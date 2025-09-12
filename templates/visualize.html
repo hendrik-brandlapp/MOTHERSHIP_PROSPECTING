@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block title %}Visualize - DOUANO Dashboard{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  .dropdown-panel{position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:12px; max-height:280px; overflow:auto; z-index:1055; margin-top:6px; padding:6px;}
+  .dropdown-item{padding:8px 10px; cursor:pointer; border-radius:8px;}
+  .dropdown-item:hover{background:rgba(17,24,39,0.06);}  
+  .dropdown-empty{padding:10px; color:#6b7280;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row g-3 align-items-end mb-3">
+    <div class="col-md-3">
+      <label class="form-label">Company</label>
+      <div class="position-relative" id="vizCompanyWrapper">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-building"></i></span>
+          <input id="vizCompany" class="form-control" placeholder="Search company name" autocomplete="off" />
+          <button class="btn btn-outline-secondary" type="button" id="vizCompanyToggle" aria-label="Toggle company list"><i class="fas fa-caret-down"></i></button>
+        </div>
+        <div id="vizCompanyDropdown" class="dropdown-panel shadow" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Product</label>
+      <div class="position-relative" id="vizProductWrapper">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-box"></i></span>
+          <input id="vizProduct" class="form-control" placeholder="Search product name (optional)" autocomplete="off" />
+          <button class="btn btn-outline-secondary" type="button" id="vizProductToggle" aria-label="Toggle product list"><i class="fas fa-caret-down"></i></button>
+        </div>
+        <div id="vizProductDropdown" class="dropdown-panel shadow" style="display:none;"></div>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Start</label>
+      <input id="vizStart" type="date" class="form-control" />
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">End</label>
+      <input id="vizEnd" type="date" class="form-control" />
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Group By</label>
+      <select id="vizGroupBy" class="form-select">
+        <option value="date" selected>Date</option>
+        <option value="company">Company</option>
+        <option value="product">Product</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Interval</label>
+      <select id="vizInterval" class="form-select">
+        <option value="day" selected>Day</option>
+        <option value="week">Week</option>
+        <option value="month">Month</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Chart</label>
+      <select id="vizType" class="form-select">
+        <option value="line" selected>Line</option>
+        <option value="bar">Bar</option>
+        <option value="pie">Pie</option>
+        <option value="table">Table</option>
+      </select>
+    </div>
+    <div class="col-md-2 d-flex align-items-center">
+      <div class="form-check mt-4">
+        <input class="form-check-input" type="checkbox" id="vizProductOnly">
+        <label class="form-check-label" for="vizProductOnly">Product-only</label>
+      </div>
+    </div>
+    <div class="col-md-2 d-flex align-items-end gap-2">
+      <button id="vizLoad" class="btn btn-primary w-100"><i class="fas fa-plus me-1"></i>Add Chart</button>
+      <button id="vizClear" class="btn btn-outline-secondary"><i class="fas fa-trash"></i></button>
+    </div>
+  </div>
+
+  <div id="vizChartsContainer" class="d-flex flex-column gap-3"></div>
+</div>
+
+<script>
+let charts = [];
+// Build in-platform dropdowns like on Sales page
+function attachDropdown({wrapperId, inputId, toggleId, panelId, source, onResolveMap}){
+  const wrap = document.getElementById(wrapperId);
+  const input = document.getElementById(inputId);
+  const toggle = document.getElementById(toggleId);
+  const panel = document.getElementById(panelId);
+  const open = ()=> panel.style.display = 'block';
+  const close = ()=> panel.style.display = 'none';
+  let items = [];
+  const render = (list)=>{
+    panel.innerHTML = (list||[]).slice(0,500).map(x=>`<div class="dropdown-item" data-id="${x.id||''}">${x.name||''}</div>`).join('') || '<div class="dropdown-empty">No results</div>';
+  };
+  const seed = async()=>{ items = await source(''); render(items); };
+  seed();
+  input.addEventListener('input', async (ev)=>{
+    ev.preventDefault(); ev.stopPropagation();
+    const q = (input.value||'').toLowerCase();
+    let filtered = q ? items.filter(x=>x.name && x.name.toLowerCase().includes(q)) : items;
+    render(filtered);
+    open();
+    if (q.length>=2){
+      const remote = await source(q);
+      // Merge and render; also update resolve map
+      if (onResolveMap) onResolveMap(remote);
+      const merged=[...remote,...filtered].reduce((acc,cur)=>{if(!acc.find(a=>a.id===cur.id))acc.push(cur);return acc;},[]);
+      render(merged);
+    }
+  });
+  toggle.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); if(panel.style.display==='none'||panel.style.display==='') open(); else close();});
+  // Prevent focus loss and default behaviors that can cause page jump
+  panel.addEventListener('mousedown',(e)=>{ e.preventDefault(); });
+  panel.addEventListener('click',(e)=>{ e.preventDefault(); e.stopPropagation(); const it=e.target.closest('.dropdown-item'); if(!it) return; input.value=it.textContent; input.dataset.selectedId = it.getAttribute('data-id')||''; close();});
+  document.addEventListener('click',(e)=>{ if(!wrap.contains(e.target)) close();});
+}
+document.getElementById('vizLoad').addEventListener('click', async () => {
+  const params = new URLSearchParams();
+  const companyInput = document.getElementById('vizCompany');
+  let companyName = companyInput.value.trim();
+  let companyId = companyInput.dataset.selectedId || '';
+  const product = document.getElementById('vizProduct').value.trim();
+  const start = document.getElementById('vizStart').value;
+  const end = document.getElementById('vizEnd').value;
+  const groupBy = document.getElementById('vizGroupBy').value;
+  const interval = document.getElementById('vizInterval').value;
+  const type = document.getElementById('vizType').value;
+  const productOnly = document.getElementById('vizProductOnly').checked;
+  // Resolve company name -> id for API param, but keep the name for display
+  if (!productOnly && (companyName || companyId)){
+    let paramValue = '';
+    if (companyId) {
+      paramValue = String(companyId);
+    } else {
+      try{
+        const mapJson = sessionStorage.getItem('duano_company_name_to_id');
+        if (mapJson){
+          const map = JSON.parse(mapJson);
+          const id = map[companyName];
+          if (id) paramValue = String(id);
+        }
+      }catch(_){ }
+      if (!paramValue && /^\d+$/.test(companyName)) paramValue = companyName;
+    }
+    if (paramValue) params.set('filter_by_company', paramValue);
+  }
+  if (product) params.set('filter_by_product', product);
+  if (start) params.set('filter_by_start_date', start);
+  if (end) params.set('filter_by_end_date', end);
+  params.set('group_by', productOnly ? 'product' : groupBy);
+  params.set('interval', interval);
+
+  const resp = await fetch(`/api/analytics/sales?${params.toString()}`);
+  const data = await resp.json();
+  const result = data.result || { labels: [], datasets: [] };
+
+  // Create a new chart card
+  const container = document.getElementById('vizChartsContainer');
+  const card = document.createElement('div');
+  card.className = 'card p-3';
+  const title = document.createElement('div');
+  title.className = 'd-flex justify-content-between align-items-center mb-2';
+  const desc = document.createElement('div');
+  const parts = [];
+  if (!productOnly && (companyName || companyId)) {
+    let displayCompany = companyName;
+    if (!displayCompany && companyId) {
+      try {
+        const idMapJson = sessionStorage.getItem('duano_company_id_to_name');
+        if (idMapJson) {
+          const idMap = JSON.parse(idMapJson);
+          displayCompany = idMap[String(companyId)] || String(companyId);
+        } else {
+          displayCompany = String(companyId);
+        }
+      } catch(_) { displayCompany = String(companyId); }
+    }
+    parts.push(`Company: ${displayCompany}`);
+  }
+  if (product) parts.push(`Product: ${product}`);
+  if (start || end) parts.push(`Range: ${start||'…'} → ${end||'…'}`);
+  parts.push(`Group: ${(productOnly ? 'product' : groupBy)}`);
+  parts.push(`Type: ${type}`);
+  desc.textContent = parts.join('  ·  ');
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'btn btn-sm btn-light';
+  closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+  title.appendChild(desc);
+  title.appendChild(closeBtn);
+  card.appendChild(title);
+
+  if (type === 'table') {
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'table-responsive';
+    tableWrap.innerHTML = `<table class="table table-sm"><thead><tr><th>${(productOnly ? 'PRODUCT' : (groupBy||'').toUpperCase())}</th><th>Amount (€)</th></tr></thead><tbody>${result.labels.map((lbl,i)=>`<tr><td>${lbl}</td><td>${result.datasets[0]?.data[i] ?? ''}</td></tr>`).join('')}</tbody></table>`;
+    card.appendChild(tableWrap);
+    container.prepend(card);
+    // allow closing
+    closeBtn.addEventListener('click', ()=>{ card.remove(); });
+    return;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.height = 120;
+  card.appendChild(canvas);
+  container.prepend(card);
+
+  const chart = new Chart(canvas.getContext('2d'), {
+    type: type === 'pie' ? 'pie' : (type === 'bar' ? 'bar' : 'line'),
+    data: {
+      labels: result.labels,
+      datasets: result.datasets.map(ds => ({
+        label: ds.label,
+        data: ds.data,
+        borderColor: '#111827',
+        backgroundColor: type === 'pie' ? result.labels.map((_,i)=>`hsl(${i*37%360}deg 70% 55%)`) : 'rgba(17,24,39,0.15)',
+        fill: type !== 'bar',
+        tension: 0.25
+      }))
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: type !== 'line' || result.datasets.length > 1 } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+  charts.push({ chart, root: card });
+  closeBtn.addEventListener('click', ()=>{
+    try { chart.destroy(); } catch(_) {}
+    card.remove();
+  });
+});
+
+document.getElementById('vizClear').addEventListener('click', ()=>{
+  charts.forEach(c=>{ try{ c.chart.destroy(); }catch(_){} });
+  charts = [];
+  document.getElementById('vizChartsContainer').innerHTML='';
+});
+
+// Data providers for dropdowns
+async function companySource(q){
+  try{
+    if (!q){
+      // from cache
+      const cached = sessionStorage.getItem('duano_companies_cache_v1');
+      const companies = cached ? JSON.parse(cached) : [];
+      return (companies||[]).map(c=>({id:c.id,name:c.public_name||c.name||''})).filter(x=>x.name);
+    } else {
+      const resp = await fetch(`/api/companies?q=${encodeURIComponent(q)}&per_page=50`);
+      const data = await resp.json();
+      return (data.result?.data||[]).map(x=>({id:x.id,name:x.name})).filter(x=>x.name);
+    }
+  }catch(_){ return []; }
+}
+function updateCompanyMap(list){
+  try{
+    const mapJson = sessionStorage.getItem('duano_company_name_to_id');
+    const idMapJson = sessionStorage.getItem('duano_company_id_to_name');
+    const nameToId = mapJson ? JSON.parse(mapJson) : {};
+    const idToName = idMapJson ? JSON.parse(idMapJson) : {};
+    list.forEach(x=>{ nameToId[x.name]=x.id; idToName[String(x.id)] = x.name; });
+    sessionStorage.setItem('duano_company_name_to_id', JSON.stringify(nameToId));
+    sessionStorage.setItem('duano_company_id_to_name', JSON.stringify(idToName));
+  }catch(_){ }
+}
+async function productSource(q){
+  // use cached product catalog/hierarchy if present; else try to fetch hierarchy once
+  try{
+    let names=[];
+    const cat = sessionStorage.getItem('duano_product_catalog_cache_v1');
+    const hier = sessionStorage.getItem('duano_product_hierarchy_cache_v1');
+    if (!cat && !hier){
+      try{ await fetch('/api/products/hierarchy').then(r=>r.json()).then(d=>{sessionStorage.setItem('duano_product_hierarchy_cache_v1', JSON.stringify(d.result?.data||[]));}); }catch(_){ }
+    }
+    const cat2 = sessionStorage.getItem('duano_product_catalog_cache_v1');
+    if (cat2){
+      const prods = JSON.parse(cat2)||[]; names.push(...prods.map(p=>p.name||'').filter(Boolean));
+    }
+    const hier2 = sessionStorage.getItem('duano_product_hierarchy_cache_v1');
+    if (hier2){
+      const arr = JSON.parse(hier2)||[];
+      arr.forEach(it=>{ if (it.composed_product?.name) names.push(it.composed_product.name); (it.components||[]).forEach(c=>{ if(c.product?.name) names.push(c.product.name); }); });
+    }
+    let uniq=[...new Set(names)].map(n=>({name:n}));
+    if (q){ uniq = uniq.filter(x=>x.name.toLowerCase().includes(q.toLowerCase())); }
+    return uniq;
+  }catch(_){ return []; }
+}
+
+// Attach dropdowns on load
+attachDropdown({wrapperId:'vizCompanyWrapper', inputId:'vizCompany', toggleId:'vizCompanyToggle', panelId:'vizCompanyDropdown', source:companySource, onResolveMap:updateCompanyMap});
+attachDropdown({wrapperId:'vizProductWrapper', inputId:'vizProduct', toggleId:'vizProductToggle', panelId:'vizProductDropdown', source:productSource});
+</script>
+{% endblock %}
+

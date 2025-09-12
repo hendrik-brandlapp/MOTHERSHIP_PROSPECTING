@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}CRM - DOUANO{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="fas fa-handshake me-2 text-primary"></i>CRM</h2>
+                <p class="text-muted mb-0">Search people, directors, and contacts</p>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-primary rounded-pill shadow-sm" onclick="loadCrmCompanies()">
+                    <i class="fas fa-sync-alt me-2"></i>Refresh CRM
+                </button>
+                <button class="btn btn-success rounded-pill shadow-sm" onclick="showAddPersonModal()">
+                    <i class="fas fa-plus me-2"></i>Add Person
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CRM Search and Filters -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-3 flex-wrap">
+        <input type="text" class="form-control" id="crm-search" placeholder="Search people, directors, contacts..." style="width: 300px;">
+        <select class="form-select" id="crm-status-filter" style="width: 130px;">
+            <option value="">All Statuses</option>
+            <option value="Prospect">Prospect</option>
+            <option value="Klant">Klant</option>
+        </select>
+        <button class="btn btn-outline-secondary rounded-pill btn-sm" onclick="clearCrmFilters()">
+            <i class="fas fa-times me-1"></i>Clear Filters
+        </button>
+    </div>
+</div>
+
+<!-- CRM Container -->
+<div id="crm-container">
+    <div class="text-center py-5">
+        <i class="fas fa-handshake fa-3x text-muted mb-3"></i>
+        <p class="text-muted">Click "Refresh CRM" to load companies from Duano...</p>
+    </div>
+</div>
+
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// CRM Functions
+let crmCompanies = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    // CRM search event listeners
+    const crmSearch = document.getElementById('crm-search');
+    if (crmSearch) {
+        crmSearch.addEventListener('input', filterCrmCompanies);
+        
+        // Check for search parameter in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const searchParam = urlParams.get('search');
+        if (searchParam) {
+            crmSearch.value = searchParam;
+            // Auto-load and filter
+            loadCrmCompanies().then(() => {
+                filterCrmCompanies();
+            });
+        }
+    }
+    
+    const crmStatusFilter = document.getElementById('crm-status-filter');
+    if (crmStatusFilter) {
+        crmStatusFilter.addEventListener('change', filterCrmCompanies);
+    }
+});
+
+// Load CRM companies from Duano
+async function loadCrmCompanies() {
+    const container = document.getElementById('crm-container');
+    
+    try {
+        container.innerHTML = '<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-3x text-muted mb-3"></i><p class="text-muted">Loading CRM companies...</p></div>';
+        
+        const response = await fetch('/api/crm/companies');
+        const data = await response.json();
+        
+        if (response.ok) {
+            crmCompanies = data.companies || [];
+            displayCrmCompanies(crmCompanies);
+            showToast(`Loaded ${crmCompanies.length} companies from CRM`, 'success');
+        } else {
+            throw new Error(data.error || 'Failed to load CRM companies');
+        }
+    } catch (error) {
+        console.error('Error loading CRM companies:', error);
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                <p class="text-danger">Error loading CRM companies: ${error.message}</p>
+                <button class="btn btn-primary" onclick="loadCrmCompanies()">Retry</button>
+            </div>
+        `;
+        showToast('Failed to load CRM companies: ' + error.message, 'error');
+    }
+}
+
+// Display CRM companies
+function displayCrmCompanies(companies) {
+    const container = document.getElementById('crm-container');
+    
+    if (!companies || companies.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="fas fa-building fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No companies found</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const companiesHtml = companies.map(company => `
+        <div class="crm-company card mb-3 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h6 class="mb-1">${company.name || 'Unnamed Company'}</h6>
+                        <small class="text-muted">${company.address_line1 || ''} ${company.city || ''} ${company.post_code || ''}</small>
+                    </div>
+                    <span class="badge ${company.status?.name === 'Klant' ? 'bg-success' : 'bg-warning'} rounded-pill">
+                        ${company.status?.name || 'Unknown'}
+                        </span>
+                    </div>
+                    
+                <div class="row g-3 mt-2">
+                    <div class="col-md-6">
+                        ${company.phone_number ? `<div><strong>Phone:</strong> ${company.phone_number}</div>` : ''}
+                        ${company.country?.name ? `<div><strong>Country:</strong> ${company.country.name}</div>` : ''}
+                        ${company.priority?.name ? `<div><strong>Priority:</strong> ${company.priority.name}</div>` : ''}
+                    </div>
+                    <div class="col-md-6">
+                        ${company.account_manager?.name ? `<div><strong>Account Manager:</strong> ${company.account_manager.name}</div>` : ''}
+                        <div class="small text-muted mt-2">ID: ${company.id}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = companiesHtml;
+}
+
+// Filter CRM companies
+function filterCrmCompanies() {
+    const searchText = document.getElementById('crm-search')?.value.toLowerCase() || '';
+    const statusFilter = document.getElementById('crm-status-filter')?.value || '';
+    
+    let filteredCompanies = crmCompanies;
+    
+    if (searchText) {
+        filteredCompanies = filteredCompanies.filter(company => 
+            company.name?.toLowerCase().includes(searchText) ||
+            company.address_line1?.toLowerCase().includes(searchText) ||
+            company.city?.toLowerCase().includes(searchText) ||
+            company.phone_number?.includes(searchText) ||
+            company.account_manager?.name?.toLowerCase().includes(searchText)
+        );
+    }
+    
+    if (statusFilter) {
+        filteredCompanies = filteredCompanies.filter(company => 
+            company.status?.name === statusFilter
+        );
+    }
+    
+    displayCrmCompanies(filteredCompanies);
+}
+
+// Clear CRM filters
+function clearCrmFilters() {
+    document.getElementById('crm-search').value = '';
+    document.getElementById('crm-status-filter').value = '';
+    displayCrmCompanies(crmCompanies);
+}
+
+// Show add person modal (placeholder)
+function showAddPersonModal() {
+    showToast('Add Person functionality coming soon!', 'info');
+}
+
+// Toast notification function
+function showToast(message, type = 'info') {
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'primary'} border-0 position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+</script>
+
+<style>
+.crm-company {
+    transition: all 0.3s ease;
+}
+
+.crm-company:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.btn {
+    border-radius: 12px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+}
+
+.form-control, .form-select {
+    border-radius: 8px;
+    border: 1px solid #e3e6f0;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #4e73df;
+    box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+}
+</style>
+{% endblock %}

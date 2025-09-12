@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Companies - DOUANO Dashboard</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #64748b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --dark-color: #1e293b;
+            --light-color: #f8fafc;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: radial-gradient(1200px 600px at 20% 0%, #e1e9ff 0%, transparent 60%),
+                        radial-gradient(1000px 500px at 100% 0%, #ffe1f0 0%, transparent 60%),
+                        linear-gradient(135deg, #f6f7fb 0%, #eef2ff 100%);
+            background-attachment: fixed;
+        }
+
+        .navbar {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 1px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            color: var(--primary-color) !important;
+            font-size: 1.5rem;
+        }
+
+        .main-container {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(20, 30, 70, 0.12);
+            margin: 2.5rem auto;
+            padding: 2.5rem;
+            max-width: 1400px;
+        }
+
+        .card {
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(20, 30, 70, 0.08);
+            transition: all 0.3s ease;
+            background: #fff;
+        }
+
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+        }
+
+        .company-card {
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .company-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(20, 30, 70, 0.15);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-rocket me-2"></i>DOUANO
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/companies.html">Companies</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/sales.html">Sales</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/products.html">Products</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/" id="loginButton">Login</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div>
+                            <h1 class="display-6 fw-bold mb-2">
+                                <i class="fas fa-building text-primary me-3"></i>Companies
+                            </h1>
+                            <p class="text-muted mb-0">Explore and manage your company roster</p>
+                        </div>
+                        <div>
+                            <button class="btn btn-primary" onclick="refreshData()">
+                                <i class="fas fa-sync-alt me-2"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading companies...</span>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="errorState" class="alert alert-danger d-none" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span id="errorMessage">Failed to load companies data.</span>
+                <button class="btn btn-outline-danger btn-sm ms-3" onclick="refreshData()">Try Again</button>
+            </div>
+
+            <!-- Companies List -->
+            <div id="companiesContainer" class="row d-none">
+                <!-- Companies will be loaded here -->
+            </div>
+
+            <!-- No Data State -->
+            <div id="noDataState" class="text-center py-5 d-none">
+                <i class="fas fa-building fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No companies found</h4>
+                <p class="text-muted">There are no companies to display at the moment.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Check authentication status
+        function checkAuth() {
+            const token = localStorage.getItem('douano_access_token');
+            const loginButton = document.getElementById('loginButton');
+            
+            if (token) {
+                loginButton.textContent = 'Logout';
+                loginButton.onclick = logout;
+                return true;
+            } else {
+                loginButton.textContent = 'Login';
+                loginButton.onclick = () => window.location.href = '/';
+                showError('Please log in to view companies data.');
+                return false;
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('douano_access_token');
+            window.location.href = '/';
+        }
+
+        async function fetchCompanies() {
+            const token = localStorage.getItem('douano_access_token');
+            if (!token) {
+                showError('Authentication required');
+                return;
+            }
+
+            try {
+                showLoading();
+                
+                const response = await fetch('/.netlify/functions/api/api/companies', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                displayCompanies(data);
+                
+            } catch (error) {
+                console.error('Error fetching companies:', error);
+                showError(`Failed to fetch companies: ${error.message}`);
+            }
+        }
+
+        function displayCompanies(data) {
+            const container = document.getElementById('companiesContainer');
+            const companies = data.companies || data.result?.data || data.data || [];
+
+            if (companies.length === 0) {
+                showNoData();
+                return;
+            }
+
+            container.innerHTML = '';
+            
+            companies.forEach(company => {
+                const companyCard = createCompanyCard(company);
+                container.appendChild(companyCard);
+            });
+
+            showCompanies();
+        }
+
+        function createCompanyCard(company) {
+            const col = document.createElement('div');
+            col.className = 'col-lg-6 col-xl-4 mb-4';
+            
+            col.innerHTML = `
+                <div class="card company-card h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <h5 class="card-title mb-0">${company.name || 'Unnamed Company'}</h5>
+                            <span class="badge bg-primary">${company.status || 'Active'}</span>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <small class="text-muted d-block">
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                ${company.address || company.address_line1 || 'No address'}
+                            </small>
+                            ${company.city ? `<small class="text-muted d-block">${company.city}</small>` : ''}
+                            ${company.vat_number ? `<small class="text-muted d-block"><strong>VAT:</strong> ${company.vat_number}</small>` : ''}
+                        </div>
+
+                        <div class="row g-2">
+                            ${company.phone ? `
+                                <div class="col-6">
+                                    <small class="text-muted">
+                                        <i class="fas fa-phone me-1"></i>
+                                        ${company.phone}
+                                    </small>
+                                </div>
+                            ` : ''}
+                            ${company.email ? `
+                                <div class="col-6">
+                                    <small class="text-muted">
+                                        <i class="fas fa-envelope me-1"></i>
+                                        ${company.email}
+                                    </small>
+                                </div>
+                            ` : ''}
+                        </div>
+
+                        ${company.created_at ? `
+                            <div class="mt-3 pt-3 border-top">
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    Added: ${new Date(company.created_at).toLocaleDateString()}
+                                </small>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            
+            return col;
+        }
+
+        function showLoading() {
+            document.getElementById('loadingState').classList.remove('d-none');
+            document.getElementById('errorState').classList.add('d-none');
+            document.getElementById('companiesContainer').classList.add('d-none');
+            document.getElementById('noDataState').classList.add('d-none');
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('loadingState').classList.add('d-none');
+            document.getElementById('errorState').classList.remove('d-none');
+            document.getElementById('companiesContainer').classList.add('d-none');
+            document.getElementById('noDataState').classList.add('d-none');
+        }
+
+        function showCompanies() {
+            document.getElementById('loadingState').classList.add('d-none');
+            document.getElementById('errorState').classList.add('d-none');
+            document.getElementById('companiesContainer').classList.remove('d-none');
+            document.getElementById('noDataState').classList.add('d-none');
+        }
+
+        function showNoData() {
+            document.getElementById('loadingState').classList.add('d-none');
+            document.getElementById('errorState').classList.add('d-none');
+            document.getElementById('companiesContainer').classList.add('d-none');
+            document.getElementById('noDataState').classList.remove('d-none');
+        }
+
+        function refreshData() {
+            fetchCompanies();
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            if (checkAuth()) {
+                fetchCompanies();
+            }
+        });
+    </script>
+</body>
+</html>
+
+

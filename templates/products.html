@@ -1,0 +1,784 @@
+{% extends "base.html" %}
+
+{% block title %}Products Catalog - DUANO Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-boxes me-2"></i>Products Catalog
+                </h1>
+                <div class="btn-group">
+                    <button class="btn btn-outline-primary" onclick="refreshProducts()">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="toggleView()" id="viewToggle">
+                        <i class="fas fa-list me-1"></i>List View
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading indicator -->
+            <div id="loading" class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3">Loading products catalog...</p>
+            </div>
+
+            <!-- Error message -->
+            <div id="error-message" class="alert alert-danger" style="display: none;">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span id="error-text"></span>
+            </div>
+
+            <!-- Search and filters -->
+            <div id="search-container" style="display: none;" class="mb-4">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search products...">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="typeFilter">
+                            <option value="all">All Products</option>
+                            <option value="composed">Composed Products</option>
+                            <option value="component">Individual Products</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="packagingFilter" title="Filter by packaging">
+                            <option value="all">All Packaging</option>
+                            <option value="can">Cans</option>
+                            <option value="bottle">Bottles</option>
+                            <option value="box">Boxes</option>
+                            <option value="crate">Crates</option>
+                            <option value="keg">Kegs</option>
+                            <option value="pack">Packs</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select" id="sortSelect">
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="sku_asc">SKU (A-Z)</option>
+                            <option value="sku_desc">SKU (Z-A)</option>
+                            <option value="components_desc">Most Components</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="text-muted small">
+                            <span id="product-count">0</span> products
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Cards -->
+                <div class="row mt-3" id="stats-container">
+                    <div class="col-md-3">
+                        <div class="card bg-primary text-white">
+                            <div class="card-body text-center">
+                                <h5 class="mb-0" id="total-composed">0</h5>
+                                <small>Composed Products</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-success text-white">
+                            <div class="card-body text-center">
+                                <h5 class="mb-0" id="total-unique">0</h5>
+                                <small>Unique Products</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-info text-white">
+                            <div class="card-body text-center">
+                                <h5 class="mb-0" id="total-relationships">0</h5>
+                                <small>Component Relations</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-warning text-white">
+                            <div class="card-body text-center">
+                                <h5 class="mb-0" id="avg-components">0</h5>
+                                <small>Avg Components</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Products container -->
+            <div id="products-container" style="display: none;">
+                <!-- Tab navigation -->
+                <ul class="nav nav-tabs mb-3" id="productTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="hierarchy-tab" data-bs-toggle="tab" data-bs-target="#hierarchy" type="button" role="tab">
+                            <i class="fas fa-sitemap me-1"></i>Product Hierarchy
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="catalog-tab" data-bs-toggle="tab" data-bs-target="#catalog" type="button" role="tab">
+                            <i class="fas fa-th-large me-1"></i>Product Catalog
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab content -->
+                <div class="tab-content" id="productTabContent">
+                    <!-- Hierarchy Tab -->
+                    <div class="tab-pane fade" id="hierarchy" role="tabpanel">
+                        <div id="hierarchy-list" class="row g-3">
+                            <!-- Hierarchy will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Catalog Tab -->
+                    <div class="tab-pane fade show active" id="catalog" role="tabpanel">
+                        <div id="catalog-list" class="row g-3">
+                            <!-- Catalog will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <nav aria-label="Products pagination" class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="text-muted small">
+                            Showing <span id="pagination-info"></span>
+                        </div>
+                        <ul class="pagination mb-0" id="pagination">
+                            <!-- Pagination will be generated here -->
+                        </ul>
+                    </div>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Product Details Modal -->
+<div class="modal fade" id="productModal" tabindex="-1" aria-labelledby="productModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="productModalLabel">
+                    <i class="fas fa-box me-2"></i>Product Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="productModalBody">
+                <!-- Product details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allProducts = [];
+let productHierarchy = [];
+let uniqueProducts = [];
+let filteredProducts = [];
+let displayedProducts = [];
+let currentFilter = 'all';
+let currentSort = 'name_asc';
+let currentPage = 1;
+let productsPerPage = 12;
+let totalPages = 1;
+let currentView = 'cards'; // 'cards' or 'list'
+let statistics = {};
+let debounceTimer = null;
+
+// Cache keys
+const PRODUCTS_CACHE_KEY = 'duano_products_cache_v1';
+const PRODUCTS_CACHE_TIME_KEY = 'duano_products_cache_time_v1';
+
+// Sanitize function to prevent XSS and handle malformed data
+function sanitize(str) {
+    if (typeof str !== 'string') return str;
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+async function loadProducts() {
+    try {
+        // Try cache first (session-scoped): load once per tab session
+        const cached = sessionStorage.getItem(PRODUCTS_CACHE_KEY);
+        if (cached) {
+            const cachedData = JSON.parse(cached);
+            if (cachedData && cachedData.result) {
+                processProductData(cachedData);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('search-container').style.display = 'block';
+                document.getElementById('products-container').style.display = 'block';
+                updateStatistics();
+                displayHierarchy();
+                displayCatalog();
+                return; // Skip network request
+            }
+        }
+
+        const response = await fetch('/api/products/hierarchy');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Save to session cache
+        sessionStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(data));
+        sessionStorage.setItem(PRODUCTS_CACHE_TIME_KEY, String(Date.now()));
+        
+        processProductData(data);
+        
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('search-container').style.display = 'block';
+        document.getElementById('products-container').style.display = 'block';
+        document.getElementById('error-message').style.display = 'none';
+        
+        updateStatistics();
+        displayHierarchy();
+        displayCatalog();
+        
+    } catch (error) {
+        console.error('Error loading products:', error);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-text').textContent = `Failed to load products: ${error.message}`;
+    }
+}
+
+function processProductData(data) {
+    if (data.result) {
+        productHierarchy = data.result.hierarchy || [];
+        uniqueProducts = data.result.unique_products || [];
+        statistics = data.result.statistics || {};
+        allProducts = data.result.data || [];
+        
+        // Create a combined list for filtering/searching
+        filteredProducts = [...productHierarchy];
+    }
+}
+
+function refreshProducts() {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('products-container').style.display = 'none';
+    document.getElementById('search-container').style.display = 'none';
+    document.getElementById('error-message').style.display = 'none';
+    
+    // Reset pagination and filters
+    currentPage = 1;
+    currentFilter = 'all';
+    currentSort = 'name_asc';
+    document.getElementById('searchInput').value = '';
+    document.getElementById('typeFilter').value = 'all';
+    document.getElementById('sortSelect').value = 'name_asc';
+    
+    // Bust cache so next load fetches fresh data
+    sessionStorage.removeItem(PRODUCTS_CACHE_KEY);
+    sessionStorage.removeItem(PRODUCTS_CACHE_TIME_KEY);
+    
+    loadProducts();
+}
+
+function updateStatistics() {
+    document.getElementById('total-composed').textContent = statistics.total_composed_products || 0;
+    document.getElementById('total-unique').textContent = statistics.total_unique_products || 0;
+    document.getElementById('total-relationships').textContent = statistics.total_component_relationships || 0;
+    
+    const avgComponents = statistics.total_composed_products > 0 
+        ? Math.round((statistics.total_component_relationships || 0) / statistics.total_composed_products * 10) / 10
+        : 0;
+    document.getElementById('avg-components').textContent = avgComponents;
+}
+
+function displayHierarchy() {
+    const hierarchyList = document.getElementById('hierarchy-list');
+    hierarchyList.innerHTML = '';
+    
+    // Filter by search (name/sku of composed or any component)
+    const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+    let items = [...productHierarchy];
+    if (q) {
+        items = items.filter(item => {
+            const composed = item.composed_product || {};
+            const inComposed = (composed.name || '').toLowerCase().includes(q) || (composed.sku || '').toLowerCase().includes(q);
+            const inComponents = (item.components || []).some(c =>
+                (c.product?.name || '').toLowerCase().includes(q) || (c.product?.sku || '').toLowerCase().includes(q)
+            );
+            return inComposed || inComponents;
+        });
+    }
+
+    if (items.length === 0) {
+        hierarchyList.innerHTML = `
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-boxes fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No composed products found</h5>
+                    <p class="text-muted">Try changing your search or filter.</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    document.getElementById('product-count').textContent = items.length;
+    items.forEach(item => {
+        const hierarchyCard = createHierarchyCard(item);
+        hierarchyList.appendChild(hierarchyCard);
+    });
+}
+
+function createHierarchyCard(item) {
+    const col = document.createElement('div');
+    col.className = 'col-12 col-md-6 col-xl-4';
+    
+    const composedProduct = item.composed_product || {};
+    const components = item.components || [];
+    
+    col.innerHTML = `
+        <div class="card h-100 shadow-sm product-card" data-product-id="${composedProduct.id || 0}" data-product-type="composed" style="cursor: pointer; border-radius: 12px; overflow: hidden;">
+            <div class="card-header bg-primary text-white" style="border-bottom: none;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold">
+                        <i class="fas fa-box me-1"></i>
+                        ${sanitize(composedProduct.name || 'Unknown Product')}
+                    </h6>
+                    <span class="badge bg-light text-primary">${components.length} components</span>
+                </div>
+                <small class="opacity-75">SKU: ${sanitize(composedProduct.sku || 'N/A')}</small>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    ${components.slice(0, 5).map(comp => `
+                        <div class="list-group-item d-flex justify-content-between align-items-center py-2" style="border: none;">
+                            <div>
+                                <strong>${sanitize(comp.product?.name || 'Unknown')}</strong>
+                                <br>
+                                <small class="text-muted">SKU: ${sanitize(comp.product?.sku || 'N/A')}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-secondary">${comp.quantity} ${sanitize(comp.product?.unit || '')}</span>
+                            </div>
+                        </div>
+                    `).join('')}
+                    ${components.length > 5 ? `
+                        <div class="list-group-item text-center text-muted py-2" style="border: none;">
+                            <small>... and ${components.length - 5} more components</small>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add event listener instead of onclick
+    const card = col.querySelector('.product-card');
+    if (card) {
+        console.log('Adding click listener to card with ID:', composedProduct.id);
+        card.addEventListener('click', function(e) {
+            console.log('HIERARCHY CARD CLICKED!');
+            e.preventDefault();
+            e.stopPropagation();
+            const productId = parseInt(this.dataset.productId);
+            const productType = this.dataset.productType;
+            console.log('Card clicked:', productId, productType);
+            showProductDetails(productId, productType);
+        });
+    } else {
+        console.error('Card element not found in hierarchy card');
+    }
+    
+    return col;
+}
+
+function displayCatalog() {
+    const catalogList = document.getElementById('catalog-list');
+    catalogList.innerHTML = '';
+    
+    if (uniqueProducts.length === 0) {
+        catalogList.innerHTML = `
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="fas fa-box fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No products found</h5>
+                    <p class="text-muted">No products available in the catalog.</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    // Sort and filter unique products
+    let displayProducts = [...uniqueProducts];
+    
+    // Apply type filter
+    if (currentFilter !== 'all') {
+        displayProducts = displayProducts.filter(product => product.type === (currentFilter === 'component' ? 'component' : 'composed'));
+    }
+
+    // Apply packaging filter (best-effort heuristic on name/SKU)
+    const packaging = (document.getElementById('packagingFilter')?.value || 'all').toLowerCase();
+    if (packaging !== 'all') {
+        const patterns = {
+            can: /(can|blik|cans)/i,
+            bottle: /(bottle|fles)/i,
+            box: /(box|doos)/i,
+            crate: /(crate|krat)/i,
+            keg: /(keg)/i,
+            pack: /(pack|6x|4x)/i
+        };
+        const rx = patterns[packaging] || null;
+        if (rx) {
+            displayProducts = displayProducts.filter(p => rx.test(p.name || '') || rx.test(p.sku || ''));
+        }
+    }
+    
+    // Apply search filter
+    const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase();
+    if (searchTerm) {
+        displayProducts = displayProducts.filter(product =>
+            (product.name && product.name.toLowerCase().includes(searchTerm)) ||
+            (product.sku && product.sku.toLowerCase().includes(searchTerm))
+        );
+    }
+    
+    // Apply sorting
+    displayProducts.sort((a, b) => {
+        switch (currentSort) {
+            case 'name_asc':
+                return (a.name || '').localeCompare(b.name || '');
+            case 'name_desc':
+                return (b.name || '').localeCompare(a.name || '');
+            case 'sku_asc':
+                return (a.sku || '').localeCompare(b.sku || '');
+            case 'sku_desc':
+                return (b.sku || '').localeCompare(a.sku || '');
+            default:
+                return 0;
+        }
+    });
+    
+    document.getElementById('product-count').textContent = displayProducts.length;
+    
+    displayProducts.forEach(product => {
+        const productCard = createProductCatalogCard(product);
+        catalogList.appendChild(productCard);
+    });
+}
+
+function createProductCatalogCard(product) {
+    const col = document.createElement('div');
+    col.className = 'col-12 col-sm-6 col-lg-4 col-xl-3';
+    
+    const isComposed = product.type === 'composed';
+    const badgeClass = isComposed ? 'bg-primary' : 'bg-success';
+    const icon = isComposed ? 'fa-boxes' : 'fa-box';
+    
+    col.innerHTML = `
+        <div class="card h-100 shadow-sm product-card" data-product-id="${product.id || 0}" data-product-type="${product.type || 'component'}" style="cursor: pointer; border-radius: 12px;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h6 class="card-title mb-0 fw-semibold">
+                        <i class="fas ${icon} me-1"></i>
+                        ${sanitize(product.name || 'Unknown Product')}
+                    </h6>
+                    <span class="badge ${badgeClass}">${product.type}</span>
+                </div>
+                
+                <div class="mb-2">
+                    <small class="text-muted">SKU:</small>
+                    <div class="fw-bold">${sanitize(product.sku || 'N/A')}</div>
+                </div>
+                
+                ${product.unit ? `
+                <div class="mb-0">
+                    <small class="text-muted">Unit:</small>
+                    <div>${sanitize(product.unit)}</div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    // Add event listener instead of onclick
+    const card = col.querySelector('.product-card');
+    if (card) {
+        console.log('Adding click listener to catalog card with ID:', product.id);
+        card.addEventListener('click', function(e) {
+            console.log('CATALOG CARD CLICKED!');
+            e.preventDefault();
+            e.stopPropagation();
+            const productId = parseInt(this.dataset.productId);
+            const productType = this.dataset.productType;
+            console.log('Catalog card clicked:', productId, productType);
+            showProductDetails(productId, productType);
+        });
+    } else {
+        console.error('Card element not found in catalog card');
+    }
+    
+    return col;
+}
+
+function showProductDetails(productId, productType) {
+    console.log('=== PRODUCT DETAILS ===');
+    console.log('Product ID:', productId, 'Type:', productType);
+    
+    // Find the product in our data
+    let product = null;
+    let components = [];
+    
+    if (productType === 'composed') {
+        const hierarchyItem = productHierarchy.find(item => item.composed_product?.id === productId);
+        if (hierarchyItem) {
+            product = hierarchyItem.composed_product;
+            components = hierarchyItem.components || [];
+        }
+    } else {
+        product = uniqueProducts.find(p => p.id === productId);
+    }
+    
+    if (!product) {
+        alert('Product not found!');
+        return;
+    }
+    
+    console.log('Found product:', product.name);
+    
+    // Update modal content
+    document.getElementById('productModalLabel').innerHTML = `
+        <i class="fas fa-${productType === 'composed' ? 'boxes' : 'box'} me-2"></i>
+        ${product.name}
+        <span class="badge bg-${productType === 'composed' ? 'primary' : 'success'} ms-2">${productType}</span>
+    `;
+    
+    document.getElementById('productModalBody').innerHTML = `
+        <div class="row">
+            <div class="col-12">
+                <h6><i class="fas fa-info-circle me-2"></i>Product Information</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Name:</strong></td><td>${product.name}</td></tr>
+                    <tr><td><strong>SKU:</strong></td><td>${product.sku}</td></tr>
+                    <tr><td><strong>Type:</strong></td><td><span class="badge bg-${productType === 'composed' ? 'primary' : 'success'}">${productType}</span></td></tr>
+                    ${product.unit ? `<tr><td><strong>Unit:</strong></td><td>${product.unit}</td></tr>` : ''}
+                </table>
+            </div>
+        </div>
+        
+        ${components.length > 0 ? `
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6><i class="fas fa-list me-2"></i>Components (${components.length})</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead class="table-dark">
+                            <tr><th>Component</th><th>SKU</th><th>Quantity</th><th>Unit</th></tr>
+                        </thead>
+                        <tbody>
+                            ${components.map(comp => `
+                                <tr>
+                                    <td>${comp.product?.name || 'Unknown'}</td>
+                                    <td>${comp.product?.sku || 'N/A'}</td>
+                                    <td class="fw-bold">${comp.quantity || 0}</td>
+                                    <td>${comp.product?.unit || 'N/A'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        ` : ''}
+    `;
+    
+    // Debug modal showing
+    const modalElement = document.getElementById('productModal');
+    console.log('Modal element found:', modalElement);
+    console.log('Bootstrap available:', typeof bootstrap);
+    console.log('Bootstrap.Modal available:', typeof bootstrap?.Modal);
+    
+    if (!modalElement) {
+        alert('Modal element not found!');
+        return;
+    }
+    
+    // CRITICAL FIX: Ensure modal is attached to <body> to avoid stacking-context issues
+    if (modalElement.parentElement !== document.body) {
+        console.log('Moving modal to body to fix stacking context');
+        document.body.appendChild(modalElement);
+    }
+    
+    if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+        alert('Bootstrap not loaded properly!');
+        return;
+    }
+    
+    try {
+        // Clean up any existing modal state (like company modal does)
+        console.log('Cleaning up existing modal state...');
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+        document.body.classList.remove('modal-open');
+        
+        // Try multiple approaches
+        console.log('Attempting to show modal...');
+        
+        // Method 1: Direct Bootstrap 5 (same as company modal)
+        const modal = new bootstrap.Modal(modalElement, {
+            backdrop: true,
+            keyboard: true,
+            focus: true
+        });
+        // Add cleanup event listeners only once
+        if (!modalElement.hasAttribute('data-listeners-added')) {
+            modalElement.setAttribute('data-listeners-added', 'true');
+            
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                console.log('Modal hidden event fired - cleaning up');
+                // Comprehensive cleanup
+                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+                
+                // Extra cleanup - remove any stray modal classes
+                modalElement.style.display = '';
+                modalElement.classList.remove('show');
+            });
+            
+            modalElement.addEventListener('hide.bs.modal', function () {
+                console.log('Modal hide event fired');
+            });
+        }
+        
+        modal.show();
+        
+        console.log('Modal show command executed');
+    } catch (error) {
+        console.error('Error showing modal:', error);
+        alert('Error showing modal: ' + error.message);
+    }
+}
+
+function toggleView() {
+    currentView = currentView === 'cards' ? 'list' : 'cards';
+    const toggleBtn = document.getElementById('viewToggle');
+    
+    if (currentView === 'list') {
+        toggleBtn.innerHTML = '<i class="fas fa-th me-1"></i>Card View';
+    } else {
+        toggleBtn.innerHTML = '<i class="fas fa-list me-1"></i>List View';
+    }
+    
+    // Re-display current tab
+    const activeTab = document.querySelector('#productTabs .nav-link.active').getAttribute('data-bs-target');
+    if (activeTab === '#hierarchy') {
+        displayHierarchy();
+    } else {
+        displayCatalog();
+    }
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    loadProducts();
+    
+    // Search and filter event listeners
+    document.getElementById('searchInput').addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            if (document.querySelector('#catalog-tab').classList.contains('active')) {
+                displayCatalog();
+            } else {
+                displayHierarchy();
+            }
+        }, 150);
+    });
+    
+    document.getElementById('typeFilter').addEventListener('change', function() {
+        currentFilter = this.value;
+        // Smart switch view for a responsive UX
+        if (currentFilter === 'component') {
+            document.getElementById('catalog-tab').click();
+            displayCatalog();
+        } else if (currentFilter === 'composed') {
+            document.getElementById('hierarchy-tab').click();
+            displayHierarchy();
+        } else {
+            if (document.querySelector('#catalog-tab').classList.contains('active')) displayCatalog();
+            else displayHierarchy();
+        }
+    });
+    
+    document.getElementById('sortSelect').addEventListener('change', function() {
+        currentSort = this.value;
+        if (document.querySelector('#catalog-tab').classList.contains('active')) displayCatalog();
+    });
+    const packagingFilter = document.getElementById('packagingFilter');
+    if (packagingFilter) packagingFilter.addEventListener('change', function() {
+        if (document.querySelector('#catalog-tab').classList.contains('active')) displayCatalog();
+    });
+});
+</script>
+
+<style>
+.product-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.2s ease-in-out;
+}
+
+.product-card {
+    transition: all 0.2s ease-in-out;
+}
+
+.badge {
+    font-size: 0.75em;
+}
+
+.table td {
+    padding: 0.25rem 0.5rem;
+}
+
+.table th {
+    padding: 0.5rem;
+    background-color: #f8f9fa;
+}
+
+.nav-tabs .nav-link {
+    border: 1px solid transparent;
+    border-top-left-radius: 0.375rem;
+    border-top-right-radius: 0.375rem;
+}
+
+.nav-tabs .nav-link.active {
+    color: #495057;
+    background-color: #fff;
+    border-color: #dee2e6 #dee2e6 #fff;
+}
+
+.list-group-item {
+    border-left: 0;
+    border-right: 0;
+}
+
+.list-group-item:first-child {
+    border-top: 0;
+}
+
+.list-group-item:last-child {
+    border-bottom: 0;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,541 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - DOUANO{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="fas fa-tachometer-alt me-2 text-primary"></i>Dashboard</h2>
+                <p class="text-muted mb-0">Overview of your DOUANO data</p>
+            </div>
+            <div>
+                <span class="badge bg-success">
+                    <i class="fas fa-circle me-1"></i>Connected
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">All Companies</h6>
+                        <h3 class="mb-0" id="companies-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-building fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Company Categories</h6>
+                        <h3 class="mb-0" id="company-categories-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-tags fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">CRM Contacts</h6>
+                        <h3 class="mb-0" id="crm-contacts-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-users fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Company Statuses</h6>
+                        <h3 class="mb-0" id="company-statuses-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-flag fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">API Status</h6>
+                        <h3 class="mb-0">
+                            <span class="badge bg-success">Active</span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-plug fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Second Row of Stats -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">CRM Actions</h6>
+                        <h3 class="mb-0" id="crm-actions-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-tasks fa-2x text-purple"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Accountancy Accounts</h6>
+                        <h3 class="mb-0" id="accountancy-accounts-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-list fa-2x text-indigo"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Sales Invoices</h6>
+                        <h3 class="mb-0" id="sales-invoices-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-receipt fa-2x text-green"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Delivery Orders</h6>
+                        <h3 class="mb-0" id="orders-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-truck fa-2x text-orange"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Products</h6>
+                        <h3 class="mb-0" id="products-count">
+                            <span class="loading-spinner"></span>
+                        </h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-boxes fa-2x text-purple"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-pie me-2"></i>Company Categories Distribution</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="categoriesChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-bar me-2"></i>Data Summary</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="summaryChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-building me-2"></i>Recent Company Categories</h5>
+                <a href="{{ url_for('companies') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body">
+                <div id="recent-categories">
+                    <div class="text-center">
+                        <span class="loading-spinner"></span>
+                        <p class="mt-2 text-muted">Loading company categories...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-users me-2"></i>Recent CRM Contacts</h5>
+                <a href="{{ url_for('crm') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body">
+                <div id="recent-contacts">
+                    <div class="text-center">
+                        <span class="loading-spinner"></span>
+                        <p class="mt-2 text-muted">Loading CRM contacts...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load dashboard data
+    loadDashboardData();
+});
+
+async function loadDashboardData() {
+    try {
+        // Load all companies
+        const allCompaniesResponse = await fetch('/api/companies');
+        if (allCompaniesResponse.ok) {
+            const allCompaniesData = await allCompaniesResponse.json();
+            updateAllCompaniesData(allCompaniesData);
+        } else {
+            document.getElementById('companies-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+        // Load company categories
+        const companiesResponse = await fetch('/api/company-categories');
+        if (companiesResponse.ok) {
+            const companiesData = await companiesResponse.json();
+            updateCompaniesData(companiesData);
+        } else {
+            document.getElementById('company-categories-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+        // Load CRM contacts
+        const contactsResponse = await fetch('/api/crm-contacts');
+        if (contactsResponse.ok) {
+            const contactsData = await contactsResponse.json();
+            updateContactsData(contactsData);
+        } else {
+            document.getElementById('crm-contacts-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+        // Load CRM actions
+        const actionsResponse = await fetch('/api/crm-actions');
+        if (actionsResponse.ok) {
+            const actionsData = await actionsResponse.json();
+            updateActionsData(actionsData);
+        } else {
+            document.getElementById('crm-actions-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+        // Load company statuses
+        const statusesResponse = await fetch('/api/company-statuses');
+        if (statusesResponse.ok) {
+            const statusesData = await statusesResponse.json();
+            updateStatusesData(statusesData);
+        } else {
+            document.getElementById('company-statuses-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+        // Load accountancy accounts
+        const accountsResponse = await fetch('/api/accountancy/accounts');
+        if (accountsResponse.ok) {
+            const accountsData = await accountsResponse.json();
+            updateAccountsData(accountsData);
+        } else {
+            document.getElementById('accountancy-accounts-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+        // Load sales invoices
+        const salesResponse = await fetch('/api/sales-invoices');
+        if (salesResponse.ok) {
+            const salesData = await salesResponse.json();
+            updateSalesData(salesData);
+        } else {
+            document.getElementById('sales-invoices-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+        // Load products hierarchy
+        const productsResponse = await fetch('/api/products/hierarchy');
+        if (productsResponse.ok) {
+            const productsData = await productsResponse.json();
+            updateProductsData(productsData);
+        } else {
+            document.getElementById('products-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+        // Load delivery orders
+        const ordersResponse = await fetch('/api/delivery-orders');
+        if (ordersResponse.ok) {
+            const ordersData = await ordersResponse.json();
+            updateOrdersData(ordersData);
+        } else {
+            document.getElementById('orders-count').innerHTML = '<span class="text-danger">Error</span>';
+        }
+
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        showErrorState();
+    }
+}
+
+function updateAllCompaniesData(data) {
+    const count = data.result ? data.result.total || data.result.data.length : 0;
+    document.getElementById('companies-count').textContent = count;
+}
+
+function updateCompaniesData(data) {
+    const count = data.result ? data.result.total || data.result.data.length : 0;
+    document.getElementById('company-categories-count').textContent = count;
+    
+    if (data.result && data.result.data) {
+        updateCategoriesChart(data.result.data);
+        updateRecentCategories(data.result.data.slice(0, 5));
+    }
+}
+
+function updateContactsData(data) {
+    const count = data.result ? data.result.total || data.result.data.length : 0;
+    document.getElementById('crm-contacts-count').textContent = count;
+    
+    if (data.result && data.result.data) {
+        updateRecentContacts(data.result.data.slice(0, 5));
+    }
+}
+
+function updateActionsData(data) {
+    const count = data.result ? data.result.total || data.result.data.length : 0;
+    document.getElementById('crm-actions-count').textContent = count;
+}
+
+function updateStatusesData(data) {
+    const count = data.result ? data.result.total || data.result.data.length : 0;
+    document.getElementById('company-statuses-count').textContent = count;
+}
+
+function updateAccountsData(data) {
+    const count = data.result ? data.result.total || data.result.data.length : 0;
+    document.getElementById('accountancy-accounts-count').textContent = count;
+}
+
+function updateSalesData(data) {
+    const count = data.result ? data.result.total || data.result.data.length : 0;
+    document.getElementById('sales-invoices-count').textContent = count;
+}
+
+function updateProductsData(data) {
+    const count = data.result && data.result.statistics ? data.result.statistics.total_unique_products : 0;
+    document.getElementById('products-count').textContent = count;
+}
+
+function updateOrdersData(data) {
+    const count = data.result ? data.result.total || data.result.data.length : 0;
+    document.getElementById('orders-count').textContent = count;
+}
+
+function updateCategoriesChart(categories) {
+    const ctx = document.getElementById('categoriesChart').getContext('2d');
+    
+    const labels = categories.map(cat => cat.name);
+    const data = categories.map(() => 1); // Equal distribution for now
+    
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: [
+                    '#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+                    '#06b6d4', '#84cc16', '#f97316', '#ec4899', '#6366f1'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+    
+    // Update summary chart
+    updateSummaryChart();
+}
+
+function updateSummaryChart() {
+    const ctx = document.getElementById('summaryChart').getContext('2d');
+    
+    const companiesCount = parseInt(document.getElementById('company-categories-count').textContent) || 0;
+    const contactsCount = parseInt(document.getElementById('crm-contacts-count').textContent) || 0;
+    const statusesCount = parseInt(document.getElementById('company-statuses-count').textContent) || 0;
+    const accountsCount = parseInt(document.getElementById('accountancy-accounts-count').textContent) || 0;
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Categories', 'Contacts', 'Statuses', 'Accounts'],
+            datasets: [{
+                data: [companiesCount, contactsCount, statusesCount, accountsCount],
+                backgroundColor: ['#2563eb', '#10b981', '#8b5cf6', '#06b6d4']
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function updateRecentCategories(categories) {
+    const container = document.getElementById('recent-categories');
+    
+    if (categories.length === 0) {
+        container.innerHTML = '<p class="text-muted">No categories found</p>';
+        return;
+    }
+    
+    const html = categories.map(cat => `
+        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+            <div>
+                <strong>${cat.name}</strong>
+                <br>
+                <small class="text-muted">ID: ${cat.id} • Created: ${new Date(cat.created_at).toLocaleDateString()}</small>
+            </div>
+            <span class="badge bg-primary">${cat.id}</span>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+function updateRecentContacts(contacts) {
+    const container = document.getElementById('recent-contacts');
+    
+    if (contacts.length === 0) {
+        container.innerHTML = '<p class="text-muted">No contacts found</p>';
+        return;
+    }
+    
+    const html = contacts.map(contact => `
+        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+            <div>
+                <strong>${contact.name || 'Unnamed Contact'}</strong>
+                <br>
+                <small class="text-muted">
+                    ${contact.crm_company ? contact.crm_company.name : 'No Company'} • 
+                    ${contact.is_active ? 'Active' : 'Inactive'}
+                </small>
+            </div>
+            <span class="badge ${contact.is_active ? 'bg-success' : 'bg-secondary'}">
+                ${contact.is_active ? 'Active' : 'Inactive'}
+            </span>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+function showErrorState() {
+    document.getElementById('company-categories-count').innerHTML = '<span class="text-danger">Error</span>';
+    document.getElementById('crm-contacts-count').innerHTML = '<span class="text-danger">Error</span>';
+    document.getElementById('crm-actions-count').innerHTML = '<span class="text-danger">Error</span>';
+}
+</script>
+{% endblock %}

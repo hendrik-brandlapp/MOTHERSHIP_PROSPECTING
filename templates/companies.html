@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+
+{% block title %}Companies - DOUANO{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="fas fa-building me-2 text-primary"></i>Companies</h2>
+                <p class="text-muted mb-0">Search and manage companies by VAT numbers</p>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="loadCompanies()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Search and Filter -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" class="form-control" id="searchInput" placeholder="Search VAT numbers, company names..." onkeyup="filterCompanies()">
+        </div>
+    </div>
+    <div class="col-md-6">
+        <select class="form-select" id="sortSelect" onchange="sortCompanies()">
+            <option value="name">Sort by Name</option>
+            <option value="id">Sort by ID</option>
+            <option value="created_at">Sort by Created Date</option>
+        </select>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loading-state" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-3 text-muted">Loading companies...</p>
+</div>
+
+<!-- Error State -->
+<div id="error-state" class="alert alert-danger d-none" role="alert">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    <span id="error-message"></span>
+    <button class="btn btn-outline-danger btn-sm ms-2" onclick="loadCompanies()">
+        <i class="fas fa-redo me-1"></i>Retry
+    </button>
+</div>
+
+<!-- Companies Grid -->
+<div id="companies-container" class="d-none">
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 id="companies-count" class="mb-0"></h5>
+                <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="viewMode" id="gridView" autocomplete="off" checked>
+                    <label class="btn btn-outline-secondary btn-sm" for="gridView">
+                        <i class="fas fa-th"></i> Grid
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="viewMode" id="listView" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="listView">
+                        <i class="fas fa-list"></i> List
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Grid View -->
+    <div id="grid-view" class="row">
+        <!-- Companies will be loaded here -->
+    </div>
+    
+    <!-- List View -->
+    <div id="list-view" class="d-none">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Address</th>
+                        <th>Status</th>
+                        <th>Account Manager</th>
+                    </tr>
+                </thead>
+                <tbody id="companies-table-body">
+                    <!-- Table rows will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Company Detail Modal -->
+<div class="modal fade" id="companyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-building me-2"></i>
+                    <span id="modal-company-name"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Basic Information</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>ID:</strong></td>
+                                <td id="modal-company-id"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Name:</strong></td>
+                                <td id="modal-company-name-detail"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Entity Version:</strong></td>
+                                <td id="modal-company-version"></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Timestamps</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Created:</strong></td>
+                                <td id="modal-company-created"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Updated:</strong></td>
+                                <td id="modal-company-updated"></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let companiesData = [];
+let filteredCompanies = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Check for search parameter in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchParam = urlParams.get('search');
+    
+    if (searchParam) {
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = searchParam;
+            console.log('Set search parameter:', searchParam);
+        }
+    }
+    
+    loadCompanies();
+    
+    // View mode toggle
+    document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
+        radio.addEventListener('change', toggleView);
+    });
+});
+
+async function loadCompanies() {
+    showLoadingState();
+    
+    try {
+        const response = await fetch('/api/crm/companies');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.companies) {
+            companiesData = data.companies;
+            filteredCompanies = [...companiesData];
+            displayCompanies();
+            showCompaniesContainer();
+            
+            // Apply search filter if there's a search parameter
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput && searchInput.value) {
+                console.log('Applying filter for:', searchInput.value);
+                filterCompanies();
+            } else {
+                console.log('No search value to apply');
+            }
+        } else {
+            throw new Error('Invalid data format received');
+        }
+        
+    } catch (error) {
+        console.error('Error loading companies:', error);
+        showErrorState(error.message);
+    }
+}
+
+function showLoadingState() {
+    document.getElementById('loading-state').classList.remove('d-none');
+    document.getElementById('error-state').classList.add('d-none');
+    document.getElementById('companies-container').classList.add('d-none');
+}
+
+function showErrorState(message) {
+    document.getElementById('loading-state').classList.add('d-none');
+    document.getElementById('error-state').classList.remove('d-none');
+    document.getElementById('companies-container').classList.add('d-none');
+    document.getElementById('error-message').textContent = message;
+}
+
+function showCompaniesContainer() {
+    document.getElementById('loading-state').classList.add('d-none');
+    document.getElementById('error-state').classList.add('d-none');
+    document.getElementById('companies-container').classList.remove('d-none');
+}
+
+function displayCompanies() {
+    const count = filteredCompanies.length;
+    document.getElementById('companies-count').textContent = `${count} ${count === 1 ? 'Company' : 'Companies'}`;
+    
+    // Update both views
+    displayGridView();
+    displayListView();
+}
+
+function displayGridView() {
+    const container = document.getElementById('grid-view');
+    
+    if (filteredCompanies.length === 0) {
+        container.innerHTML = '<div class="col-12"><p class="text-muted text-center">No companies found</p></div>';
+        return;
+    }
+    
+    const html = filteredCompanies.map(company => `
+        <div class="col-md-4 col-lg-3 mb-4">
+            <div class="card h-100 company-card" onclick="showCompanyDetails(${company.id})">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0">${company.name || 'Unnamed Company'}</h6>
+                        <span class="badge ${company.status?.name === 'Klant' ? 'bg-success' : 'bg-warning'}">${company.status?.name || 'Unknown'}</span>
+                    </div>
+                    <p class="card-text text-muted small mb-2">
+                        <i class="fas fa-map-marker-alt me-1"></i>
+                        ${company.address_line1 || ''} ${company.city || ''} ${company.post_code || ''}
+                    </p>
+                    <p class="card-text text-muted small mb-2">
+                        <i class="fas fa-phone me-1"></i>
+                        ${company.phone_number || 'No phone'}
+                    </p>
+                    <p class="card-text text-muted small mb-0">
+                        <i class="fas fa-user me-1"></i>
+                        ${company.account_manager?.name || 'No manager'}
+                    </p>
+                </div>
+                <div class="card-footer bg-transparent border-0">
+                    <small class="text-muted">
+                        <i class="fas fa-hashtag me-1"></i>
+                        ID: ${company.id}
+                    </small>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+function displayListView() {
+    const tbody = document.getElementById('companies-table-body');
+    
+    if (filteredCompanies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No companies found</td></tr>';
+        return;
+    }
+    
+    const html = filteredCompanies.map(company => `
+        <tr onclick="showCompanyDetails(${company.id})" style="cursor: pointer;">
+            <td><span class="badge bg-primary">${company.id}</span></td>
+            <td><strong>${company.name || 'Unnamed Company'}</strong></td>
+            <td>${company.address_line1 || ''} ${company.city || ''}</td>
+            <td><span class="badge ${company.status?.name === 'Klant' ? 'bg-success' : 'bg-warning'}">${company.status?.name || 'Unknown'}</span></td>
+            <td>${company.account_manager?.name || 'No manager'}</td>
+        </tr>
+    `).join('');
+    
+    tbody.innerHTML = html;
+}
+
+function filterCompanies() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    console.log('Filtering companies with term:', searchTerm);
+    console.log('Total companies to filter:', companiesData.length);
+    
+    filteredCompanies = companiesData.filter(company => {
+        const companyStr = JSON.stringify(company).toLowerCase();
+        const matches = companyStr.includes(searchTerm) ||
+               (company.name && company.name.toLowerCase().includes(searchTerm)) ||
+               (company.address_line1 && company.address_line1.toLowerCase().includes(searchTerm)) ||
+               (company.city && company.city.toLowerCase().includes(searchTerm)) ||
+               (company.phone_number && company.phone_number.includes(searchTerm)) ||
+               (company.account_manager?.name && company.account_manager.name.toLowerCase().includes(searchTerm)) ||
+               company.id.toString().includes(searchTerm);
+        
+        if (matches) {
+            console.log('Match found:', company.name, 'for term:', searchTerm);
+        }
+        return matches;
+    });
+    
+    console.log('Filtered companies count:', filteredCompanies.length);
+    displayCompanies();
+}
+
+function sortCompanies() {
+    const sortBy = document.getElementById('sortSelect').value;
+    
+    filteredCompanies.sort((a, b) => {
+        if (sortBy === 'name') {
+            return a.name.localeCompare(b.name);
+        } else if (sortBy === 'id') {
+            return a.id - b.id;
+        } else if (sortBy === 'created_at') {
+            return new Date(a.created_at) - new Date(b.created_at);
+        }
+        return 0;
+    });
+    
+    displayCompanies();
+}
+
+function toggleView() {
+    const gridView = document.getElementById('grid-view');
+    const listView = document.getElementById('list-view');
+    const isGridMode = document.getElementById('gridView').checked;
+    
+    if (isGridMode) {
+        gridView.classList.remove('d-none');
+        listView.classList.add('d-none');
+    } else {
+        gridView.classList.add('d-none');
+        listView.classList.remove('d-none');
+    }
+}
+
+function showCompanyDetails(companyId) {
+    const company = companiesData.find(c => c.id === companyId);
+    
+    if (!company) return;
+    
+    // Populate modal
+    document.getElementById('modal-company-name').textContent = company.name;
+    document.getElementById('modal-company-id').textContent = company.id;
+    document.getElementById('modal-company-name-detail').textContent = company.name;
+    document.getElementById('modal-company-version').textContent = company.entity_version;
+    document.getElementById('modal-company-created').textContent = new Date(company.created_at).toLocaleString();
+    document.getElementById('modal-company-updated').textContent = new Date(company.updated_at).toLocaleString();
+    
+    // Show modal using data attributes (safer approach)
+    const modalElement = document.getElementById('companyModal');
+    
+    // Use Bootstrap's data-bs-toggle approach or get existing instance
+    let modal = bootstrap.Modal.getInstance(modalElement);
+    if (!modal) {
+        modal = new bootstrap.Modal(modalElement);
+    }
+    modal.show();
+}
+</script>
+
+<style>
+.company-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.company-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+}
+
+.table tbody tr:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+}
+</style>
+{% endblock %}

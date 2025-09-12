@@ -1,0 +1,457 @@
+{% extends "base.html" %}
+
+{% block title %}Company Statuses - DOUANO{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="fas fa-flag me-2 text-primary"></i>Company Statuses</h2>
+                <p class="text-muted mb-0">Manage and view company status configurations</p>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="loadStatuses()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters and Search -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" class="form-control" id="searchInput" placeholder="Search statuses..." onkeyup="filterStatuses()">
+        </div>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="sortSelect" onchange="sortStatuses()">
+            <option value="name">Sort by Name</option>
+            <option value="id">Sort by ID</option>
+            <option value="is_default">Sort by Default</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="filterActiveSelect" onchange="filterByActive()">
+            <option value="">All Statuses</option>
+            <option value="true">Active Only</option>
+            <option value="false">Inactive Only</option>
+        </select>
+    </div>
+    <div class="col-md-2">
+        <button class="btn btn-outline-secondary w-100" onclick="resetFilters()">
+            <i class="fas fa-times me-1"></i>Reset
+        </button>
+    </div>
+</div>
+
+<!-- Loading State -->
+<div id="loading-state" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <p class="mt-3 text-muted">Loading company statuses...</p>
+</div>
+
+<!-- Error State -->
+<div id="error-state" class="alert alert-danger d-none" role="alert">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    <span id="error-message"></span>
+    <button class="btn btn-outline-danger btn-sm ms-2" onclick="loadStatuses()">
+        <i class="fas fa-redo me-1"></i>Retry
+    </button>
+</div>
+
+<!-- Statuses Container -->
+<div id="statuses-container" class="d-none">
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 id="statuses-count" class="mb-0"></h5>
+                <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="viewMode" id="gridView" autocomplete="off" checked>
+                    <label class="btn btn-outline-secondary btn-sm" for="gridView">
+                        <i class="fas fa-th"></i> Grid
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="viewMode" id="listView" autocomplete="off">
+                    <label class="btn btn-outline-secondary btn-sm" for="listView">
+                        <i class="fas fa-list"></i> List
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Grid View -->
+    <div id="grid-view" class="row">
+        <!-- Statuses will be loaded here -->
+    </div>
+    
+    <!-- List View -->
+    <div id="list-view" class="d-none">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Default</th>
+                        <th>Active</th>
+                        <th>Created</th>
+                        <th>Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="statuses-table-body">
+                    <!-- Table rows will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Status Detail Modal -->
+<div class="modal fade" id="statusModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-flag me-2"></i>
+                    <span id="modal-status-name"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Status Information</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>ID:</strong></td>
+                                <td id="modal-status-id"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Name:</strong></td>
+                                <td id="modal-status-name-detail"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Description:</strong></td>
+                                <td id="modal-status-description"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Is Default:</strong></td>
+                                <td id="modal-status-default"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Is Active:</strong></td>
+                                <td id="modal-status-active"></td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Timestamps</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Created:</strong></td>
+                                <td id="modal-status-created"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Updated:</strong></td>
+                                <td id="modal-status-updated"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Version:</strong></td>
+                                <td id="modal-status-version"></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let statusesData = [];
+let filteredStatuses = [];
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadStatuses();
+    
+    // View mode toggle
+    document.querySelectorAll('input[name="viewMode"]').forEach(radio => {
+        radio.addEventListener('change', toggleView);
+    });
+});
+
+async function loadStatuses() {
+    showLoadingState();
+    
+    try {
+        const response = await fetch('/api/company-statuses');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.result && data.result.data) {
+            statusesData = data.result.data;
+            filteredStatuses = [...statusesData];
+            displayStatuses();
+            showStatusesContainer();
+        } else if (data.result && Array.isArray(data.result)) {
+            statusesData = data.result;
+            filteredStatuses = [...statusesData];
+            displayStatuses();
+            showStatusesContainer();
+        } else {
+            // Handle empty data
+            statusesData = [];
+            filteredStatuses = [];
+            displayStatuses();
+            showStatusesContainer();
+        }
+        
+    } catch (error) {
+        console.error('Error loading statuses:', error);
+        showErrorState(error.message);
+    }
+}
+
+function showLoadingState() {
+    document.getElementById('loading-state').classList.remove('d-none');
+    document.getElementById('error-state').classList.add('d-none');
+    document.getElementById('statuses-container').classList.add('d-none');
+}
+
+function showErrorState(message) {
+    document.getElementById('loading-state').classList.add('d-none');
+    document.getElementById('error-state').classList.remove('d-none');
+    document.getElementById('statuses-container').classList.add('d-none');
+    document.getElementById('error-message').textContent = message;
+}
+
+function showStatusesContainer() {
+    document.getElementById('loading-state').classList.add('d-none');
+    document.getElementById('error-state').classList.add('d-none');
+    document.getElementById('statuses-container').classList.remove('d-none');
+}
+
+function displayStatuses() {
+    const count = filteredStatuses.length;
+    document.getElementById('statuses-count').textContent = `${count} ${count === 1 ? 'Status' : 'Statuses'}`;
+    
+    // Update both views
+    displayGridView();
+    displayListView();
+}
+
+function displayGridView() {
+    const container = document.getElementById('grid-view');
+    
+    if (filteredStatuses.length === 0) {
+        container.innerHTML = '<div class="col-12"><p class="text-muted text-center">No statuses found</p></div>';
+        return;
+    }
+    
+    const html = filteredStatuses.map(status => `
+        <div class="col-md-4 col-lg-3 mb-4">
+            <div class="card h-100 status-card" onclick="showStatusDetails(${status.id})">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0">${status.name || 'Unnamed Status'}</h6>
+                        <span class="badge bg-primary">${status.id}</span>
+                    </div>
+                    
+                    ${status.description ? `
+                        <p class="card-text text-muted small mb-2">
+                            <i class="fas fa-info-circle me-1"></i>
+                            ${status.description}
+                        </p>
+                    ` : ''}
+                    
+                    <div class="mb-2">
+                        ${status.is_default ? 
+                            '<span class="badge bg-warning me-1"><i class="fas fa-star me-1"></i>Default</span>' : 
+                            ''
+                        }
+                        ${status.is_active ? 
+                            '<span class="badge bg-success">Active</span>' : 
+                            '<span class="badge bg-secondary">Inactive</span>'
+                        }
+                    </div>
+                    
+                    <p class="card-text text-muted small mb-0">
+                        <i class="fas fa-calendar me-1"></i>
+                        Created: ${new Date(status.created_at).toLocaleDateString()}
+                    </p>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+function displayListView() {
+    const tbody = document.getElementById('statuses-table-body');
+    
+    if (filteredStatuses.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No statuses found</td></tr>';
+        return;
+    }
+    
+    const html = filteredStatuses.map(status => `
+        <tr onclick="showStatusDetails(${status.id})" style="cursor: pointer;">
+            <td><span class="badge bg-primary">${status.id}</span></td>
+            <td><strong>${status.name || 'Unnamed Status'}</strong></td>
+            <td>
+                ${status.is_default ? 
+                    '<span class="badge bg-warning"><i class="fas fa-star me-1"></i>Default</span>' : 
+                    '<span class="text-muted">No</span>'
+                }
+            </td>
+            <td>
+                ${status.is_active ? 
+                    '<span class="badge bg-success">Active</span>' : 
+                    '<span class="badge bg-secondary">Inactive</span>'
+                }
+            </td>
+            <td>${new Date(status.created_at).toLocaleDateString()}</td>
+            <td>${new Date(status.updated_at).toLocaleDateString()}</td>
+        </tr>
+    `).join('');
+    
+    tbody.innerHTML = html;
+}
+
+function filterStatuses() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    
+    filteredStatuses = statusesData.filter(status => 
+        (status.name || '').toLowerCase().includes(searchTerm) ||
+        status.id.toString().includes(searchTerm) ||
+        (status.description || '').toLowerCase().includes(searchTerm)
+    );
+    
+    displayStatuses();
+}
+
+function filterByActive() {
+    const activeFilter = document.getElementById('filterActiveSelect').value;
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    
+    let filtered = statusesData;
+    
+    // Apply active filter
+    if (activeFilter !== '') {
+        filtered = filtered.filter(status => 
+            status.is_active === (activeFilter === 'true')
+        );
+    }
+    
+    // Apply search filter
+    if (searchTerm) {
+        filtered = filtered.filter(status => 
+            (status.name || '').toLowerCase().includes(searchTerm) ||
+            status.id.toString().includes(searchTerm) ||
+            (status.description || '').toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    filteredStatuses = filtered;
+    displayStatuses();
+}
+
+function sortStatuses() {
+    const sortBy = document.getElementById('sortSelect').value;
+    
+    filteredStatuses.sort((a, b) => {
+        if (sortBy === 'name') {
+            return (a.name || '').localeCompare(b.name || '');
+        } else if (sortBy === 'id') {
+            return a.id - b.id;
+        } else if (sortBy === 'is_default') {
+            return (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0);
+        }
+        return 0;
+    });
+    
+    displayStatuses();
+}
+
+function resetFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('filterActiveSelect').value = '';
+    document.getElementById('sortSelect').value = 'name';
+    
+    filteredStatuses = [...statusesData];
+    displayStatuses();
+}
+
+function toggleView() {
+    const gridView = document.getElementById('grid-view');
+    const listView = document.getElementById('list-view');
+    const isGridMode = document.getElementById('gridView').checked;
+    
+    if (isGridMode) {
+        gridView.classList.remove('d-none');
+        listView.classList.add('d-none');
+    } else {
+        gridView.classList.add('d-none');
+        listView.classList.remove('d-none');
+    }
+}
+
+function showStatusDetails(statusId) {
+    const status = statusesData.find(s => s.id === statusId);
+    
+    if (!status) return;
+    
+    // Populate modal
+    document.getElementById('modal-status-name').textContent = status.name || 'Unnamed Status';
+    document.getElementById('modal-status-id').textContent = status.id;
+    document.getElementById('modal-status-name-detail').textContent = status.name || 'N/A';
+    document.getElementById('modal-status-description').textContent = status.description || 'No description';
+    document.getElementById('modal-status-default').innerHTML = status.is_default ? 
+        '<span class="badge bg-warning"><i class="fas fa-star me-1"></i>Yes</span>' : 
+        '<span class="text-muted">No</span>';
+    document.getElementById('modal-status-active').innerHTML = status.is_active ? 
+        '<span class="badge bg-success">Active</span>' : 
+        '<span class="badge bg-secondary">Inactive</span>';
+    document.getElementById('modal-status-created').textContent = new Date(status.created_at).toLocaleString();
+    document.getElementById('modal-status-updated').textContent = new Date(status.updated_at).toLocaleString();
+    document.getElementById('modal-status-version').textContent = status.entity_version || 'N/A';
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('statusModal'));
+    modal.show();
+}
+</script>
+
+<style>
+.status-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.status-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+}
+
+.table tbody tr:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+}
+</style>
+{% endblock %}

@@ -1,0 +1,1035 @@
+{% extends "base.html" %}
+
+{% block title %}Accountancy - DOUANO{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="fas fa-calculator me-2 text-primary"></i>Accountancy</h2>
+                <p class="text-muted mb-0">Manage accounts, bookings, and financial data</p>
+            </div>
+            <div>
+                <button class="btn btn-primary" onclick="loadAccountancyData()">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Accountancy Tabs -->
+<ul class="nav nav-tabs mb-4" id="accountancyTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="accounts-tab" data-bs-toggle="tab" data-bs-target="#accounts" type="button" role="tab">
+            <i class="fas fa-list me-1"></i>Accounts
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="bookings-tab" data-bs-toggle="tab" data-bs-target="#bookings" type="button" role="tab">
+            <i class="fas fa-book me-1"></i>Bookings
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="accountancyTabContent">
+    <!-- Accounts Tab -->
+    <div class="tab-pane fade show active" id="accounts" role="tabpanel">
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                    <input type="text" class="form-control" id="accountSearchInput" placeholder="Search accounts..." onkeyup="filterAccounts()">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="accountSortSelect" onchange="sortAccounts()">
+                    <option value="number">Sort by Number</option>
+                    <option value="description">Sort by Description</option>
+                    <option value="type">Sort by Type</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="accountFilterVisible" onchange="filterAccountsByVisible()">
+                    <option value="">All Accounts</option>
+                    <option value="true">Visible Only</option>
+                    <option value="false">Hidden Only</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-outline-secondary w-100" onclick="resetAccountFilters()">
+                    <i class="fas fa-times me-1"></i>Reset
+                </button>
+            </div>
+        </div>
+
+        <!-- Accounts Loading State -->
+        <div id="accounts-loading-state" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3 text-muted">Loading accounts...</p>
+        </div>
+
+        <!-- Accounts Error State -->
+        <div id="accounts-error-state" class="alert alert-danger d-none" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <span id="accounts-error-message"></span>
+            <button class="btn btn-outline-danger btn-sm ms-2" onclick="loadAccounts()">
+                <i class="fas fa-redo me-1"></i>Retry
+            </button>
+        </div>
+
+        <!-- Accounts Container -->
+        <div id="accounts-container" class="d-none">
+            <div class="row mb-3">
+                <div class="col-12">
+                    <h5 id="accounts-count" class="mb-0"></h5>
+                </div>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Description</th>
+                            <th>Type</th>
+                            <th>Visible</th>
+                            <th>Sort Order</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accounts-table-body">
+                        <!-- Table rows will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bookings Tab -->
+    <div class="tab-pane fade" id="bookings" role="tabpanel">
+        <!-- Bookings Sub-tabs -->
+        <ul class="nav nav-pills mb-3" id="bookingsTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="bookings-list-tab" data-bs-toggle="pill" data-bs-target="#bookings-list" type="button" role="tab">
+                    <i class="fas fa-list me-1"></i>All Bookings
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="booking-search-tab" data-bs-toggle="pill" data-bs-target="#booking-search" type="button" role="tab">
+                    <i class="fas fa-search me-1"></i>Search by ID
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="bookingsTabContent">
+            <!-- All Bookings Tab -->
+            <div class="tab-pane fade show active" id="bookings-list" role="tabpanel">
+                <!-- Bookings Filters -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" class="form-control" id="bookingsSearchInput" placeholder="Search bookings..." onkeyup="filterBookings()">
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="date" class="form-control" id="bookingsStartDate" onchange="filterBookings()" title="Start Date">
+                    </div>
+                    <div class="col-md-2">
+                        <input type="date" class="form-control" id="bookingsEndDate" onchange="filterBookings()" title="End Date">
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select" id="bookingsSortSelect" onchange="sortBookings()">
+                            <option value="date_desc">Date (Newest)</option>
+                            <option value="date_asc">Date (Oldest)</option>
+                            <option value="account">By Account</option>
+                            <option value="journal">By Journal</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-secondary w-100" onclick="resetBookingsFilters()">
+                            <i class="fas fa-times me-1"></i>Reset
+                        </button>
+                    </div>
+                    <div class="col-md-1">
+                        <button class="btn btn-primary w-100" onclick="loadBookings()">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bookings Loading State -->
+                <div id="bookings-loading-state" class="text-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Loading bookings...</p>
+                </div>
+
+                <!-- Bookings Error State -->
+                <div id="bookings-error-state" class="alert alert-danger d-none" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span id="bookings-error-message"></span>
+                    <button class="btn btn-outline-danger btn-sm ms-2" onclick="loadBookings()">
+                        <i class="fas fa-redo me-1"></i>Retry
+                    </button>
+                </div>
+
+                <!-- Bookings Container -->
+                <div id="bookings-container" class="d-none">
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <h5 id="bookings-count" class="mb-0"></h5>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Journal</th>
+                                    <th>Account</th>
+                                    <th>Book Number</th>
+                                    <th>Type</th>
+                                    <th>Company</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookings-table-body">
+                                <!-- Table rows will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <nav aria-label="Bookings pagination" class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="text-muted small">
+                                Showing <span id="bookings-pagination-info"></span>
+                            </div>
+                            <ul class="pagination mb-0" id="bookings-pagination">
+                                <!-- Pagination will be generated here -->
+                            </ul>
+                        </div>
+                    </nav>
+                </div>
+            </div>
+
+            <!-- Search by ID Tab -->
+            <div class="tab-pane fade" id="booking-search" role="tabpanel">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="fas fa-hashtag"></i></span>
+                            <input type="number" class="form-control" id="bookingIdInput" placeholder="Enter booking ID..." min="1">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <button class="btn btn-primary w-100" onclick="loadBooking()">
+                            <i class="fas fa-search me-1"></i>Load Booking
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Booking Loading State -->
+                <div id="booking-loading-state" class="text-center py-5 d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Loading booking...</p>
+                </div>
+
+                <!-- Booking Error State -->
+                <div id="booking-error-state" class="alert alert-danger d-none" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <span id="booking-error-message"></span>
+                </div>
+
+                <!-- Booking Container -->
+                <div id="booking-container" class="d-none">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5><i class="fas fa-book me-2"></i>Booking Details</h5>
+                        </div>
+                        <div class="card-body" id="booking-details">
+                            <!-- Booking details will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Booking Instructions -->
+                <div id="booking-instructions" class="text-center py-5">
+                    <i class="fas fa-book fa-4x text-muted mb-3"></i>
+                    <h4>Load a Booking</h4>
+                    <p class="text-muted">Enter a booking ID above to view detailed booking information.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Account Detail Modal -->
+<div class="modal fade" id="accountModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-list me-2"></i>
+                    Account Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="account-modal-body">
+                <!-- Account details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let accountsData = [];
+let filteredAccounts = [];
+let bookingsData = [];
+let filteredBookings = [];
+let currentBookingsPage = 1;
+let bookingsPerPage = 20;
+let totalBookingsPages = 1;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadAccountancyData();
+    
+    // Tab change event
+    document.querySelectorAll('[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            const target = e.target.getAttribute('data-bs-target');
+            if (target === '#bookings') {
+                // Load bookings when switching to bookings tab
+                if (bookingsData.length === 0) {
+                    loadBookings();
+                }
+            }
+        });
+    });
+    
+    // Sub-tab change event for bookings
+    document.querySelectorAll('[data-bs-toggle="pill"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function(e) {
+            const target = e.target.getAttribute('data-bs-target');
+            if (target === '#bookings-list') {
+                // Load bookings when switching to bookings list
+                if (bookingsData.length === 0) {
+                    loadBookings();
+                }
+            } else if (target === '#booking-search') {
+                // Reset booking search section
+                document.getElementById('booking-container').classList.add('d-none');
+                document.getElementById('booking-error-state').classList.add('d-none');
+                document.getElementById('booking-instructions').classList.remove('d-none');
+            }
+        });
+    });
+});
+
+async function loadAccountancyData() {
+    await loadAccounts();
+}
+
+async function loadAccounts() {
+    showAccountsLoadingState();
+    
+    try {
+        const response = await fetch('/api/accountancy/accounts');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.result && data.result.data) {
+            accountsData = data.result.data;
+            filteredAccounts = [...accountsData];
+            displayAccounts();
+            showAccountsContainer();
+        } else if (data.result && Array.isArray(data.result)) {
+            accountsData = data.result;
+            filteredAccounts = [...accountsData];
+            displayAccounts();
+            showAccountsContainer();
+        } else {
+            // Handle empty data
+            accountsData = [];
+            filteredAccounts = [];
+            displayAccounts();
+            showAccountsContainer();
+        }
+        
+    } catch (error) {
+        console.error('Error loading accounts:', error);
+        showAccountsErrorState(error.message);
+    }
+}
+
+async function loadBooking() {
+    const bookingId = document.getElementById('bookingIdInput').value;
+    
+    if (!bookingId) {
+        alert('Please enter a booking ID');
+        return;
+    }
+    
+    showBookingLoadingState();
+    
+    try {
+        const response = await fetch(`/api/accountancy/bookings/${bookingId}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        displayBooking(data);
+        showBookingContainer();
+        
+    } catch (error) {
+        console.error('Error loading booking:', error);
+        showBookingErrorState(error.message);
+    }
+}
+
+// Accounts functions
+function showAccountsLoadingState() {
+    document.getElementById('accounts-loading-state').classList.remove('d-none');
+    document.getElementById('accounts-error-state').classList.add('d-none');
+    document.getElementById('accounts-container').classList.add('d-none');
+}
+
+function showAccountsErrorState(message) {
+    document.getElementById('accounts-loading-state').classList.add('d-none');
+    document.getElementById('accounts-error-state').classList.remove('d-none');
+    document.getElementById('accounts-container').classList.add('d-none');
+    document.getElementById('accounts-error-message').textContent = message;
+}
+
+function showAccountsContainer() {
+    document.getElementById('accounts-loading-state').classList.add('d-none');
+    document.getElementById('accounts-error-state').classList.add('d-none');
+    document.getElementById('accounts-container').classList.remove('d-none');
+}
+
+function displayAccounts() {
+    const count = filteredAccounts.length;
+    document.getElementById('accounts-count').textContent = `${count} ${count === 1 ? 'Account' : 'Accounts'}`;
+    
+    const tbody = document.getElementById('accounts-table-body');
+    
+    if (filteredAccounts.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No accounts found</td></tr>';
+        return;
+    }
+    
+    const html = filteredAccounts.map(account => `
+        <tr>
+            <td><strong>${account.number || 'N/A'}</strong></td>
+            <td>${account.description || 'No description'}</td>
+            <td>
+                <span class="badge bg-info">${account.type || 'N/A'}</span>
+            </td>
+            <td>
+                ${account.is_visible ? 
+                    '<span class="badge bg-success">Visible</span>' : 
+                    '<span class="badge bg-secondary">Hidden</span>'
+                }
+            </td>
+            <td>${account.sort || 'N/A'}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="showAccountDetails(${account.id})">
+                    <i class="fas fa-eye"></i> View
+                </button>
+            </td>
+        </tr>
+    `).join('');
+    
+    tbody.innerHTML = html;
+}
+
+// Booking functions
+function showBookingLoadingState() {
+    document.getElementById('booking-loading-state').classList.remove('d-none');
+    document.getElementById('booking-error-state').classList.add('d-none');
+    document.getElementById('booking-container').classList.add('d-none');
+    document.getElementById('booking-instructions').classList.add('d-none');
+}
+
+function showBookingErrorState(message) {
+    document.getElementById('booking-loading-state').classList.add('d-none');
+    document.getElementById('booking-error-state').classList.remove('d-none');
+    document.getElementById('booking-container').classList.add('d-none');
+    document.getElementById('booking-instructions').classList.add('d-none');
+    document.getElementById('booking-error-message').textContent = message;
+}
+
+function showBookingContainer() {
+    document.getElementById('booking-loading-state').classList.add('d-none');
+    document.getElementById('booking-error-state').classList.add('d-none');
+    document.getElementById('booking-container').classList.remove('d-none');
+    document.getElementById('booking-instructions').classList.add('d-none');
+}
+
+function displayBooking(data) {
+    const container = document.getElementById('booking-details');
+    
+    if (data.result) {
+        const booking = data.result;
+        const html = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Booking Information</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>ID:</strong></td>
+                            <td>${booking.id}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Date:</strong></td>
+                            <td>${booking.date || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Description:</strong></td>
+                            <td>${booking.description || 'No description'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Amount:</strong></td>
+                            <td>${booking.amount || 'N/A'}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Additional Details</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>Created:</strong></td>
+                            <td>${booking.created_at ? new Date(booking.created_at).toLocaleString() : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Updated:</strong></td>
+                            <td>${booking.updated_at ? new Date(booking.updated_at).toLocaleString() : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Version:</strong></td>
+                            <td>${booking.entity_version || 'N/A'}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        `;
+        container.innerHTML = html;
+    } else {
+        container.innerHTML = '<p class="text-muted">No booking data available</p>';
+    }
+}
+
+// Bookings list functions
+async function loadBookings() {
+    showBookingsLoadingState();
+    
+    try {
+        const params = new URLSearchParams();
+        
+        // Add date filters if set
+        const startDate = document.getElementById('bookingsStartDate').value;
+        const endDate = document.getElementById('bookingsEndDate').value;
+        
+        if (startDate) params.append('filter_by_start_date', startDate);
+        if (endDate) params.append('filter_by_end_date', endDate);
+        
+        // Add default ordering
+        params.append('order_by_date', 'desc');
+        
+        const response = await fetch(`/api/accountancy/bookings?${params.toString()}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.result && data.result.data) {
+            bookingsData = data.result.data;
+            filteredBookings = [...bookingsData];
+            displayBookings();
+            showBookingsContainer();
+        } else if (data.result && Array.isArray(data.result)) {
+            bookingsData = data.result;
+            filteredBookings = [...bookingsData];
+            displayBookings();
+            showBookingsContainer();
+        } else {
+            // Handle empty data
+            bookingsData = [];
+            filteredBookings = [];
+            displayBookings();
+            showBookingsContainer();
+        }
+        
+    } catch (error) {
+        console.error('Error loading bookings:', error);
+        showBookingsErrorState(error.message);
+    }
+}
+
+function showBookingsLoadingState() {
+    document.getElementById('bookings-loading-state').classList.remove('d-none');
+    document.getElementById('bookings-error-state').classList.add('d-none');
+    document.getElementById('bookings-container').classList.add('d-none');
+}
+
+function showBookingsErrorState(message) {
+    document.getElementById('bookings-loading-state').classList.add('d-none');
+    document.getElementById('bookings-error-state').classList.remove('d-none');
+    document.getElementById('bookings-container').classList.add('d-none');
+    document.getElementById('bookings-error-message').textContent = message;
+}
+
+function showBookingsContainer() {
+    document.getElementById('bookings-loading-state').classList.add('d-none');
+    document.getElementById('bookings-error-state').classList.add('d-none');
+    document.getElementById('bookings-container').classList.remove('d-none');
+}
+
+function displayBookings() {
+    const totalCount = filteredBookings.length;
+    document.getElementById('bookings-count').textContent = `${totalCount} ${totalCount === 1 ? 'Booking' : 'Bookings'}`;
+    
+    // Calculate pagination
+    totalBookingsPages = Math.ceil(totalCount / bookingsPerPage);
+    if (currentBookingsPage > totalBookingsPages) {
+        currentBookingsPage = Math.max(1, totalBookingsPages);
+    }
+    
+    const startIndex = (currentBookingsPage - 1) * bookingsPerPage;
+    const endIndex = startIndex + bookingsPerPage;
+    const displayedBookings = filteredBookings.slice(startIndex, endIndex);
+    
+    const tbody = document.getElementById('bookings-table-body');
+    
+    if (displayedBookings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No bookings found</td></tr>';
+        updateBookingsPagination();
+        return;
+    }
+    
+    const html = displayedBookings.map(booking => `
+        <tr>
+            <td>${booking.date ? new Date(booking.date).toLocaleDateString() : 'N/A'}</td>
+            <td>${booking.journal || 'N/A'}</td>
+            <td>${booking.account || 'N/A'}</td>
+            <td>${booking.book_number || 'N/A'}</td>
+            <td>
+                <span class="badge bg-info">${booking.booking_type || 'N/A'}</span>
+            </td>
+            <td>${booking.company || 'N/A'}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="showBookingDetails(${booking.id})">
+                    <i class="fas fa-eye"></i> View
+                </button>
+            </td>
+        </tr>
+    `).join('');
+    
+    tbody.innerHTML = html;
+    updateBookingsPagination();
+}
+
+function updateBookingsPagination() {
+    const totalCount = filteredBookings.length;
+    const startIndex = (currentBookingsPage - 1) * bookingsPerPage + 1;
+    const endIndex = Math.min(currentBookingsPage * bookingsPerPage, totalCount);
+    
+    document.getElementById('bookings-pagination-info').textContent = 
+        totalCount > 0 ? `${startIndex}-${endIndex} of ${totalCount}` : '0 of 0';
+    
+    const pagination = document.getElementById('bookings-pagination');
+    
+    if (totalBookingsPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    let paginationHTML = '';
+    
+    // Previous button
+    paginationHTML += `
+        <li class="page-item ${currentBookingsPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="changeBookingsPage(${currentBookingsPage - 1}); return false;">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        </li>
+    `;
+    
+    // Page numbers
+    const startPage = Math.max(1, currentBookingsPage - 2);
+    const endPage = Math.min(totalBookingsPages, currentBookingsPage + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHTML += `
+            <li class="page-item ${i === currentBookingsPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="changeBookingsPage(${i}); return false;">${i}</a>
+            </li>
+        `;
+    }
+    
+    // Next button
+    paginationHTML += `
+        <li class="page-item ${currentBookingsPage === totalBookingsPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="changeBookingsPage(${currentBookingsPage + 1}); return false;">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+    `;
+    
+    pagination.innerHTML = paginationHTML;
+}
+
+function changeBookingsPage(page) {
+    if (page < 1 || page > totalBookingsPages || page === currentBookingsPage) return;
+    
+    currentBookingsPage = page;
+    displayBookings();
+}
+
+function filterBookings() {
+    const searchTerm = document.getElementById('bookingsSearchInput').value.toLowerCase();
+    const startDate = document.getElementById('bookingsStartDate').value;
+    const endDate = document.getElementById('bookingsEndDate').value;
+    
+    filteredBookings = bookingsData.filter(booking => {
+        // Search filter
+        const matchesSearch = !searchTerm || 
+            (booking.journal && booking.journal.toLowerCase().includes(searchTerm)) ||
+            (booking.account && booking.account.toLowerCase().includes(searchTerm)) ||
+            (booking.book_number && booking.book_number.toString().toLowerCase().includes(searchTerm)) ||
+            (booking.booking_type && booking.booking_type.toLowerCase().includes(searchTerm)) ||
+            (booking.company && booking.company.toLowerCase().includes(searchTerm));
+        
+        // Date filters
+        let matchesDate = true;
+        if (booking.date) {
+            const bookingDate = new Date(booking.date);
+            if (startDate) {
+                matchesDate = matchesDate && bookingDate >= new Date(startDate);
+            }
+            if (endDate) {
+                matchesDate = matchesDate && bookingDate <= new Date(endDate);
+            }
+        }
+        
+        return matchesSearch && matchesDate;
+    });
+    
+    currentBookingsPage = 1;
+    displayBookings();
+}
+
+function sortBookings() {
+    const sortBy = document.getElementById('bookingsSortSelect').value;
+    
+    filteredBookings.sort((a, b) => {
+        switch (sortBy) {
+            case 'date_desc':
+                return new Date(b.date || 0) - new Date(a.date || 0);
+            case 'date_asc':
+                return new Date(a.date || 0) - new Date(b.date || 0);
+            case 'account':
+                return (a.account || '').localeCompare(b.account || '');
+            case 'journal':
+                return (a.journal || '').localeCompare(b.journal || '');
+            default:
+                return 0;
+        }
+    });
+    
+    displayBookings();
+}
+
+function resetBookingsFilters() {
+    document.getElementById('bookingsSearchInput').value = '';
+    document.getElementById('bookingsStartDate').value = '';
+    document.getElementById('bookingsEndDate').value = '';
+    document.getElementById('bookingsSortSelect').value = 'date_desc';
+    
+    filteredBookings = [...bookingsData];
+    currentBookingsPage = 1;
+    displayBookings();
+}
+
+async function showBookingDetails(bookingId) {
+    try {
+        const response = await fetch(`/api/accountancy/bookings/${bookingId}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Find the booking in our local data first for additional context
+        const localBooking = bookingsData.find(b => b.id === bookingId);
+        const booking = data.result || data;
+        
+        const modalBody = document.getElementById('account-modal-body');
+        modalBody.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Booking Information</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>ID:</strong></td>
+                            <td>${booking.id}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Date:</strong></td>
+                            <td>${booking.date ? new Date(booking.date).toLocaleDateString() : 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Journal:</strong></td>
+                            <td>${booking.journal || localBooking?.journal || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Account:</strong></td>
+                            <td>${booking.account || localBooking?.account || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Book Number:</strong></td>
+                            <td>${booking.book_number || localBooking?.book_number || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Booking Type:</strong></td>
+                            <td><span class="badge bg-info">${booking.booking_type || localBooking?.booking_type || 'N/A'}</span></td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Additional Details</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>Company:</strong></td>
+                            <td>${booking.company || localBooking?.company || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cost Center:</strong></td>
+                            <td>${booking.cost_center || localBooking?.cost_center || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Cost Unit:</strong></td>
+                            <td>${booking.cost_unit || localBooking?.cost_unit || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Product:</strong></td>
+                            <td>${booking.product || localBooking?.product || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Amount:</strong></td>
+                            <td>${booking.amount || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Created:</strong></td>
+                            <td>${booking.created_at ? new Date(booking.created_at).toLocaleString() : 'N/A'}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        // Update modal title
+        document.querySelector('#accountModal .modal-title').innerHTML = `
+            <i class="fas fa-book me-2"></i>Booking Details #${booking.id}
+        `;
+        
+        const modal = new bootstrap.Modal(document.getElementById('accountModal'));
+        modal.show();
+        
+    } catch (error) {
+        console.error('Error loading booking details:', error);
+        alert('Failed to load booking details: ' + error.message);
+    }
+}
+
+// Filter and sort functions
+function filterAccounts() {
+    const searchTerm = document.getElementById('accountSearchInput').value.toLowerCase();
+    
+    filteredAccounts = accountsData.filter(account => 
+        (account.number || '').toString().toLowerCase().includes(searchTerm) ||
+        (account.description || '').toLowerCase().includes(searchTerm) ||
+        (account.type || '').toLowerCase().includes(searchTerm)
+    );
+    
+    displayAccounts();
+}
+
+function filterAccountsByVisible() {
+    const visibleFilter = document.getElementById('accountFilterVisible').value;
+    const searchTerm = document.getElementById('accountSearchInput').value.toLowerCase();
+    
+    let filtered = accountsData;
+    
+    // Apply visible filter
+    if (visibleFilter !== '') {
+        filtered = filtered.filter(account => 
+            account.is_visible === (visibleFilter === 'true')
+        );
+    }
+    
+    // Apply search filter
+    if (searchTerm) {
+        filtered = filtered.filter(account => 
+            (account.number || '').toString().toLowerCase().includes(searchTerm) ||
+            (account.description || '').toLowerCase().includes(searchTerm) ||
+            (account.type || '').toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    filteredAccounts = filtered;
+    displayAccounts();
+}
+
+function sortAccounts() {
+    const sortBy = document.getElementById('accountSortSelect').value;
+    
+    filteredAccounts.sort((a, b) => {
+        if (sortBy === 'number') {
+            return (a.number || 0) - (b.number || 0);
+        } else if (sortBy === 'description') {
+            return (a.description || '').localeCompare(b.description || '');
+        } else if (sortBy === 'type') {
+            return (a.type || '').localeCompare(b.type || '');
+        }
+        return 0;
+    });
+    
+    displayAccounts();
+}
+
+function resetAccountFilters() {
+    document.getElementById('accountSearchInput').value = '';
+    document.getElementById('accountFilterVisible').value = '';
+    document.getElementById('accountSortSelect').value = 'number';
+    
+    filteredAccounts = [...accountsData];
+    displayAccounts();
+}
+
+async function showAccountDetails(accountId) {
+    try {
+        const response = await fetch(`/api/accountancy/accounts/${accountId}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        const account = data.result || data;
+        
+        const modalBody = document.getElementById('account-modal-body');
+        modalBody.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Account Information</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>ID:</strong></td>
+                            <td>${account.id}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Number:</strong></td>
+                            <td>${account.number || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Description:</strong></td>
+                            <td>${account.description || 'No description'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Type:</strong></td>
+                            <td><span class="badge bg-info">${account.type || 'N/A'}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Visible:</strong></td>
+                            <td>
+                                ${account.is_visible ? 
+                                    '<span class="badge bg-success">Yes</span>' : 
+                                    '<span class="badge bg-secondary">No</span>'
+                                }
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Additional Details</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>Sort Order:</strong></td>
+                            <td>${account.sort || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Account Group:</strong></td>
+                            <td>${account.account_group || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Account Class:</strong></td>
+                            <td>${account.account_class || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Allow Matching:</strong></td>
+                            <td>
+                                ${account.allow_matching ? 
+                                    '<span class="badge bg-success">Yes</span>' : 
+                                    '<span class="badge bg-secondary">No</span>'
+                                }
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Created:</strong></td>
+                            <td>${account.created_at ? new Date(account.created_at).toLocaleString() : 'N/A'}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        `;
+        
+        const modal = new bootstrap.Modal(document.getElementById('accountModal'));
+        modal.show();
+        
+    } catch (error) {
+        console.error('Error loading account details:', error);
+        alert('Failed to load account details: ' + error.message);
+    }
+}
+</script>
+
+<style>
+.nav-tabs .nav-link {
+    color: var(--secondary-color);
+    font-weight: 500;
+}
+
+.nav-tabs .nav-link.active {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.table tbody tr:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+}
+</style>
+{% endblock %}

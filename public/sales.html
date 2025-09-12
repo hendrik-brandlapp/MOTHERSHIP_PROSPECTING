@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales - DOUANO Dashboard</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #64748b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --dark-color: #1e293b;
+            --light-color: #f8fafc;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: radial-gradient(1200px 600px at 20% 0%, #e1e9ff 0%, transparent 60%),
+                        radial-gradient(1000px 500px at 100% 0%, #ffe1f0 0%, transparent 60%),
+                        linear-gradient(135deg, #f6f7fb 0%, #eef2ff 100%);
+            background-attachment: fixed;
+        }
+
+        .navbar {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 1px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            color: var(--primary-color) !important;
+            font-size: 1.5rem;
+        }
+
+        .main-container {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 24px;
+            box-shadow: 0 20px 60px rgba(20, 30, 70, 0.12);
+            margin: 2.5rem auto;
+            padding: 2.5rem;
+            max-width: 1400px;
+        }
+
+        .card {
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(20, 30, 70, 0.08);
+            transition: all 0.3s ease;
+            background: #fff;
+        }
+
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+        }
+
+        .sales-table {
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .table th {
+            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+            border: none;
+            font-weight: 600;
+            color: var(--dark-color);
+        }
+
+        .table td {
+            border: none;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: middle;
+        }
+
+        .amount-positive {
+            color: var(--success-color);
+            font-weight: 600;
+        }
+
+        .amount-negative {
+            color: var(--danger-color);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-rocket me-2"></i>DOUANO
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/companies.html">Companies</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/sales.html">Sales</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/products.html">Products</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/" id="loginButton">Login</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-container">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div>
+                            <h1 class="display-6 fw-bold mb-2">
+                                <i class="fas fa-receipt text-success me-3"></i>Sales
+                            </h1>
+                            <p class="text-muted mb-0">Investigate invoices, customers and revenue insights</p>
+                        </div>
+                        <div>
+                            <button class="btn btn-primary" onclick="refreshData()">
+                                <i class="fas fa-sync-alt me-2"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="row mb-4" id="statsContainer" style="display: none;">
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <i class="fas fa-file-invoice fa-2x text-primary mb-3"></i>
+                            <h4 class="card-title" id="totalInvoices">0</h4>
+                            <p class="card-text text-muted">Total Invoices</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <i class="fas fa-euro-sign fa-2x text-success mb-3"></i>
+                            <h4 class="card-title amount-positive" id="totalRevenue">€0</h4>
+                            <p class="card-text text-muted">Total Revenue</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <i class="fas fa-chart-line fa-2x text-warning mb-3"></i>
+                            <h4 class="card-title" id="avgInvoice">€0</h4>
+                            <p class="card-text text-muted">Average Invoice</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <i class="fas fa-users fa-2x text-info mb-3"></i>
+                            <h4 class="card-title" id="uniqueCustomers">0</h4>
+                            <p class="card-text text-muted">Unique Customers</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading sales data...</span>
+                </div>
+            </div>
+
+            <!-- Error State -->
+            <div id="errorState" class="alert alert-danger d-none" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span id="errorMessage">Failed to load sales data.</span>
+                <button class="btn btn-outline-danger btn-sm ms-3" onclick="refreshData()">Try Again</button>
+            </div>
+
+            <!-- Sales Table -->
+            <div id="salesContainer" class="d-none">
+                <div class="card sales-table">
+                    <div class="card-header">
+                        <h5 class="mb-0">Recent Sales</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0" id="salesTable">
+                                <thead>
+                                    <tr>
+                                        <th>Invoice #</th>
+                                        <th>Customer</th>
+                                        <th>Date</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Sales data will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- No Data State -->
+            <div id="noDataState" class="text-center py-5 d-none">
+                <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No sales data found</h4>
+                <p class="text-muted">There are no sales records to display at the moment.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Check authentication status
+        function checkAuth() {
+            const token = localStorage.getItem('douano_access_token');
+            const loginButton = document.getElementById('loginButton');
+            
+            if (token) {
+                loginButton.textContent = 'Logout';
+                loginButton.onclick = logout;
+                return true;
+            } else {
+                loginButton.textContent = 'Login';
+                loginButton.onclick = () => window.location.href = '/';
+                showError('Please log in to view sales data.');
+                return false;
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('douano_access_token');
+            window.location.href = '/';
+        }
+
+        async function fetchSales() {
+            const token = localStorage.getItem('douano_access_token');
+            if (!token) {
+                showError('Authentication required');
+                return;
+            }
+
+            try {
+                showLoading();
+                
+                const response = await fetch('/.netlify/functions/api/api/sales', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                displaySales(data);
+                
+            } catch (error) {
+                console.error('Error fetching sales:', error);
+                showError(`Failed to fetch sales: ${error.message}`);
+            }
+        }
+
+        function displaySales(data) {
+            const sales = data.sales || data.result?.data || data.data || data.invoices || [];
+
+            if (sales.length === 0) {
+                showNoData();
+                return;
+            }
+
+            // Calculate and display stats
+            displayStats(sales);
+            
+            // Display sales table
+            const tableBody = document.querySelector('#salesTable tbody');
+            tableBody.innerHTML = '';
+            
+            sales.forEach(sale => {
+                const row = createSaleRow(sale);
+                tableBody.appendChild(row);
+            });
+
+            showSales();
+        }
+
+        function displayStats(sales) {
+            const totalInvoices = sales.length;
+            const totalRevenue = sales.reduce((sum, sale) => sum + (parseFloat(sale.amount) || parseFloat(sale.total) || 0), 0);
+            const avgInvoice = totalRevenue / totalInvoices || 0;
+            const uniqueCustomers = new Set(sales.map(sale => sale.customer_name || sale.customer_id || sale.client_name)).size;
+
+            document.getElementById('totalInvoices').textContent = totalInvoices;
+            document.getElementById('totalRevenue').textContent = `€${totalRevenue.toFixed(2)}`;
+            document.getElementById('avgInvoice').textContent = `€${avgInvoice.toFixed(2)}`;
+            document.getElementById('uniqueCustomers').textContent = uniqueCustomers;
+            document.getElementById('statsContainer').style.display = 'block';
+        }
+
+        function createSaleRow(sale) {
+            const row = document.createElement('tr');
+            
+            const invoiceNumber = sale.invoice_number || sale.number || sale.id || 'N/A';
+            const customerName = sale.customer_name || sale.client_name || sale.customer || 'Unknown Customer';
+            const date = sale.date || sale.invoice_date || sale.created_at || 'Unknown Date';
+            const amount = parseFloat(sale.amount) || parseFloat(sale.total) || 0;
+            const status = sale.status || sale.payment_status || 'Unknown';
+            
+            row.innerHTML = `
+                <td><strong>${invoiceNumber}</strong></td>
+                <td>${customerName}</td>
+                <td>${new Date(date).toLocaleDateString()}</td>
+                <td class="${amount >= 0 ? 'amount-positive' : 'amount-negative'}">
+                    €${Math.abs(amount).toFixed(2)}
+                </td>
+                <td>
+                    <span class="badge ${getStatusBadgeClass(status)}">${status}</span>
+                </td>
+            `;
+            
+            return row;
+        }
+
+        function getStatusBadgeClass(status) {
+            const statusLower = status.toLowerCase();
+            if (statusLower.includes('paid') || statusLower.includes('completed')) {
+                return 'bg-success';
+            } else if (statusLower.includes('pending') || statusLower.includes('processing')) {
+                return 'bg-warning';
+            } else if (statusLower.includes('cancelled') || statusLower.includes('failed')) {
+                return 'bg-danger';
+            } else {
+                return 'bg-secondary';
+            }
+        }
+
+        function showLoading() {
+            document.getElementById('loadingState').classList.remove('d-none');
+            document.getElementById('errorState').classList.add('d-none');
+            document.getElementById('salesContainer').classList.add('d-none');
+            document.getElementById('noDataState').classList.add('d-none');
+            document.getElementById('statsContainer').style.display = 'none';
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('loadingState').classList.add('d-none');
+            document.getElementById('errorState').classList.remove('d-none');
+            document.getElementById('salesContainer').classList.add('d-none');
+            document.getElementById('noDataState').classList.add('d-none');
+            document.getElementById('statsContainer').style.display = 'none';
+        }
+
+        function showSales() {
+            document.getElementById('loadingState').classList.add('d-none');
+            document.getElementById('errorState').classList.add('d-none');
+            document.getElementById('salesContainer').classList.remove('d-none');
+            document.getElementById('noDataState').classList.add('d-none');
+        }
+
+        function showNoData() {
+            document.getElementById('loadingState').classList.add('d-none');
+            document.getElementById('errorState').classList.add('d-none');
+            document.getElementById('salesContainer').classList.add('d-none');
+            document.getElementById('noDataState').classList.remove('d-none');
+            document.getElementById('statsContainer').style.display = 'none';
+        }
+
+        function refreshData() {
+            fetchSales();
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            if (checkAuth()) {
+                fetchSales();
+            }
+        });
+    </script>
+</body>
+</html>
+
+

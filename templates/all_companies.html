@@ -1,0 +1,1335 @@
+{% extends "base.html" %}
+
+{% block title %}All Companies - DUANO Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>All Companies</h2>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary" onclick="refreshCompanies()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="filterDropdown" data-bs-toggle="dropdown">
+                            <i class="fas fa-filter"></i> Filter
+                        </button>
+                        <ul class="dropdown-menu" style="min-width: 250px;">
+                            <li><h6 class="dropdown-header">Filter by Type</h6></li>
+                            <li><a class="dropdown-item" href="#" onclick="filterCompanies('customers')">Customers Only</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="filterCompanies('suppliers')">Suppliers Only</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="filterCompanies('active')">Active Only</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" onclick="filterCompanies('all')">Show All</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading indicator -->
+            <div id="loading" class="text-center my-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading companies...</p>
+            </div>
+
+            <!-- Error message -->
+            <div id="error-message" class="alert alert-danger" style="display: none;"></div>
+
+            <!-- Search bar -->
+            <div class="row mb-4" id="search-container" style="display: none;">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control" id="searchInput" placeholder="Search companies by name, tag, or VAT number...">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex align-items-center">
+                        <span class="text-muted me-2">Total:</span>
+                        <span class="badge bg-primary" id="totalCount">0</span>
+                        <span class="text-muted ms-3 me-2">Filtered:</span>
+                        <span class="badge bg-secondary" id="filteredCount">0</span>
+                        <span class="text-muted ms-3 me-2">Page:</span>
+                        <span class="badge bg-info" id="pageInfo">1 of 1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Companies grid -->
+            <div id="companies-container" style="display: none;">
+                <div class="row" id="companies-grid">
+                    <!-- Companies will be loaded here -->
+                </div>
+                
+                <!-- Pagination -->
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <nav aria-label="Companies pagination">
+                            <ul class="pagination justify-content-center" id="pagination">
+                                <!-- Pagination will be generated here -->
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Company Detail Modal -->
+<div class="modal fade" id="companyModal" tabindex="-1" aria-labelledby="companyModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="companyModalLabel">Company Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="companyModalBody">
+                <!-- Company details will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let allCompanies = [];
+let filteredCompanies = [];
+let displayedCompanies = [];
+let currentFilter = 'all';
+let currentPage = 1;
+let companiesPerPage = 50;
+let totalPages = 1;
+
+// Cache keys
+const COMPANIES_CACHE_KEY = 'duano_companies_cache_v1';
+const COMPANIES_CACHE_TIME_KEY = 'duano_companies_cache_time_v1';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadCompanies();
+    
+    // Setup search functionality
+    const searchInput = document.getElementById('searchInput');
+    searchInput.addEventListener('input', function() {
+        filterAndDisplayCompanies();
+    });
+    
+    // Setup event delegation for company cards
+    document.getElementById('companies-grid').addEventListener('click', function(e) {
+        const card = e.target.closest('.company-card');
+        if (card) {
+            const companyId = parseInt(card.getAttribute('data-company-id'));
+            if (companyId) {
+                showCompanyDetails(companyId, card);
+            }
+        }
+    });
+
+    // Ensure modal is attached to <body> to avoid stacking-context issues
+    const modalEl = document.getElementById('companyModal');
+    if (modalEl && modalEl.parentElement !== document.body) {
+        document.body.appendChild(modalEl);
+    }
+});
+
+async function loadCompanies() {
+    try {
+        // Try cache first (session-scoped): load once per tab session
+        const cached = sessionStorage.getItem(COMPANIES_CACHE_KEY);
+        if (cached) {
+            const cachedData = JSON.parse(cached);
+            if (Array.isArray(cachedData) && cachedData.length >= 0) {
+                allCompanies = cachedData;
+                filteredCompanies = [...allCompanies];
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('search-container').style.display = 'block';
+                document.getElementById('companies-container').style.display = 'block';
+                calculatePagination();
+                updateCounts();
+                displayCurrentPage();
+                updatePagination();
+                return; // Skip network request
+            }
+        }
+
+        const response = await fetch('/api/companies');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        allCompanies = data.result?.data || [];
+        // Save to session cache
+        sessionStorage.setItem(COMPANIES_CACHE_KEY, JSON.stringify(allCompanies));
+        sessionStorage.setItem(COMPANIES_CACHE_TIME_KEY, String(Date.now()));
+        filteredCompanies = [...allCompanies];
+        
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('search-container').style.display = 'block';
+        document.getElementById('companies-container').style.display = 'block';
+        
+        calculatePagination();
+        updateCounts();
+        displayCurrentPage();
+        updatePagination();
+        
+    } catch (error) {
+        console.error('Error loading companies:', error);
+        document.getElementById('loading').style.display = 'none';
+        const errorDiv = document.getElementById('error-message');
+        errorDiv.textContent = `Error loading companies: ${error.message}`;
+        errorDiv.style.display = 'block';
+    }
+}
+
+function filterCompanies(type) {
+    currentFilter = type;
+    filterAndDisplayCompanies();
+}
+
+function filterAndDisplayCompanies() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    
+    // Apply filter
+    let filtered = [...allCompanies];
+    
+    switch(currentFilter) {
+        case 'customers':
+            filtered = filtered.filter(company => company.is_customer);
+            break;
+        case 'suppliers':
+            filtered = filtered.filter(company => company.is_supplier);
+            break;
+        case 'active':
+            filtered = filtered.filter(company => company.company_status?.name === 'Actief');
+            break;
+        default:
+            // Show all
+            break;
+    }
+    
+    // Apply search
+    if (searchTerm) {
+        filtered = filtered.filter(company => 
+            company.name?.toLowerCase().includes(searchTerm) ||
+            company.public_name?.toLowerCase().includes(searchTerm) ||
+            company.tag?.toLowerCase().includes(searchTerm) ||
+            company.vat_number?.toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    filteredCompanies = filtered;
+    currentPage = 1; // Reset to first page when filtering
+    calculatePagination();
+    updateCounts();
+    displayCurrentPage();
+    updatePagination();
+}
+
+function calculatePagination() {
+    totalPages = Math.ceil(filteredCompanies.length / companiesPerPage);
+    if (currentPage > totalPages) {
+        currentPage = Math.max(1, totalPages);
+    }
+}
+
+function displayCurrentPage() {
+    const startIndex = (currentPage - 1) * companiesPerPage;
+    const endIndex = startIndex + companiesPerPage;
+    displayedCompanies = filteredCompanies.slice(startIndex, endIndex);
+    displayCompanies();
+}
+
+function goToPage(page) {
+    if (page >= 1 && page <= totalPages) {
+        currentPage = page;
+        displayCurrentPage();
+        updatePagination();
+    }
+}
+
+function displayCompanies() {
+    const container = document.getElementById('companies-grid');
+    
+    if (displayedCompanies.length === 0) {
+        container.innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-info text-center">
+                    <i class="fas fa-info-circle"></i>
+                    No companies found matching your criteria.
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = displayedCompanies.map(company => `
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 company-card" data-company-id="${company.id}" style="cursor: pointer;">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0">${company.public_name || company.name}</h5>
+                        <small class="text-muted">#${company.tag}</small>
+                    </div>
+                    
+                    ${company.name !== company.public_name ? `<p class="text-muted small mb-2">${company.name}</p>` : ''}
+                    
+                    <div class="mb-2">
+                        ${company.is_customer ? '<span class="badge bg-success me-1">Customer</span>' : ''}
+                        ${company.is_supplier ? '<span class="badge bg-info me-1">Supplier</span>' : ''}
+                        ${company.company_status ? `<span class="badge bg-${getStatusColor(company.company_status.name)}">${company.company_status.name}</span>` : ''}
+                    </div>
+                    
+                    ${company.vat_number ? `<p class="small text-muted mb-1"><i class="fas fa-hashtag"></i> ${company.vat_number}</p>` : ''}
+                    ${company.email_addresses ? `<p class="small text-muted mb-1"><i class="fas fa-envelope"></i> ${company.email_addresses}</p>` : ''}
+                    
+                    ${company.sales_price_class ? `<p class="small mb-1"><strong>Price Class:</strong> ${company.sales_price_class.name}</p>` : ''}
+                    
+                    ${company.company_categories && company.company_categories.length > 0 ? `
+                        <div class="mt-2">
+                            ${company.company_categories.map(cat => `<span class="badge bg-light text-dark me-1">${cat.name}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+                <div class="card-footer bg-light">
+                    <small class="text-muted">
+                        <i class="fas fa-calendar"></i> Created: ${formatDate(company.created_at)}
+                    </small>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function showCompanyDetails(companyId) {
+    console.log('Showing details for company ID:', companyId);
+    
+    // Find the company in allCompanies (not displayedCompanies in case of pagination)
+    const company = allCompanies.find(c => c.id === companyId);
+    if (!company) {
+        console.error('Company not found:', companyId);
+        return;
+    }
+    
+    console.log('Found company:', company.name);
+    
+    const modalBody = document.getElementById('companyModalBody');
+    const modalTitle = document.getElementById('companyModalLabel');
+    
+    modalTitle.textContent = company.public_name || company.name;
+    
+    // Sanitize data to prevent URL errors
+    const sanitize = (text) => {
+        if (!text) return 'N/A';
+        return String(text).replace(/[<>&"']/g, function (match) {
+            return {
+                '<': '&lt;',
+                '>': '&gt;',
+                '&': '&amp;',
+                '"': '&quot;',
+                "'": '&#x27;'
+            }[match];
+        });
+    };
+
+    modalBody.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Basic Information</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Name:</strong></td><td>${sanitize(company.name)}</td></tr>
+                    <tr><td><strong>Public Name:</strong></td><td>${sanitize(company.public_name)}</td></tr>
+                    <tr><td><strong>Tag:</strong></td><td>${sanitize(company.tag)}</td></tr>
+                    <tr><td><strong>VAT Number:</strong></td><td>${sanitize(company.vat_number)}</td></tr>
+                    <tr><td><strong>Status:</strong></td><td><span class="badge bg-${getStatusColor(company.company_status?.name)}">${sanitize(company.company_status?.name)}</span></td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6>Business Type</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Customer:</strong></td><td>${company.is_customer ? 'Yes' : 'No'}</td></tr>
+                    <tr><td><strong>Supplier:</strong></td><td>${company.is_supplier ? 'Yes' : 'No'}</td></tr>
+                    <tr><td><strong>Price Class:</strong></td><td>${sanitize(company.sales_price_class?.name)}</td></tr>
+                    <tr><td><strong>Delivery Type:</strong></td><td>${sanitize(company.document_delivery_type)}</td></tr>
+                </table>
+            </div>
+        </div>
+        
+        ${company.company_categories && company.company_categories.length > 0 ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6>Categories</h6>
+                    <div>
+                        ${company.company_categories.map(cat => `<span class="badge bg-primary me-1">${sanitize(cat.name)}</span>`).join('')}
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+        
+        ${company.addresses && company.addresses.length > 0 ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6>Addresses</h6>
+                    <div class="list-group">
+                        ${company.addresses.map(addr => `
+                            <div class="list-group-item">
+                                <strong>${sanitize(addr.name)}</strong> <span class="badge bg-secondary">${sanitize(addr.address_type)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+        
+        ${company.bank_accounts && company.bank_accounts.length > 0 ? `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h6>Bank Accounts</h6>
+                    <div class="list-group">
+                        ${company.bank_accounts.map(bank => `
+                            <div class="list-group-item">
+                                <strong>${sanitize(bank.name)}</strong><br>
+                                <small class="text-muted">${sanitize(bank.iban)}</small>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        ` : ''}
+        
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6><i class="fas fa-receipt me-2"></i>Sales Data</h6>
+                <div id="company-sales-${company.id}" class="border rounded p-3 bg-light">
+                    <div class="text-center">
+                        <div class="spinner-border spinner-border-sm" role="status">
+                            <span class="visually-hidden">Loading sales data...</span>
+                        </div>
+                        <small class="ms-2">Loading sales data...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-3">
+            <div class="col-12">
+                <h6>Timestamps</h6>
+                <table class="table table-sm">
+                    <tr><td><strong>Created:</strong></td><td>${formatDate(company.created_at)}</td></tr>
+                    <tr><td><strong>Updated:</strong></td><td>${formatDate(company.updated_at)}</td></tr>
+                    <tr><td><strong>Version:</strong></td><td>${sanitize(company.entity_version)}</td></tr>
+                </table>
+            </div>
+        </div>
+    `;
+    
+    console.log('Modal content populated, showing modal...');
+    
+    // Load sales data asynchronously
+    loadCompanySalesData(company.id);
+    
+    // Use standard Bootstrap modal centered on screen, ensure body/backdrop state is clean
+    const modalElement = document.getElementById('companyModal');
+    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+    const modal = new bootstrap.Modal(modalElement, {
+        backdrop: true,
+        keyboard: true,
+        focus: true
+    });
+    modal.show();
+}
+
+function closeModal() {
+    const modalElement = document.getElementById('companyModal');
+    const modal = bootstrap.Modal.getInstance(modalElement);
+    if (modal) {
+        modal.hide();
+    }
+}
+
+function updateCounts() {
+    document.getElementById('totalCount').textContent = allCompanies.length;
+    document.getElementById('filteredCount').textContent = filteredCompanies.length;
+    document.getElementById('pageInfo').textContent = `${currentPage} of ${totalPages}`;
+}
+
+function updatePagination() {
+    const pagination = document.getElementById('pagination');
+    
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    let paginationHTML = '';
+    
+    // Previous button
+    paginationHTML += `
+        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="goToPage(${currentPage - 1}); return false;">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        </li>
+    `;
+    
+    // Page numbers
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+    
+    if (startPage > 1) {
+        paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="goToPage(1); return false;">1</a></li>`;
+        if (startPage > 2) {
+            paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        paginationHTML += `
+            <li class="page-item ${i === currentPage ? 'active' : ''}">
+                <a class="page-link" href="#" onclick="goToPage(${i}); return false;">${i}</a>
+            </li>
+        `;
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHTML += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+        paginationHTML += `<li class="page-item"><a class="page-link" href="#" onclick="goToPage(${totalPages}); return false;">${totalPages}</a></li>`;
+    }
+    
+    // Next button
+    paginationHTML += `
+        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="goToPage(${currentPage + 1}); return false;">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+    `;
+    
+    pagination.innerHTML = paginationHTML;
+}
+
+function refreshCompanies() {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('companies-container').style.display = 'none';
+    document.getElementById('search-container').style.display = 'none';
+    document.getElementById('error-message').style.display = 'none';
+    
+    // Reset pagination
+    currentPage = 1;
+    currentFilter = 'all';
+    document.getElementById('searchInput').value = '';
+    // Bust cache so next load fetches fresh data
+    sessionStorage.removeItem(COMPANIES_CACHE_KEY);
+    sessionStorage.removeItem(COMPANIES_CACHE_TIME_KEY);
+    
+    loadCompanies();
+}
+
+function getStatusColor(status) {
+    if (!status) return 'secondary';
+    switch(status.toLowerCase()) {
+        case 'actief': return 'success';
+        case 'handelstop': return 'warning';
+        case 'bestaat niet meer': return 'danger';
+        default: return 'secondary';
+    }
+}
+
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-GB');
+}
+
+async function loadCompanySalesData(companyId) {
+    const salesContainer = document.getElementById(`company-sales-${companyId}`);
+    
+    try {
+        console.log(`Loading sales data for company ${companyId}...`);
+        // Resolve company name (for deep-linking)
+        let companyName = '';
+        try {
+            if (typeof allCompanies !== 'undefined' && Array.isArray(allCompanies)) {
+                const c = allCompanies.find(cmp => cmp.id === companyId);
+                companyName = (c && (c.public_name || c.name)) || '';
+            }
+        } catch (_) {}
+        const response = await fetch(`/api/companies/${companyId}/sales`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const salesInvoices = data.result?.data || [];
+        
+        // Fetch pricing adjustments to link product/category pricing
+        let pricingIndex = { product: new Map(), category: new Map() };
+        try {
+            const pricingResp = await fetch(`/api/companies/${companyId}/pricing`);
+            if (pricingResp.ok) {
+                const pricing = await pricingResp.json();
+                const salesAdjustments = pricing.sales_adjustments?.result?.data || [];
+                salesAdjustments.forEach(adj => {
+                    if (adj.product && adj.product.id) {
+                        if (!pricingIndex.product.has(adj.product.id)) pricingIndex.product.set(adj.product.id, []);
+                        pricingIndex.product.get(adj.product.id).push(adj);
+                    }
+                    if (Array.isArray(adj.product_categories)) {
+                        adj.product_categories.forEach(cat => {
+                            if (!pricingIndex.category.has(cat.id)) pricingIndex.category.set(cat.id, []);
+                            pricingIndex.category.get(cat.id).push(adj);
+                        });
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('Pricing fetch failed (non-blocking):', e);
+        }
+        
+        console.log(`Found ${salesInvoices.length} sales invoices for company ${companyId}`);
+        
+        // Debug: Log the structure of the first invoice to see available fields
+        if (salesInvoices.length > 0) {
+            console.log('Sample invoice structure:', salesInvoices[0]);
+            console.log('Available fields:', Object.keys(salesInvoices[0]));
+            
+            // Fetch detailed data for first few invoices to see full structure
+            console.log('Fetching detailed invoice data...');
+            const detailedInvoices = await Promise.all(
+                salesInvoices.slice(0, 3).map(async (invoice) => {
+                    try {
+                        const detailResponse = await fetch(`/api/sales-invoices/${invoice.id}`);
+                        if (detailResponse.ok) {
+                            const detailData = await detailResponse.json();
+                            console.log(`Detailed invoice ${invoice.id}:`, detailData);
+                            return detailData.result || detailData;
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching invoice ${invoice.id} details:`, error);
+                    }
+                    return invoice;
+                })
+            );
+            
+            // Use detailed data if available
+            if (detailedInvoices.length > 0 && detailedInvoices[0]) {
+                console.log('Using detailed invoice data for better pricing');
+                console.log('Detailed invoices received:', detailedInvoices);
+                // Replace first few invoices with detailed data
+                detailedInvoices.forEach((detailedInvoice, index) => {
+                    if (detailedInvoice && salesInvoices[index]) {
+                        console.log(`Replacing invoice ${salesInvoices[index].id} with detailed data:`, detailedInvoice);
+                        salesInvoices[index] = detailedInvoice;
+                    }
+                });
+            } else {
+                console.log('No detailed invoice data received, using list data');
+            }
+        }
+        
+        if (salesInvoices.length === 0) {
+            salesContainer.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-receipt fa-2x mb-2"></i>
+                    <p class="mb-0">No sales invoices found for this company</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Helpers for product/pricing linking
+        const getLineProductId = (line) => line.product?.id || line.product_id || line.productId || null;
+        const getLineQuantity = (line) => Number(line.quantity || line.qty || 1);
+        const getLineUnitPrice = (line) => {
+            // Try common unit price fields; fallback derive from totals
+            const direct = line.unit_price || line.price_per_unit || line.unit_amount || line.price || line.unit_price_excl || line.unit_price_incl;
+            if (direct) return Number(direct);
+            const total = line.amount || line.total || line.total_price || line.total_price_excl || line.total_price_incl || 0;
+            const qty = getLineQuantity(line);
+            return qty ? Number(total) / Number(qty) : 0;
+        };
+        const applyAdjustmentsToUnit = (unitPrice, productId, lineCategories = []) => {
+            let adjusted = unitPrice;
+            const candidates = [];
+            if (productId && pricingIndex.product.has(productId)) candidates.push(...pricingIndex.product.get(productId));
+            lineCategories.forEach(catId => {
+                if (pricingIndex.category.has(catId)) candidates.push(...pricingIndex.category.get(catId));
+            });
+            candidates.forEach(adj => {
+                const t = (adj.price_adjustment_discount_type || '').toLowerCase();
+                const v = Number(adj.value || 0);
+                switch (t) {
+                    case 'percent_discount': adjusted = adjusted * (1 - v); break;
+                    case 'absolute_discount': adjusted = adjusted - v; break;
+                    case 'new_price': adjusted = v; break;
+                    case 'derived_price_percentage_discount': adjusted = adjusted * (1 - v); break;
+                    case 'derived_price_absolute_discount': adjusted = adjusted - v; break;
+                    default: break;
+                }
+            });
+            return adjusted;
+        };
+        
+        // Calculate sales statistics - use correct DUANO field names
+        const getInvoiceAmount = (invoice) => {
+            console.log(`Getting amount for invoice ${invoice.id}:`, invoice);
+            
+            // Use actual DUANO API field names from debug output
+            const amount = invoice.payable_amount_without_financial_discount || 
+                   invoice.payable_amount_with_financial_discount ||
+                   invoice.balance ||
+                   // Calculate from line items if available (correct field name)
+                   (invoice.invoice_line_items && Array.isArray(invoice.invoice_line_items) ? 
+                       invoice.invoice_line_items.reduce((sum, line) => {
+                           const qty = getLineQuantity(line);
+                           const baseUnit = getLineUnitPrice(line);
+                           const productId = getLineProductId(line);
+                           // (Optional) if categories available on line, supply ids; many APIs omit -> []
+                           const adjustedUnit = applyAdjustmentsToUnit(baseUnit, productId, []);
+                           const lineAmount = (adjustedUnit || 0) * (qty || 0) || line.amount || line.total || 0;
+                           return sum + Number(lineAmount || 0);
+                       }, 0) : 0) ||
+                   // Fallback to other possible fields
+                   invoice.total_amount || 
+                   invoice.amount || 
+                   invoice.total || 
+                   invoice.value || 
+                   invoice.price || 
+                   0;
+            
+            console.log(`Final calculated amount for invoice ${invoice.id}: ${amount}`);
+            return amount;
+        };
+        
+        const getInvoiceStatus = (invoice) => {
+            // Use actual DUANO API field names from debug output
+            if (invoice.is_sent === true) return 'sent';
+            if (invoice.balance === 0) return 'paid';
+            if (invoice.balance > 0) return 'pending';
+            
+            // Fallback to other status fields
+            return invoice.status || 
+                   invoice.state || 
+                   invoice.invoice_status || 
+                   invoice.payment_status ||
+                   invoice.document_status ||
+                   'pending';
+        };
+        
+        const getInvoiceCurrency = (invoice) => {
+            return invoice.currency || invoice.currency_code || 'EUR';
+        };
+        
+        const totalAmount = salesInvoices.reduce((sum, invoice) => sum + getInvoiceAmount(invoice), 0);
+        const paidInvoices = salesInvoices.filter(inv => getInvoiceStatus(inv)?.toLowerCase() === 'paid');
+        const pendingInvoices = salesInvoices.filter(inv => getInvoiceStatus(inv)?.toLowerCase() !== 'paid');
+        
+        // Show summary and recent invoices
+        salesContainer.innerHTML = `
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-0 text-primary">${salesInvoices.length}</div>
+                        <small class="text-muted">Total Invoices</small>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-0 text-success">${formatCurrency(totalAmount)}</div>
+                        <small class="text-muted">Total Value</small>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-0 text-warning">${pendingInvoices.length}</div>
+                        <small class="text-muted">Pending</small>
+                    </div>
+                </div>
+            </div>
+            
+            ${salesInvoices.length > 0 ? `
+                <div class="mt-3">
+                    <h6 class="mb-2">Recent Invoices</h6>
+                    <div class="list-group">
+                        ${salesInvoices.slice(0, 5).map(invoice => {
+                            const amount = getInvoiceAmount(invoice);
+                            const hasLineItems = invoice.invoice_line_items && Array.isArray(invoice.invoice_line_items) && invoice.invoice_line_items.length > 0;
+                            
+                            return `
+                            <div class="list-group-item py-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <strong>${sanitize(invoice.invoice_number || invoice.number || `#${invoice.id}`)}</strong>
+                                        <br>
+                                        <small class="text-muted">${formatDate(invoice.created_at || invoice.date || invoice.invoice_date)}</small>
+                                        ${hasLineItems ? `
+                                        <br>
+                                        <small class="text-info">${invoice.invoice_line_items.length} line item${invoice.invoice_line_items.length > 1 ? 's' : ''}</small>
+                                        ` : ''}
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="fw-bold">${formatCurrency(amount, getInvoiceCurrency(invoice))}</div>
+                                        <div>${getStatusBadge(getInvoiceStatus(invoice))}</div>
+                                    </div>
+                                </div>
+                                ${hasLineItems ? `
+                                <div class="mt-2 border-top pt-2">
+                                    <small class="text-muted">Line Items:</small>
+                                    <div class="ms-2">
+                                        ${invoice.invoice_line_items.slice(0, 3).map(line => `
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <small>
+                                                    ${sanitize(line.description || line.product?.name || 'Item')}
+                                                    ${getLineQuantity(line) ? `(${getLineQuantity(line)}x)` : ''}
+                                                </small>
+                                                <small class="fw-bold">
+                                                    ${(() => {
+                                                        const qty = getLineQuantity(line);
+                                                        const baseUnit = getLineUnitPrice(line);
+                                                        const productId = getLineProductId(line);
+                                                        const adjustedUnit = applyAdjustmentsToUnit(baseUnit, productId, []);
+                                                        const total = (adjustedUnit || 0) * (qty || 0);
+                                                        return formatCurrency(total || line.amount || line.total || 0, getInvoiceCurrency(invoice));
+                                                    })()}
+                                                </small>
+                                            </div>
+                                        `).join('')}
+                                        ${invoice.invoice_line_items.length > 3 ? `<small class="text-muted">... and ${invoice.invoice_line_items.length - 3} more</small>` : ''}
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                            `;
+                        }).join('')}
+                    </div>
+                    ${salesInvoices.length > 5 ? `
+                        <div class="text-center mt-2">
+                            <a href="/sales?company=${companyId}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-external-link-alt me-1"></i>View All Sales
+                            </a>
+                        </div>
+                    ` : `
+                        <div class="text-center mt-2">
+                            <a href="/sales?company=${companyId}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-external-link-alt me-1"></i>View All Sales
+                            </a>
+                        </div>
+                    `}
+                    <div class="text-center mt-2">
+                        <a href="/sales?company=${encodeURIComponent(companyName || companyId)}" class="btn btn-sm btn-primary">
+                            <i class="fas fa-filter me-1"></i>Filter by company in Sales
+                        </a>
+                    </div>
+                </div>
+            ` : ''}
+        `;
+        
+    } catch (error) {
+        console.error('Error loading sales data:', error);
+        salesContainer.innerHTML = `
+            <div class="text-center text-danger">
+                <i class="fas fa-exclamation-triangle mb-2"></i>
+                <p class="mb-0 small">Failed to load sales data: ${error.message}</p>
+                <button class="btn btn-sm btn-outline-primary mt-2" onclick="loadCompanySalesData(${companyId})">
+                    <i class="fas fa-sync-alt me-1"></i>Retry
+                </button>
+            </div>
+        `;
+    }
+}
+
+async function loadCompanyOrdersData(companyId) {
+    const ordersContainer = document.getElementById(`company-orders-${companyId}`);
+    
+    try {
+        console.log(`Loading orders data for company ${companyId}...`);
+        const response = await fetch(`/api/companies/${companyId}/orders`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const orders = data.result?.data || [];
+        
+        console.log(`Found ${orders.length} delivery orders for company ${companyId}`);
+        
+        // Debug: Log the structure of the first order to see available fields
+        if (orders.length > 0) {
+            console.log('Sample order structure:', orders[0]);
+            console.log('Available order fields:', Object.keys(orders[0]));
+        }
+        
+        if (orders.length === 0) {
+            ordersContainer.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-truck fa-2x mb-2"></i>
+                    <p class="mb-0">No delivery orders found for this company</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Helper functions for order data
+        const getOrderValue = (order) => {
+            // Calculate order value from items if available
+            if (order.delivery_order_items && Array.isArray(order.delivery_order_items)) {
+                return order.delivery_order_items.reduce((sum, item) => {
+                    const quantity = item.quantity || 0;
+                    const price = item.price || item.unit_price || 0;
+                    return sum + (quantity * price);
+                }, 0);
+            }
+            return order.total_value || order.amount || order.total || 0;
+        };
+        
+        const getOrderStatus = (order) => {
+            return order.status || order.state || order.delivery_status || 'pending';
+        };
+        
+        const getOrderDate = (order) => {
+            return order.date || order.created_at || order.order_date;
+        };
+        
+        // Calculate order statistics
+        const totalValue = orders.reduce((sum, order) => sum + getOrderValue(order), 0);
+        const deliveredOrders = orders.filter(order => getOrderStatus(order)?.toLowerCase() === 'delivered');
+        const pendingOrders = orders.filter(order => getOrderStatus(order)?.toLowerCase() !== 'delivered');
+        
+        // Show summary and recent orders
+        ordersContainer.innerHTML = `
+            <div class="row">
+                <div class="col-md-4 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-0 text-primary">${orders.length}</div>
+                        <small class="text-muted">Total Orders</small>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-0 text-success">${formatCurrency(totalValue)}</div>
+                        <small class="text-muted">Total Value</small>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-0 text-warning">${pendingOrders.length}</div>
+                        <small class="text-muted">Pending</small>
+                    </div>
+                </div>
+            </div>
+            
+            ${orders.length > 0 ? `
+                <div class="mt-3">
+                    <h6 class="mb-2">Recent Orders</h6>
+                    <div class="list-group">
+                        ${orders.slice(0, 5).map(order => `
+                            <div class="list-group-item d-flex justify-content-between align-items-center py-2">
+                                <div>
+                                    <strong>${sanitize(order.reference || `#${order.id}`)}</strong>
+                                    <br>
+                                    <small class="text-muted">${formatDate(getOrderDate(order))}</small>
+                                    ${order.requested_delivery_date ? `<br><small class="text-info">Delivery: ${formatDate(order.requested_delivery_date)}</small>` : ''}
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-bold">${formatCurrency(getOrderValue(order))}</div>
+                                    <div>${getOrderStatusBadge(getOrderStatus(order))}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${orders.length > 5 ? `
+                        <div class="text-center mt-2">
+                            <a href="/orders?company=${companyId}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-external-link-alt me-1"></i>View All Orders
+                            </a>
+                        </div>
+                    ` : ''}
+                </div>
+            ` : ''}
+        `;
+        
+    } catch (error) {
+        console.error('Error loading orders data:', error);
+        ordersContainer.innerHTML = `
+            <div class="text-center text-danger">
+                <i class="fas fa-exclamation-triangle mb-2"></i>
+                <p class="mb-0 small">Failed to load orders data: ${error.message}</p>
+                <button class="btn btn-sm btn-outline-primary mt-2" onclick="loadCompanyOrdersData(${companyId})">
+                    <i class="fas fa-sync-alt me-1"></i>Retry
+                </button>
+            </div>
+        `;
+    }
+}
+
+function getOrderStatusBadge(status) {
+    if (!status) return '<span class="badge bg-secondary">Unknown</span>';
+    
+    const statusLower = status.toLowerCase();
+    let badgeClass = 'bg-secondary';
+    let displayText = status;
+    
+    switch (statusLower) {
+        case 'draft':
+        case 'concept':
+            badgeClass = 'bg-warning text-dark';
+            displayText = 'Draft';
+            break;
+        case 'confirmed':
+        case 'bevestigd':
+            badgeClass = 'bg-info';
+            displayText = 'Confirmed';
+            break;
+        case 'in_progress':
+        case 'processing':
+        case 'in_behandeling':
+            badgeClass = 'bg-primary';
+            displayText = 'Processing';
+            break;
+        case 'shipped':
+        case 'verzonden':
+            badgeClass = 'bg-warning text-dark';
+            displayText = 'Shipped';
+            break;
+        case 'delivered':
+        case 'afgeleverd':
+            badgeClass = 'bg-success';
+            displayText = 'Delivered';
+            break;
+        case 'cancelled':
+        case 'geannuleerd':
+        case 'canceled':
+            badgeClass = 'bg-danger';
+            displayText = 'Cancelled';
+            break;
+        case 'pending':
+        case 'wachtend':
+            badgeClass = 'bg-warning text-dark';
+            displayText = 'Pending';
+            break;
+        default:
+            displayText = status.charAt(0).toUpperCase() + status.slice(1);
+            break;
+    }
+    
+    return `<span class="badge ${badgeClass}">${displayText}</span>`;
+}
+
+function formatCurrency(amount, currency = 'EUR') {
+    if (!amount) return '€0.00';
+    
+    try {
+        return new Intl.NumberFormat('en-EU', {
+            style: 'currency',
+            currency: currency || 'EUR'
+        }).format(amount);
+    } catch (e) {
+        return `${currency || '€'} ${amount}`;
+    }
+}
+
+function getStatusBadge(status) {
+    if (!status) return '<span class="badge bg-secondary">Unknown</span>';
+    
+    const statusLower = status.toLowerCase();
+    let badgeClass = 'bg-secondary';
+    let displayText = status;
+    
+    switch (statusLower) {
+        case 'draft':
+        case 'concept':
+            badgeClass = 'bg-warning text-dark';
+            displayText = 'Draft';
+            break;
+        case 'sent':
+        case 'verzonden':
+        case 'pending':
+            badgeClass = 'bg-info';
+            displayText = 'Sent';
+            break;
+        case 'paid':
+        case 'betaald':
+        case 'completed':
+            badgeClass = 'bg-success';
+            displayText = 'Paid';
+            break;
+        case 'overdue':
+        case 'achterstallig':
+            badgeClass = 'bg-danger';
+            displayText = 'Overdue';
+            break;
+        case 'cancelled':
+        case 'geannuleerd':
+        case 'canceled':
+            badgeClass = 'bg-dark';
+            displayText = 'Cancelled';
+            break;
+        case 'partial':
+        case 'gedeeltelijk':
+            badgeClass = 'bg-warning text-dark';
+            displayText = 'Partial';
+            break;
+        default:
+            displayText = status.charAt(0).toUpperCase() + status.slice(1);
+            break;
+    }
+    
+    return `<span class="badge ${badgeClass}">${displayText}</span>`;
+}
+
+// Sanitize function (reused from company data)
+function sanitize(text) {
+    if (!text) return 'N/A';
+    return String(text).replace(/[<>&"']/g, function (match) {
+        return {
+            '<': '&lt;',
+            '>': '&gt;',
+            '&': '&amp;',
+            '"': '&quot;',
+            "'": '&#x27;'
+        }[match];
+    });
+}
+
+// Add hover effects
+document.addEventListener('DOMContentLoaded', function() {
+    const style = document.createElement('style');
+    style.textContent = `
+        .company-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        }
+        .company-card {
+            transition: all 0.2s ease;
+        }
+        
+        /* Keep only minimal modal adjustments; rely on Bootstrap for centering/backdrop */
+        .modal-body {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+    `;
+    document.head.appendChild(style);
+});
+
+async function loadCompanyPricingData(companyId) {
+    const pricingContainer = document.getElementById(`company-pricing-${companyId}`);
+    
+    try {
+        console.log(`Loading pricing data for company ${companyId}...`);
+        const response = await fetch(`/api/companies/${companyId}/pricing`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const purchaseAdjustments = data.purchase_adjustments?.result?.data || [];
+        const salesAdjustments = data.sales_adjustments?.result?.data || [];
+        
+        console.log(`Found ${purchaseAdjustments.length} purchase adjustments and ${salesAdjustments.length} sales adjustments for company ${companyId}`);
+        
+        const totalAdjustments = purchaseAdjustments.length + salesAdjustments.length;
+        
+        if (totalAdjustments === 0) {
+            pricingContainer.innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-tags fa-2x mb-2"></i>
+                    <p class="mb-0">No pricing adjustments found</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Calculate pricing statistics
+        const activeAdjustments = [...purchaseAdjustments, ...salesAdjustments].filter(adj => 
+            adj.price_adjustment?.start_date && adj.price_adjustment?.end_date &&
+            new Date() >= new Date(adj.price_adjustment.start_date) && 
+            new Date() <= new Date(adj.price_adjustment.end_date)
+        );
+        
+        const promotions = [...purchaseAdjustments, ...salesAdjustments].filter(adj => 
+            adj.price_adjustment?.price_adjustment_type === 'promotion'
+        );
+        
+        const contracts = [...purchaseAdjustments, ...salesAdjustments].filter(adj => 
+            adj.price_adjustment?.price_adjustment_type === 'contract'
+        );
+        
+        // Show summary and recent adjustments
+        pricingContainer.innerHTML = `
+            <div class="row">
+                <div class="col-6 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-0 text-primary">${totalAdjustments}</div>
+                        <small class="text-muted">Total</small>
+                    </div>
+                </div>
+                <div class="col-6 mb-2">
+                    <div class="text-center">
+                        <div class="h5 mb-0 text-success">${activeAdjustments.length}</div>
+                        <small class="text-muted">Active</small>
+                    </div>
+                </div>
+            </div>
+            
+            ${totalAdjustments > 0 ? `
+                <div class="mt-3">
+                    <h6 class="mb-2">Recent Adjustments</h6>
+                    <div class="list-group">
+                        ${[...purchaseAdjustments, ...salesAdjustments].slice(0, 3).map(adjustment => `
+                            <div class="list-group-item py-2">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <strong>${sanitize(adjustment.price_adjustment?.name || 'Adjustment')}</strong>
+                                        <br>
+                                        <small class="text-muted">${sanitize(adjustment.product?.name || 'All Products')}</small>
+                                        <br>
+                                        <small class="text-info">${adjustment.price_adjustment?.transaction_type || 'N/A'}</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="fw-bold">
+                                            ${adjustment.price_adjustment_discount_type === 'percent_discount' ? 
+                                                `${(adjustment.value * 100).toFixed(1)}%` : 
+                                                (adjustment.price_adjustment_discount_type === 'new_price' ? 
+                                                    formatCurrency(adjustment.value) : 
+                                                    formatCurrency(adjustment.value)
+                                                )
+                                            }
+                                        </div>
+                                        <div>${getPricingTypeBadge(adjustment.price_adjustment?.price_adjustment_type)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    ${totalAdjustments > 3 ? `
+                        <div class="text-center mt-2">
+                            <small class="text-muted">... and ${totalAdjustments - 3} more adjustments</small>
+                        </div>
+                    ` : ''}
+                </div>
+            ` : ''}
+        `;
+        
+    } catch (error) {
+        console.error('Error loading pricing data:', error);
+        pricingContainer.innerHTML = `
+            <div class="text-center text-danger">
+                <i class="fas fa-exclamation-triangle mb-2"></i>
+                <p class="mb-0 small">Failed to load pricing data: ${error.message}</p>
+                <button class="btn btn-sm btn-outline-primary mt-2" onclick="loadCompanyPricingData(${companyId})">
+                    <i class="fas fa-sync-alt me-1"></i>Retry
+                </button>
+            </div>
+        `;
+    }
+}
+
+function getPricingTypeBadge(type) {
+    if (!type) return '<span class="badge bg-secondary">Unknown</span>';
+    
+    switch (type.toLowerCase()) {
+        case 'promotion':
+            return '<span class="badge bg-warning text-dark">Promotion</span>';
+        case 'contract':
+            return '<span class="badge bg-info">Contract</span>';
+        default:
+            return `<span class="badge bg-secondary">${type}</span>`;
+    }
+}
+
+async function debugInvoiceAPI(companyId) {
+    console.log('=== DEBUGGING INVOICE API ===');
+    
+    try {
+        // Test company sales API
+        console.log('1. Testing company sales API...');
+        const salesResponse = await fetch(`/api/companies/${companyId}/sales`);
+        const salesData = await salesResponse.json();
+        console.log('Sales API response:', salesData);
+        
+        const invoices = salesData.result?.data || [];
+        if (invoices.length > 0) {
+            const firstInvoice = invoices[0];
+            console.log('2. First invoice from list:', firstInvoice);
+            console.log('   Available fields:', Object.keys(firstInvoice));
+            
+            // Test individual invoice API
+            console.log('3. Testing individual invoice API...');
+            const detailResponse = await fetch(`/api/sales-invoices/${firstInvoice.id}`);
+            const detailData = await detailResponse.json();
+            console.log('Individual invoice API response:', detailData);
+            console.log('   Detail fields:', Object.keys(detailData.result || detailData));
+            
+            // Test amount extraction
+            console.log('4. Testing amount extraction...');
+            console.log('   List invoice amount fields:');
+            ['total_amount', 'amount', 'total', 'value', 'price'].forEach(field => {
+                console.log(`     ${field}:`, firstInvoice[field]);
+            });
+            
+            const detailInvoice = detailData.result || detailData;
+            console.log('   Detail invoice amount fields:');
+            ['total_amount', 'amount', 'total', 'value', 'price', 'total_incl_tax', 'total_excl_tax'].forEach(field => {
+                console.log(`     ${field}:`, detailInvoice[field]);
+            });
+            
+            // Check for line items
+            if (detailInvoice.invoice_lines) {
+                console.log('5. Invoice line items found:', detailInvoice.invoice_lines);
+            } else {
+                console.log('5. No invoice_lines field found');
+                console.log('   Looking for alternative line item fields...');
+                ['lines', 'items', 'invoice_items', 'details', 'line_items'].forEach(field => {
+                    if (detailInvoice[field]) {
+                        console.log(`   Found ${field}:`, detailInvoice[field]);
+                    }
+                });
+            }
+        }
+        
+        // Test pricing API as alternative
+        console.log('6. Testing pricing API as alternative...');
+        try {
+            const pricingResponse = await fetch(`/api/companies/${companyId}/pricing`);
+            const pricingData = await pricingResponse.json();
+            console.log('Pricing API response:', pricingData);
+            
+            const purchaseAdjustments = pricingData.purchase_adjustments?.result?.data || [];
+            const salesAdjustments = pricingData.sales_adjustments?.result?.data || [];
+            
+            console.log(`Found ${purchaseAdjustments.length} purchase adjustments and ${salesAdjustments.length} sales adjustments`);
+            
+            if (purchaseAdjustments.length > 0) {
+                console.log('Sample purchase adjustment:', purchaseAdjustments[0]);
+            }
+            if (salesAdjustments.length > 0) {
+                console.log('Sample sales adjustment:', salesAdjustments[0]);
+            }
+        } catch (pricingError) {
+            console.log('Pricing API error:', pricingError);
+        }
+        
+        alert('Debug complete! Check browser console for detailed API response information.');
+        
+    } catch (error) {
+        console.error('Debug error:', error);
+        alert('Debug failed: ' + error.message);
+    }
+}
+</script>
+{% endblock %}

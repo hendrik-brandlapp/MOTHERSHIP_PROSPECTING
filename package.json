@@ -1,0 +1,15 @@
+{
+  "name": "mothership-prospecting",
+  "version": "1.0.0",
+  "description": "DOUANO Frontend - Beautiful interface to interact with your DOUANO data",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'Build completed'",
+    "dev": "echo 'Development server'"
+  },
+  "keywords": ["douano", "prospecting", "crm"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

@@ -1,0 +1,9 @@
+{
+  "name": "douano-netlify-functions",
+  "version": "1.0.0",
+  "description": "Netlify functions for DOUANO API",
+  "main": "api.js",
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
