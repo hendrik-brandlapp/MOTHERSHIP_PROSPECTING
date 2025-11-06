@@ -1,0 +1,1310 @@
+{% extends "base.html" %}
+
+{% block title %}Data Analysis - DOUANO{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-database me-2 text-primary"></i>Data Analysis</h2>
+                    <p class="text-muted mb-0">Comprehensive company and invoice data analysis</p>
+                </div>
+                <div>
+                    <button class="btn btn-success me-2" onclick="syncLatestData()">
+                        <i class="fas fa-sync-alt me-2"></i>Daily Sync
+                    </button>
+                    <button class="btn btn-info me-2" onclick="refreshCompanyMetrics()">
+                        <i class="fas fa-calculator me-2"></i>Refresh Metrics
+                    </button>
+                    <button class="btn btn-warning me-2" onclick="populateCompaniesDatabase()">
+                        <i class="fas fa-database me-2"></i>Populate Companies DB
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="loadData()">
+                        <i class="fas fa-refresh me-2"></i>Refresh Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Year Selection and Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold mb-3">Select Data View</label>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button class="btn btn-outline-primary year-tag active" data-year="2025" onclick="changeYear('2025')">
+                                    <i class="fas fa-calendar-alt me-2"></i>2025
+                                </button>
+                                <button class="btn btn-outline-primary year-tag" data-year="2024" onclick="changeYear('2024')">
+                                    <i class="fas fa-calendar-alt me-2"></i>2024
+                                </button>
+                                <button class="btn btn-outline-success year-tag" data-year="combined" onclick="changeYear('combined')">
+                                    <i class="fas fa-layer-group me-2"></i>Combined
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="row" id="year-stats" style="display: none;">
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h4 class="mb-1 text-primary" id="stat-total-companies">-</h4>
+                                        <small class="text-muted">Companies</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h4 class="mb-1 text-success" id="stat-total-revenue">-</h4>
+                                        <small class="text-muted">Total Revenue</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h4 class="mb-1 text-info" id="stat-total-invoices">-</h4>
+                                        <small class="text-muted">Invoices</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-center">
+                                        <h4 class="mb-1 text-warning" id="stat-avg-revenue">-</h4>
+                                        <small class="text-muted">Avg/Company</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Year Breakdown for Combined View -->
+                            <div class="row mt-3" id="year-breakdown" style="display: none;">
+                                <div class="col-12">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="card bg-light border-0">
+                                                <div class="card-body py-2">
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="fw-bold text-primary">2024:</span>
+                                                        <span id="breakdown-2024">-</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="card bg-light border-0">
+                                                <div class="card-body py-2">
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="fw-bold text-success">2025:</span>
+                                                        <span id="breakdown-2025">-</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Status -->
+    <div id="sync-status" class="alert alert-info" style="display: none;">
+        <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm me-3" role="status">
+                <span class="visually-hidden">Syncing...</span>
+            </div>
+            <div>
+                <strong>Syncing latest data...</strong>
+                <p class="mb-0" id="sync-message">Fetching latest invoices from DOUANO...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Results -->
+    <div id="sync-results" style="display: none;"></div>
+
+    <!-- Filters and Search -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Search Companies</label>
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search by name, VAT, email..." onkeyup="filterCompanies()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Min Revenue</label>
+                            <input type="number" class="form-control" id="minRevenue" placeholder="€0" onchange="filterCompanies()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Min Invoices</label>
+                            <input type="number" class="form-control" id="minInvoices" placeholder="1" onchange="filterCompanies()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Sort By</label>
+                            <select class="form-select" id="sortBy" onchange="sortCompanies()">
+                                <option value="revenue_desc">Revenue (High to Low)</option>
+                                <option value="revenue_asc">Revenue (Low to High)</option>
+                                <option value="name_asc">Name (A-Z)</option>
+                                <option value="name_desc">Name (Z-A)</option>
+                                <option value="invoices_desc">Invoice Count (High to Low)</option>
+                                <option value="invoices_asc">Invoice Count (Low to High)</option>
+                                <option value="avg_desc">Avg Invoice (High to Low)</option>
+                                <option value="avg_asc">Avg Invoice (Low to High)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">View</label>
+                            <select class="form-select" id="viewMode" onchange="changeViewMode()">
+                                <option value="cards">Card View</option>
+                                <option value="table">Table View</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-3 text-muted">Loading company data...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-message" class="alert alert-danger" style="display: none;">
+        <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+        <p class="mb-0" id="error-text">Failed to load company data</p>
+    </div>
+
+    <!-- Results Info -->
+    <div id="results-info" class="mb-3" style="display: none;">
+        <p class="text-muted mb-0">
+            Showing <span id="showing-count">0</span> of <span id="total-count">0</span> companies for <span id="current-year">2025</span>
+        </p>
+    </div>
+
+    <!-- Card View -->
+    <div id="companies-cards" class="row" style="display: none;">
+        <!-- Company cards will be inserted here -->
+    </div>
+
+    <!-- Table View -->
+    <div id="companies-table" style="display: none;">
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Company</th>
+                            <th>Contact</th>
+                            <th>Location</th>
+                            <th>Invoices</th>
+                            <th>Total Revenue</th>
+                            <th>Avg Invoice</th>
+                            <th>Last Invoice</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="companies-table-body">
+                        <!-- Table rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- No Results -->
+    <div id="no-results" class="text-center py-5" style="display: none;">
+        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">No companies found</h5>
+        <p class="text-muted">Try adjusting your search criteria</p>
+    </div>
+</div>
+
+<!-- Company Detail Modal -->
+<div class="modal fade" id="companyModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="companyModalTitle">Company Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="companyModalBody">
+                <!-- Company details will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Invoice Detail Modal -->
+<div class="modal fade" id="invoiceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="invoiceModalTitle">Invoice Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="invoiceModalBody" style="max-height: 70vh; overflow-y: auto;">
+                <!-- Invoice details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Company
+                </button>
+                <button type="button" class="btn btn-primary" onclick="window.print()">
+                    <i class="fas fa-print me-2"></i>Print Invoice
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+.year-tag {
+    transition: all 0.2s ease;
+    border-width: 2px !important;
+}
+
+.year-tag.active {
+    background-color: var(--bs-primary) !important;
+    border-color: var(--bs-primary) !important;
+    color: white !important;
+}
+
+.year-tag[data-year="combined"].active {
+    background-color: var(--bs-success) !important;
+    border-color: var(--bs-success) !important;
+    color: white !important;
+}
+
+.year-tag:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.invoice-container {
+    background: white;
+}
+
+.invoice-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.invoice-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.invoice-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.invoice-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+.table thead th {
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+}
+
+.invoice-row:hover {
+    background-color: #f8f9fa !important;
+    transform: scale(1.01);
+    transition: all 0.2s ease;
+}
+
+.invoice-row {
+    transition: all 0.2s ease;
+}
+
+.invoice-row:hover .text-primary {
+    color: #0056b3 !important;
+    text-decoration: underline;
+}
+</style>
+<script>
+let allCompanies = [];
+let filteredCompanies = [];
+let currentViewMode = 'cards';
+let currentYear = '2025';
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if we need to filter by company (coming from alerts page)
+    const filterCompanyId = sessionStorage.getItem('filterCompanyId');
+    const filterCompanyName = sessionStorage.getItem('filterCompanyName');
+    
+    if (filterCompanyId && filterCompanyName) {
+        // Clear the session storage
+        sessionStorage.removeItem('filterCompanyId');
+        sessionStorage.removeItem('filterCompanyName');
+        
+        // Switch to Combined tab first, then load data
+        changeYear('combined').then(() => {
+            // Auto-populate the search box with company name
+            const searchInput = document.getElementById('searchInput');
+            if (searchInput) {
+                searchInput.value = filterCompanyName;
+                searchInput.focus();
+                
+                // Trigger the search/filter
+                filterCompanies();
+                
+                // Show toast notification
+                setTimeout(() => {
+                    const toast = document.createElement('div');
+                    toast.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+                    toast.style.zIndex = '9999';
+                    toast.innerHTML = `
+                        <i class="fas fa-check-circle me-2"></i>
+                        Showing invoices for: <strong>${filterCompanyName}</strong> (Combined 2024 & 2025)
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(toast);
+                    setTimeout(() => toast.remove(), 4000);
+                }, 300);
+                
+                // Find and click on the company after filtering
+                setTimeout(() => {
+                    const companyElement = document.querySelector(`[data-company-id="${filterCompanyId}"]`);
+                    if (companyElement) {
+                        companyElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Highlight the card briefly
+                        companyElement.style.outline = '2px solid #6c5ce7';
+                        setTimeout(() => {
+                            companyElement.style.outline = '';
+                            companyElement.click();
+                        }, 800);
+                    }
+                }, 500);
+            }
+        });
+    } else {
+        loadData();
+    }
+});
+
+async function changeYear(year) {
+    currentYear = year;
+    
+    // Update active button
+    document.querySelectorAll('.year-tag').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.year === year) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Update current year display
+    const currentYearSpan = document.getElementById('current-year');
+    if (currentYearSpan) {
+        currentYearSpan.textContent = year === 'combined' ? '2024 & 2025' : year;
+    }
+    
+    loadData();
+}
+
+async function loadData() {
+    try {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('error-message').style.display = 'none';
+        document.getElementById('companies-cards').style.display = 'none';
+        document.getElementById('companies-table').style.display = 'none';
+        document.getElementById('results-info').style.display = 'none';
+        document.getElementById('no-results').style.display = 'none';
+        document.getElementById('year-stats').style.display = 'none';
+        
+        const apiEndpoint = `/api/companies-from-db?year=${currentYear}`;
+        
+        const response = await fetch(apiEndpoint);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        allCompanies = data.companies || [];
+        filteredCompanies = [...allCompanies];
+        
+        // Update stats
+        updateStats(data);
+        
+        // Display companies
+        displayCompanies();
+        
+        document.getElementById('loading').style.display = 'none';
+        
+    } catch (error) {
+        console.error('Error loading companies:', error);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-text').textContent = error.message;
+    }
+}
+
+function updateStats(data) {
+    document.getElementById('year-stats').style.display = 'flex';
+    document.getElementById('stat-total-companies').textContent = data.total_companies || 0;
+    document.getElementById('stat-total-revenue').textContent = '€' + (data.total_revenue || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2});
+    document.getElementById('stat-total-invoices').textContent = data.total_invoices || 0;
+    
+    const avgRevenue = data.total_companies > 0 ? (data.total_revenue / data.total_companies) : 0;
+    document.getElementById('stat-avg-revenue').textContent = '€' + avgRevenue.toLocaleString('nl-BE', {minimumFractionDigits: 2});
+    
+    // Show year breakdown for combined view
+    if (currentYear === 'combined' && data.year_breakdown) {
+        document.getElementById('year-breakdown').style.display = 'block';
+        
+        const breakdown2024 = data.year_breakdown['2024'];
+        const breakdown2025 = data.year_breakdown['2025'];
+        
+        document.getElementById('breakdown-2024').innerHTML = `
+            ${breakdown2024.companies} companies, ${breakdown2024.invoices} invoices, €${breakdown2024.revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
+        `;
+        
+        document.getElementById('breakdown-2025').innerHTML = `
+            ${breakdown2025.companies} companies, ${breakdown2025.invoices} invoices, €${breakdown2025.revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
+        `;
+    } else {
+        document.getElementById('year-breakdown').style.display = 'none';
+    }
+}
+
+async function syncLatestData() {
+    try {
+        document.getElementById('sync-status').style.display = 'block';
+        document.getElementById('sync-results').style.display = 'none';
+        
+        const response = await fetch(`/api/sync-${currentYear}-invoices`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        
+        if (result.success) {
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i>Daily Sync Completed!</h5>
+                    <div class="row mt-3">
+                        <div class="col-md-3">
+                            <strong>Total Fetched:</strong> ${result.total_fetched}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>New Records:</strong> <span class="text-success">${result.saved}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Updated:</strong> <span class="text-info">${result.updated}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Errors:</strong> <span class="text-danger">${result.errors}</span>
+                        </div>
+                    </div>
+                    ${result.saved > 0 || result.updated > 0 ? `
+                        <p class="mt-2 mb-0">
+                            <strong>${result.saved} new invoices</strong> have been added to the database!<br>
+                            <i class="fas fa-calculator me-1"></i><small class="text-muted">Company metrics are being automatically updated...</small>
+                        </p>
+                    ` : '<p class="mt-2 mb-0">Database is up to date - no new invoices found.</p>'}
+                </div>
+            `;
+            
+            // Refresh data after sync
+            setTimeout(() => loadData(), 2000);
+        } else {
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Sync Failed</h5>
+                    <p class="mb-0">${result.error || result.message || 'Unknown error'}</p>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+async function refreshCompanyMetrics() {
+    try {
+        document.getElementById('sync-status').style.display = 'block';
+        document.getElementById('sync-results').style.display = 'none';
+        document.getElementById('sync-message').textContent = 'Recalculating company metrics from invoice data...';
+        
+        const response = await fetch('/api/refresh-company-metrics', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        
+        if (result.success) {
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i>Company Metrics Refreshed!</h5>
+                    <p class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        All company revenue totals, invoice counts, and statistics have been recalculated from the latest invoice data.
+                    </p>
+                </div>
+            `;
+            
+            // Refresh data after metrics update
+            setTimeout(() => loadData(), 1500);
+        } else {
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Refresh Failed</h5>
+                    <p class="mb-0">${result.error || result.message || 'Unknown error'}</p>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+async function populateCompaniesDatabase() {
+    try {
+        document.getElementById('sync-status').style.display = 'block';
+        document.getElementById('sync-results').style.display = 'none';
+        document.getElementById('sync-message').textContent = 'Extracting company data from all invoices...';
+        
+        const response = await fetch('/api/populate-companies-enhanced', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        
+        if (result.success) {
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i>Companies Database Populated!</h5>
+                    <div class="row mt-3">
+                        <div class="col-md-3">
+                            <strong>Total Processed:</strong> ${result.total_processed}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>New Companies:</strong> <span class="text-success">${result.saved}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Updated:</strong> <span class="text-info">${result.updated}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Errors:</strong> <span class="text-danger">${result.errors}</span>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-md-6">
+                            <strong>API Fetch Success:</strong> <span class="text-success">${result.api_fetch_stats.success}</span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>API Fetch Errors:</strong> <span class="text-danger">${result.api_fetch_stats.errors}</span>
+                        </div>
+                    </div>
+                    <p class="mt-3 mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Enhanced companies database created with complete DOUANO API data including pricing categories, addresses, company status, categories, and financial metrics.
+                    </p>
+                </div>
+            `;
+            
+            // Refresh data after population
+            setTimeout(() => loadData(), 2000);
+        } else {
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Population Failed</h5>
+                    <p class="mb-0">${result.error || result.message || 'Unknown error'}</p>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+function filterCompanies() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const minRevenue = parseFloat(document.getElementById('minRevenue').value) || 0;
+    const minInvoices = parseInt(document.getElementById('minInvoices').value) || 0;
+    
+    filteredCompanies = allCompanies.filter(company => {
+        if (!searchTerm || searchTerm.trim() === '') {
+            // No search term, just check revenue and invoices
+            return company.total_revenue >= minRevenue && company.invoice_count >= minInvoices;
+        }
+        
+        // Build searchable text from all fields
+        const searchableText = [
+            company.name || '',
+            company.vat_number || '',
+            company.email || '',
+            company.contact_person || '',
+            company.address?.city || '',
+            company.address?.country || ''
+        ].join(' ').toLowerCase();
+        
+        const matchesSearch = searchableText.includes(searchTerm);
+        const matchesRevenue = company.total_revenue >= minRevenue;
+        const matchesInvoices = company.invoice_count >= minInvoices;
+        
+        return matchesSearch && matchesRevenue && matchesInvoices;
+    });
+    
+    sortCompanies();
+}
+
+function sortCompanies() {
+    const sortBy = document.getElementById('sortBy').value;
+    
+    filteredCompanies.sort((a, b) => {
+        switch (sortBy) {
+            case 'revenue_desc':
+                return b.total_revenue - a.total_revenue;
+            case 'revenue_asc':
+                return a.total_revenue - b.total_revenue;
+            case 'name_asc':
+                return a.name.localeCompare(b.name);
+            case 'name_desc':
+                return b.name.localeCompare(a.name);
+            case 'invoices_desc':
+                return b.invoice_count - a.invoice_count;
+            case 'invoices_asc':
+                return a.invoice_count - b.invoice_count;
+            case 'avg_desc':
+                return b.average_invoice_value - a.average_invoice_value;
+            case 'avg_asc':
+                return a.average_invoice_value - b.average_invoice_value;
+            default:
+                return b.total_revenue - a.total_revenue;
+        }
+    });
+    
+    displayCompanies();
+}
+
+function changeViewMode() {
+    currentViewMode = document.getElementById('viewMode').value;
+    displayCompanies();
+}
+
+function displayCompanies() {
+    const cardsContainer = document.getElementById('companies-cards');
+    const tableContainer = document.getElementById('companies-table');
+    const resultsInfo = document.getElementById('results-info');
+    const noResults = document.getElementById('no-results');
+    
+    // Update results info
+    document.getElementById('showing-count').textContent = filteredCompanies.length;
+    document.getElementById('total-count').textContent = allCompanies.length;
+    resultsInfo.style.display = 'block';
+    
+    if (filteredCompanies.length === 0) {
+        cardsContainer.style.display = 'none';
+        tableContainer.style.display = 'none';
+        noResults.style.display = 'block';
+        return;
+    }
+    
+    noResults.style.display = 'none';
+    
+    if (currentViewMode === 'cards') {
+        displayCardsView();
+        cardsContainer.style.display = 'flex';
+        tableContainer.style.display = 'none';
+    } else {
+        displayTableView();
+        cardsContainer.style.display = 'none';
+        tableContainer.style.display = 'block';
+    }
+}
+
+function displayCardsView() {
+    const container = document.getElementById('companies-cards');
+    container.innerHTML = '';
+    
+    filteredCompanies.forEach(company => {
+        const card = document.createElement('div');
+        card.className = 'col-md-6 col-lg-4 mb-4';
+        
+        const addressParts = [
+            company.address.city,
+            company.address.country
+        ].filter(part => part).join(', ');
+        
+        card.innerHTML = `
+            <div class="card border-0 shadow-sm h-100" data-company-id="${company.id}" style="cursor: pointer;" onclick="showCompanyDetails(${company.id})">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h5 class="card-title mb-0">${escapeHtml(company.name)}</h5>
+                        <span class="badge bg-primary">${company.invoice_count} invoices</span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="row text-sm">
+                            <div class="col-6">
+                                <strong>Total Revenue:</strong><br>
+                                <span class="text-success h6">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</span>
+                            </div>
+                            <div class="col-6">
+                                <strong>Avg Invoice:</strong><br>
+                                <span class="text-info h6">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3 text-sm">
+                        ${company.vat_number ? `<div><i class="fas fa-hashtag me-2 text-muted"></i>${escapeHtml(company.vat_number)}</div>` : ''}
+                        ${company.email ? `<div><i class="fas fa-envelope me-2 text-muted"></i>${escapeHtml(company.email)}</div>` : ''}
+                        ${company.phone ? `<div><i class="fas fa-phone me-2 text-muted"></i>${escapeHtml(company.phone)}</div>` : ''}
+                        ${addressParts ? `<div><i class="fas fa-map-marker-alt me-2 text-muted"></i>${escapeHtml(addressParts)}</div>` : ''}
+                        ${company.contact_person ? `<div><i class="fas fa-user me-2 text-muted"></i>${escapeHtml(company.contact_person)}</div>` : ''}
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            Last invoice: ${company.last_invoice_date ? new Date(company.last_invoice_date).toLocaleDateString('nl-BE') : 'N/A'}
+                        </small>
+                        <button class="btn btn-outline-primary btn-sm" onclick="showCompanyDetails(${company.id})">
+                            <i class="fas fa-eye me-1"></i>Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(card);
+    });
+}
+
+function displayTableView() {
+    const tbody = document.getElementById('companies-table-body');
+    tbody.innerHTML = '';
+    
+    filteredCompanies.forEach(company => {
+        const row = document.createElement('tr');
+        row.setAttribute('data-company-id', company.id);
+        row.style.cursor = 'pointer';
+        row.onclick = () => showCompanyDetails(company.id);
+        
+        const addressParts = [
+            company.address.city,
+            company.address.country
+        ].filter(part => part).join(', ');
+        
+        row.innerHTML = `
+            <td>
+                <div>
+                    <strong>${escapeHtml(company.name)}</strong>
+                    ${company.vat_number ? `<br><small class="text-muted">${escapeHtml(company.vat_number)}</small>` : ''}
+                </div>
+            </td>
+            <td>
+                <div>
+                    ${company.contact_person ? `<div>${escapeHtml(company.contact_person)}</div>` : ''}
+                    ${company.email ? `<div><small>${escapeHtml(company.email)}</small></div>` : ''}
+                    ${company.phone ? `<div><small>${escapeHtml(company.phone)}</small></div>` : ''}
+                </div>
+            </td>
+            <td>
+                <small>${escapeHtml(addressParts) || 'N/A'}</small>
+            </td>
+            <td>
+                <span class="badge bg-primary">${company.invoice_count}</span>
+            </td>
+            <td>
+                <strong class="text-success">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
+            </td>
+            <td>
+                <span class="text-info">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</span>
+            </td>
+            <td>
+                <small>${company.last_invoice_date ? new Date(company.last_invoice_date).toLocaleDateString('nl-BE') : 'N/A'}</small>
+            </td>
+            <td>
+                <button class="btn btn-outline-primary btn-sm" onclick="showCompanyDetails(${company.id})">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+    });
+}
+
+function showCompanyDetails(companyId) {
+    const company = allCompanies.find(c => c.id === companyId);
+    if (!company) return;
+    
+    document.getElementById('companyModalTitle').textContent = company.name;
+    
+    // Parse JSON fields if they're strings
+    if (typeof company.company_categories === 'string') {
+        try {
+            company.company_categories = JSON.parse(company.company_categories);
+        } catch (e) {
+            company.company_categories = [];
+        }
+    }
+    
+    if (typeof company.addresses === 'string') {
+        try {
+            company.addresses = JSON.parse(company.addresses);
+        } catch (e) {
+            company.addresses = [];
+        }
+    }
+    
+    if (typeof company.extension_values === 'string') {
+        try {
+            company.extension_values = JSON.parse(company.extension_values);
+        } catch (e) {
+            company.extension_values = [];
+        }
+    }
+    
+    if (typeof company.bank_accounts === 'string') {
+        try {
+            company.bank_accounts = JSON.parse(company.bank_accounts);
+        } catch (e) {
+            company.bank_accounts = [];
+        }
+    }
+    
+    if (typeof company.default_document_notes === 'string') {
+        try {
+            company.default_document_notes = JSON.parse(company.default_document_notes);
+        } catch (e) {
+            company.default_document_notes = [];
+        }
+    }
+    
+    // Parse raw company data for additional details
+    let rawData = {};
+    if (company.raw_company_data) {
+        try {
+            rawData = typeof company.raw_company_data === 'string' 
+                ? JSON.parse(company.raw_company_data) 
+                : company.raw_company_data;
+        } catch (e) {
+            rawData = {};
+        }
+    }
+    
+    // Extract address from raw data if not in structured format
+    const invoiceAddress = rawData.invoice_address || {};
+    
+    const modalBody = document.getElementById('companyModalBody');
+    modalBody.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card border-0 bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3"><i class="fas fa-building me-2 text-primary"></i>Company Details</h6>
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <strong>${escapeHtml(company.name)}</strong>
+                                ${company.public_name && company.public_name !== company.name ? `<br><small class="text-muted">${escapeHtml(company.public_name)}</small>` : ''}
+                            </div>
+                            ${company.vat_number ? `<div class="col-12"><small><strong>VAT:</strong> ${escapeHtml(company.vat_number)}</small></div>` : ''}
+                            ${company.email_addresses || company.email ? `<div class="col-12"><small><i class="fas fa-envelope me-1"></i>${escapeHtml(company.email_addresses || company.email)}</small></div>` : ''}
+                        </div>
+                        
+                        <div class="mt-3">
+                            ${company.sales_price_class_name ? `<span class="badge bg-warning text-dark me-2">${escapeHtml(company.sales_price_class_name)}</span>` : ''}
+                            ${company.company_categories && company.company_categories.length > 0 ? 
+                                company.company_categories.slice(0, 2).map(cat => `<span class="badge bg-info me-1">${escapeHtml(cat.name || cat)}</span>`).join('') : ''}
+                        </div>
+                    </div>
+                </div>
+                
+                ${invoiceAddress && Object.keys(invoiceAddress).length > 0 ? `
+                <div class="card border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title mb-2"><i class="fas fa-map-marker-alt me-2 text-primary"></i>Address</h6>
+                        <address class="mb-0">
+                            ${invoiceAddress.address_line1 ? escapeHtml(invoiceAddress.address_line1) + '<br>' : ''}
+                            ${invoiceAddress.post_code ? escapeHtml(invoiceAddress.post_code) + ' ' : ''}${escapeHtml(invoiceAddress.city || '')}<br>
+                            ${invoiceAddress.country ? escapeHtml(invoiceAddress.country.name || invoiceAddress.country) : ''}
+                            ${invoiceAddress.phone_number ? '<br><small><i class="fas fa-phone me-1"></i>' + escapeHtml(invoiceAddress.phone_number) + '</small>' : ''}
+                        </address>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3"><i class="fas fa-chart-line me-2 text-success"></i>Business Metrics ${currentYear === 'combined' ? '(Combined)' : `(${currentYear})`}</h6>
+                        
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-success mb-1">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0})}</h4>
+                                    <small class="text-muted">Total Revenue</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h4 class="text-primary mb-1">${company.invoice_count}</h4>
+                                    <small class="text-muted">Invoices</small>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="text-center">
+                                    <strong class="text-info">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 0})}</strong>
+                                    <small class="text-muted d-block">Average Invoice</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        ${currentYear === 'combined' && company.years_data ? `
+                            <hr class="my-3">
+                            <div class="row g-2">
+                                <div class="col-6 text-center">
+                                    <strong class="text-primary">2024</strong><br>
+                                    <small>${company.years_data['2024'].invoice_count} invoices</small>
+                                </div>
+                                <div class="col-6 text-center">
+                                    <strong class="text-success">2025</strong><br>
+                                    <small>${company.years_data['2025'].invoice_count} invoices</small>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">All Invoices ${currentYear === 'combined' ? '(Both Years)' : `(${currentYear})`}</h6>
+                    <div>
+                        <span class="badge bg-info" id="invoices-count">Loading...</span>
+                        <small class="text-muted ms-2">Click any invoice for details</small>
+                    </div>
+                </div>
+                
+                <div class="invoice-container" style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 8px;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Invoice #</th>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                ${currentYear === 'combined' ? '<th>Year</th>' : ''}
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoices-tbody">
+                            <!-- Invoices will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-2 d-flex justify-content-between align-items-center">
+                    <small class="text-muted" id="invoices-summary">
+                        Loading invoices...
+                    </small>
+                    <small class="text-muted">
+                        Scroll to see all invoices
+                    </small>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Show modal first
+    new bootstrap.Modal(document.getElementById('companyModal')).show();
+    
+    // Then load invoices
+    loadCompanyInvoices(company.company_id);
+}
+
+async function loadCompanyInvoices(companyId) {
+    try {
+        const response = await fetch(`/api/company-invoices/${companyId}?year=${currentYear}`);
+        const data = await response.json();
+        
+        if (data.invoices) {
+            // Update count badge
+            document.getElementById('invoices-count').textContent = `${data.invoices.length} total`;
+            
+            // Update summary
+            document.getElementById('invoices-summary').textContent = `Total: ${data.invoices.length} invoices`;
+            
+            // Populate invoices table
+            const tbody = document.getElementById('invoices-tbody');
+            tbody.innerHTML = data.invoices.map(invoice => `
+                <tr class="invoice-row" onclick="showInvoiceDetails(${companyId}, ${invoice.id})" style="cursor: pointer;">
+                    <td>
+                        <strong class="text-primary">${escapeHtml(invoice.number || invoice.id)}</strong>
+                        <i class="fas fa-external-link-alt ms-1 text-muted small"></i>
+                    </td>
+                    <td>
+                        ${invoice.date ? new Date(invoice.date).toLocaleDateString('nl-BE') : 'N/A'}
+                    </td>
+                    <td>
+                        <strong class="text-success">€${invoice.amount.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
+                    </td>
+                    ${currentYear === 'combined' ? `
+                        <td>
+                            <span class="badge ${invoice.year === 2024 ? 'bg-primary' : 'bg-success'}">${invoice.year}</span>
+                        </td>
+                    ` : ''}
+                    <td>
+                        <span class="badge bg-success">Paid</span>
+                    </td>
+                </tr>
+            `).join('');
+            
+            // Store invoices for invoice details modal
+            window.currentCompanyInvoices = data.invoices;
+        }
+    } catch (error) {
+        console.error('Error loading company invoices:', error);
+        document.getElementById('invoices-count').textContent = 'Error';
+        document.getElementById('invoices-summary').textContent = 'Error loading invoices';
+    }
+}
+
+async function showInvoiceDetails(companyId, invoiceId) {
+    // Find the invoice from stored data
+    if (!window.currentCompanyInvoices) return;
+    
+    const invoice = window.currentCompanyInvoices.find(i => i.id === invoiceId);
+    if (!invoice) return;
+    
+    // Set modal title
+    document.getElementById('invoiceModalTitle').textContent = `Invoice ${invoice.number || invoice.id}`;
+    
+    // Get full invoice data from the API
+    try {
+        const year = invoice.year || currentYear;
+        const response = await fetch(`/api/invoice-details/${year}/${invoiceId}`);
+        
+        let fullInvoiceData = null;
+        if (response.ok) {
+            const result = await response.json();
+            fullInvoiceData = result.invoice_data;
+        }
+        
+        // Build modal content
+        const modalBody = document.getElementById('invoiceModalBody');
+        modalBody.innerHTML = `
+            <!-- Breadcrumb Navigation -->
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb bg-light p-2 rounded mb-0">
+                    <li class="breadcrumb-item">
+                        <a href="#" onclick="document.getElementById('invoiceModal').querySelector('.btn-close').click(); return false;" class="text-decoration-none">
+                            <i class="fas fa-building me-1"></i>Company Details
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">
+                        <i class="fas fa-file-invoice me-1"></i>Invoice ${escapeHtml(invoice.number || invoice.id)}
+                    </li>
+                </ol>
+            </nav>
+            
+            <!-- Invoice Summary Card -->
+            <div class="card bg-light border-0 mb-3">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h5 class="mb-1">Invoice ${escapeHtml(invoice.number || invoice.id)}</h5>
+                            <p class="text-muted mb-0">
+                                ${invoice.date ? new Date(invoice.date).toLocaleDateString('nl-BE') : 'N/A'}
+                                ${invoice.year ? `<span class="badge ${invoice.year === 2024 ? 'bg-primary' : 'bg-success'} ms-2">${invoice.year}</span>` : ''}
+                            </p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <h4 class="text-success mb-1">€${invoice.amount.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</h4>
+                            <span class="badge bg-success">Paid</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            ${invoice.description ? `
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Description</h6>
+                        <div class="alert alert-light">
+                            ${escapeHtml(invoice.description)}
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+            
+            ${invoice.notes ? `
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Notes</h6>
+                        <div class="alert alert-info">
+                            ${escapeHtml(invoice.notes)}
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+            
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">Products & Line Items</h6>
+                        <span class="badge bg-secondary">${invoice.line_items_count || 0} items</span>
+                    </div>
+                    
+                    <div id="line-items-container">
+                        ${fullInvoiceData && fullInvoiceData.invoice_line_items ? `
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Product</th>
+                                            <th>Description</th>
+                                            <th>Quantity</th>
+                                            <th>Unit Price</th>
+                                            <th>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${fullInvoiceData.invoice_line_items.map(item => `
+                                            <tr>
+                                                <td>
+                                                    <strong class="text-primary">${escapeHtml((item.product && item.product.name) || 'N/A')}</strong>
+                                                    ${item.product && item.product.code ? `<br><small class="text-muted"><i class="fas fa-barcode me-1"></i>${escapeHtml(item.product.code)}</small>` : ''}
+                                                </td>
+                                                <td>
+                                                    <span class="text-muted">${escapeHtml(item.description || item.product_description || 'N/A')}</span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge bg-info">${item.quantity || item.qty || 0}</span>
+                                                </td>
+                                                <td>
+                                                    <strong class="text-success">€${(item.unit_price || item.unit_price_incl_tax || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
+                                                </td>
+                                                <td>
+                                                    <strong class="text-dark">€${(item.total_incl_tax || item.total_excl_tax || item.line_total || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : `
+                            <div class="alert alert-warning">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Line item details not available for this invoice.
+                            </div>
+                        `}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mt-3">
+                <div class="col-12">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            Created: ${invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('nl-BE') : 'N/A'}
+                            ${invoice.updated_at ? ` | Updated: ${new Date(invoice.updated_at).toLocaleDateString('nl-BE')}` : ''}
+                        </small>
+                        <button class="btn btn-primary btn-sm" onclick="window.open('/invoice/${invoice.id}/pdf', '_blank')">
+                            <i class="fas fa-file-pdf me-1"></i>View PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        new bootstrap.Modal(document.getElementById('invoiceModal')).show();
+        
+    } catch (error) {
+        console.error('Error loading invoice details:', error);
+        // Show basic details even if API call fails
+        const modalBody = document.getElementById('invoiceModalBody');
+        modalBody.innerHTML = `
+            <div class="alert alert-warning">
+                <h6>Basic Invoice Information</h6>
+                <p><strong>Invoice:</strong> ${invoice.number || invoice.id}</p>
+                <p><strong>Date:</strong> ${invoice.date ? new Date(invoice.date).toLocaleDateString('nl-BE') : 'N/A'}</p>
+                <p><strong>Amount:</strong> €${invoice.amount.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</p>
+                <p><strong>Status:</strong> Paid</p>
+                <hr>
+                <small class="text-muted">Full details could not be loaded. Error: ${error.message}</small>
+            </div>
+        `;
+        new bootstrap.Modal(document.getElementById('invoiceModal')).show();
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+</script>
+{% endblock %}

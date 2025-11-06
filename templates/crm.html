@@ -3,45 +3,44 @@
 {% block title %}CRM - DOUANO{% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h2><i class="fas fa-handshake me-2 text-primary"></i>CRM</h2>
-                <p class="text-muted mb-0">Search people, directors, and contacts</p>
-            </div>
-            <div class="btn-group">
-                <button class="btn btn-primary rounded-pill shadow-sm" onclick="loadCrmCompanies()">
-                    <i class="fas fa-sync-alt me-2"></i>Refresh CRM
-                </button>
-                <button class="btn btn-success rounded-pill shadow-sm" onclick="showAddPersonModal()">
-                    <i class="fas fa-plus me-2"></i>Add Person
-                </button>
-            </div>
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold text-dark">CRM</h1>
+            <p class="text-muted mb-0">Search people, directors, and contacts</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" onclick="loadCrmCompanies()">
+                <i class="fas fa-sync-alt me-2"></i>Refresh CRM
+            </button>
+            <button class="btn btn-primary" onclick="showAddPersonModal()">
+                <i class="fas fa-plus me-2"></i>Add Person
+            </button>
         </div>
     </div>
-</div>
 
-<!-- CRM Search and Filters -->
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div class="d-flex align-items-center gap-3 flex-wrap">
-        <input type="text" class="form-control" id="crm-search" placeholder="Search people, directors, contacts..." style="width: 300px;">
-        <select class="form-select" id="crm-status-filter" style="width: 130px;">
-            <option value="">All Statuses</option>
-            <option value="Prospect">Prospect</option>
-            <option value="Klant">Klant</option>
-        </select>
-        <button class="btn btn-outline-secondary rounded-pill btn-sm" onclick="clearCrmFilters()">
-            <i class="fas fa-times me-1"></i>Clear Filters
-        </button>
+    <!-- CRM Search and Filters -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <input type="text" class="form-control" id="crm-search" placeholder="Search companies, addresses, VAT, email..." style="width: 300px;">
+            <select class="form-select" id="crm-status-filter" style="width: 130px;">
+                <option value="">All Statuses</option>
+                <option value="Prospect">Prospect</option>
+                <option value="Klant">Klant</option>
+            </select>
+            <button class="btn btn-outline-secondary rounded-pill btn-sm" onclick="clearCrmFilters()">
+                <i class="fas fa-times me-1"></i>Clear Filters
+            </button>
+        </div>
     </div>
-</div>
 
-<!-- CRM Container -->
-<div id="crm-container">
-    <div class="text-center py-5">
-        <i class="fas fa-handshake fa-3x text-muted mb-3"></i>
-        <p class="text-muted">Click "Refresh CRM" to load companies from Duano...</p>
+    <!-- CRM Container -->
+    <div id="crm-container">
+        <div class="text-center py-5">
+            <i class="fas fa-handshake fa-3x text-muted mb-3"></i>
+            <p class="text-muted">Click "Refresh CRM" to load companies from Duano...</p>
+        </div>
     </div>
 </div>
 
@@ -121,33 +120,51 @@ function displayCrmCompanies(companies) {
         return;
     }
     
-    const companiesHtml = companies.map(company => `
+    const companiesHtml = companies.map(company => {
+        // Build complete address string
+        const addressParts = [
+            company.address_line1,
+            company.address_line2, 
+            company.city,
+            company.post_code,
+            company.country?.name
+        ].filter(part => part && part.trim());
+        
+        const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
+        
+        return `
         <div class="crm-company card mb-3 shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
                     <div>
                         <h6 class="mb-1">${company.name || 'Unnamed Company'}</h6>
-                        <small class="text-muted">${company.address_line1 || ''} ${company.city || ''} ${company.post_code || ''}</small>
+                        <small class="text-muted">${company.vat_number ? `VAT: ${company.vat_number} | ` : ''}${company.city || 'Unknown location'}</small>
                     </div>
                     <span class="badge ${company.status?.name === 'Klant' ? 'bg-success' : 'bg-warning'} rounded-pill">
                         ${company.status?.name || 'Unknown'}
-                        </span>
-                    </div>
-                    
+                    </span>
+                </div>
+                
                 <div class="row g-3 mt-2">
                     <div class="col-md-6">
-                        ${company.phone_number ? `<div><strong>Phone:</strong> ${company.phone_number}</div>` : ''}
-                        ${company.country?.name ? `<div><strong>Country:</strong> ${company.country.name}</div>` : ''}
-                        ${company.priority?.name ? `<div><strong>Priority:</strong> ${company.priority.name}</div>` : ''}
+                        <div class="mb-2">
+                            <strong><i class="fas fa-map-marker-alt me-1"></i>Address:</strong><br>
+                            <small class="text-muted">${fullAddress}</small>
+                        </div>
+                        ${company.phone_number ? `<div><strong><i class="fas fa-phone me-1"></i>Phone:</strong> ${company.phone_number}</div>` : ''}
+                        ${company.email ? `<div><strong><i class="fas fa-envelope me-1"></i>Email:</strong> ${company.email}</div>` : ''}
                     </div>
                     <div class="col-md-6">
-                        ${company.account_manager?.name ? `<div><strong>Account Manager:</strong> ${company.account_manager.name}</div>` : ''}
+                        ${company.account_manager?.name ? `<div><strong><i class="fas fa-user me-1"></i>Account Manager:</strong> ${company.account_manager.name}</div>` : ''}
+                        ${company.priority?.name ? `<div><strong><i class="fas fa-flag me-1"></i>Priority:</strong> ${company.priority.name}</div>` : ''}
+                        ${company.website ? `<div><strong><i class="fas fa-globe me-1"></i>Website:</strong> <a href="${company.website}" target="_blank" class="text-decoration-none">${company.website}</a></div>` : ''}
                         <div class="small text-muted mt-2">ID: ${company.id}</div>
                     </div>
                 </div>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
     
     container.innerHTML = companiesHtml;
 }
@@ -163,8 +180,14 @@ function filterCrmCompanies() {
         filteredCompanies = filteredCompanies.filter(company => 
             company.name?.toLowerCase().includes(searchText) ||
             company.address_line1?.toLowerCase().includes(searchText) ||
+            company.address_line2?.toLowerCase().includes(searchText) ||
             company.city?.toLowerCase().includes(searchText) ||
+            company.post_code?.toLowerCase().includes(searchText) ||
+            company.country?.name?.toLowerCase().includes(searchText) ||
+            company.vat_number?.toLowerCase().includes(searchText) ||
             company.phone_number?.includes(searchText) ||
+            company.email?.toLowerCase().includes(searchText) ||
+            company.website?.toLowerCase().includes(searchText) ||
             company.account_manager?.name?.toLowerCase().includes(searchText)
         );
     }

@@ -1,0 +1,1354 @@
+{% extends 'base.html' %}
+
+{% block title %}Tasks · DOUANO{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Compact Stats Cards */
+    .stats-overview {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e5e7eb;
+    }
+    
+    .stat-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .stat-card:hover {
+        background: #f1f5f9;
+        border-color: #3b82f6;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-card.active {
+        background: #eff6ff;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .stat-number {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+        display: block;
+        color: #1f2937;
+    }
+    
+    .stat-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+    }
+    
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    
+    .stat-card:hover::before,
+    .stat-card.active::before {
+        opacity: 1;
+    }
+    
+    /* Task Cards */
+    .task-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        background: white;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        position: relative;
+    }
+    
+    .task-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+        border-color: var(--primary-color);
+    }
+    
+    .task-card.overdue {
+        border-left: 4px solid #ef4444;
+        background: #fef2f2;
+    }
+    
+    .task-card.due-today {
+        border-left: 4px solid #f59e0b;
+        background: #fffbeb;
+    }
+    
+    .task-card.completed {
+        opacity: 0.7;
+        background: #f9fafb;
+    }
+    
+    /* Enhanced task cards with priority left border */
+    .task-card.priority-1 {
+        border-left: 4px solid #dc2626;
+        background: linear-gradient(135deg, #fef2f2 0%, white 100%);
+    }
+    
+    .task-card.priority-2 {
+        border-left: 4px solid #ea580c;
+        background: linear-gradient(135deg, #fff7ed 0%, white 100%);
+    }
+    
+    .task-card.priority-3 {
+        border-left: 4px solid #16a34a;
+        background: linear-gradient(135deg, #f0fdf4 0%, white 100%);
+    }
+    
+    .task-card.priority-4 {
+        border-left: 4px solid #6b7280;
+        background: linear-gradient(135deg, #f9fafb 0%, white 100%);
+    }
+    
+    /* Priority Indicators */
+    .priority-indicator {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+    }
+    
+    .priority-1 { background: #dc2626; } /* Red - Urgent */
+    .priority-2 { background: #ea580c; } /* Orange - Within 7 days */
+    .priority-3 { background: #16a34a; } /* Green - Not urgent */
+    .priority-4 { background: #6b7280; } /* Gray - Low priority */
+    
+    /* Calendar task cards */
+    .calendar-task-card {
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    
+    .calendar-task-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .calendar-task-card .dropdown-toggle {
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    
+    .calendar-task-card:hover .dropdown-toggle {
+        opacity: 1;
+    }
+    
+    .calendar-task-card .dropdown-menu {
+        font-size: 0.85rem;
+    }
+    
+    /* Task Type Icons */
+    .task-type-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        margin-right: 0.75rem;
+        font-size: 14px;
+        font-weight: bold;
+    }
+    
+    .type-call { background: #dbeafe; color: #1e40af; }
+    .type-email { background: #fef3c7; color: #92400e; }
+    .type-meeting { background: #d1fae5; color: #065f46; }
+    .type-follow_up { background: #e0e7ff; color: #3730a3; }
+    .type-demo { background: #fce7f3; color: #be185d; }
+    .type-proposal { background: #ecfdf5; color: #047857; }
+    .type-contract { background: #fef2f2; color: #991b1b; }
+    .type-research { background: #f3f4f6; color: #374151; }
+    .type-general { background: #e5e7eb; color: #4b5563; }
+    
+    /* Progress Bar */
+    .task-progress {
+        width: 100%;
+        height: 6px;
+        background: #e5e7eb;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 0.75rem;
+    }
+    
+    .task-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #10b981, #059669);
+        transition: width 0.3s ease;
+    }
+    
+    /* Filter Controls */
+    .filter-controls {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Task Modal */
+    .task-modal .modal-content {
+        border-radius: 16px;
+        border: none;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    }
+    
+    .task-modal .modal-header {
+        border-bottom: 1px solid #e5e7eb;
+        padding: 1.5rem;
+    }
+    
+    .task-modal .modal-body {
+        padding: 1.5rem;
+    }
+    
+    /* Quick Actions */
+    .quick-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .quick-actions .btn {
+        font-size: 0.875rem;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .task-dashboard {
+            padding: 1.5rem;
+        }
+        
+        .stat-card {
+            padding: 1rem;
+        }
+        
+        .stat-number {
+            font-size: 1.5rem;
+        }
+        
+        .task-card {
+            padding: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold text-dark">Task Management</h1>
+            <p class="text-muted mb-0">Organize and track all your sales activities</p>
+        </div>
+        <button class="btn btn-primary" onclick="showCreateTaskModal()">
+            <i class="fas fa-plus me-2"></i>New Task
+        </button>
+    </div>
+
+    <!-- Compact Stats Overview -->
+    <div class="stats-overview">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h6 class="mb-1 fw-semibold text-dark">📊 Task Overview</h6>
+                <small class="text-muted">Your productivity at a glance</small>
+            </div>
+            <button class="btn btn-outline-primary btn-sm" onclick="loadTaskAnalytics()">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+        </div>
+        <div class="row g-3" id="task-stats">
+            <div class="col-6 col-md-3">
+                <div class="stat-card" onclick="filterTasks('all')" data-filter="all">
+                    <span class="stat-number" id="total-tasks">-</span>
+                    <div class="stat-label">Total Tasks</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" onclick="filterTasks('pending')" data-filter="pending">
+                    <span class="stat-number" id="pending-tasks">-</span>
+                    <div class="stat-label">Pending</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" onclick="filterTasks('overdue')" data-filter="overdue">
+                    <span class="stat-number" id="overdue-tasks">-</span>
+                    <div class="stat-label">Overdue</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="stat-card" onclick="filterTasks('due_today')" data-filter="due_today">
+                    <span class="stat-number" id="due-today-tasks">-</span>
+                    <div class="stat-label">Due Today</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="filter-controls">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">Status</label>
+                <select class="form-select" id="status-filter" onchange="applyFilters()">
+                    <option value="">All Statuses</option>
+                    <option value="pending">⏳ Pending</option>
+                    <option value="in_progress">🔄 In Progress</option>
+                    <option value="completed">✅ Completed</option>
+                    <option value="overdue">⚠️ Overdue</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Priority</label>
+                <select class="form-select" id="priority-filter" onchange="applyFilters()">
+                    <option value="">All Priorities</option>
+                    <option value="1">🔴 High</option>
+                    <option value="2">🟡 Medium-High</option>
+                    <option value="3">🟢 Medium</option>
+                    <option value="4">🔵 Medium-Low</option>
+                    <option value="5">⚪ Low</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Type</label>
+                <select class="form-select" id="type-filter" onchange="applyFilters()">
+                    <option value="">All Types</option>
+                    <option value="call">📞 Call</option>
+                    <option value="email">📧 Email</option>
+                    <option value="meeting">🤝 Meeting</option>
+                    <option value="follow_up">📋 Follow-up</option>
+                    <option value="demo">🎯 Demo</option>
+                    <option value="proposal">📄 Proposal</option>
+                    <option value="contract">📋 Contract</option>
+                    <option value="research">🔍 Research</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Due Date</label>
+                <select class="form-select" id="due-filter" onchange="applyFilters()">
+                    <option value="">All Dates</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="today">Today</option>
+                    <option value="tomorrow">Tomorrow</option>
+                    <option value="this_week">This Week</option>
+                    <option value="next_week">Next Week</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Search</label>
+                <input type="text" class="form-control" id="search-filter" placeholder="Search tasks..." onkeyup="applyFilters()">
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-outline-secondary w-100" onclick="clearFilters()" title="Clear Filters">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tasks Container -->
+    <div id="tasks-container">
+        <div class="text-center py-5">
+            <i class="fas fa-tasks fa-3x text-muted mb-3"></i>
+            <p class="text-muted">Loading tasks...</p>
+        </div>
+    </div>
+
+    <!-- Future Tasks Calendar View -->
+    <div class="bg-white rounded border shadow-sm mt-4">
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom">
+            <div>
+                <h5 class="mb-1 fw-semibold">📅 Future Tasks Calendar</h5>
+                <small class="text-muted">View all scheduled tasks including long-term customer follow-ups</small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary btn-sm" onclick="loadCalendarView()">
+                    <i class="fas fa-sync-alt me-1"></i>Load Calendar
+                </button>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary active" onclick="setCalendarRange(365)" id="range-year">1 Year</button>
+                    <button class="btn btn-outline-primary" onclick="setCalendarRange(180)" id="range-6months">6 Months</button>
+                    <button class="btn btn-outline-primary" onclick="setCalendarRange(90)" id="range-3months">3 Months</button>
+                </div>
+            </div>
+        </div>
+        <div class="p-3">
+            <div id="calendar-container">
+                <div class="text-center py-5">
+                    <i class="fas fa-calendar-alt fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">Click "Load Calendar" to view all future tasks including automated follow-ups</p>
+                    <small class="text-muted">This includes customer check-ins scheduled months in advance</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Task Modal -->
+<div class="modal fade task-modal" id="taskModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskModalTitle">Create New Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="taskForm">
+                    <input type="hidden" id="taskId">
+                    
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Task Title *</label>
+                            <input type="text" class="form-control" id="taskTitle" required>
+                        </div>
+                        
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="taskDescription" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Task Type</label>
+                            <select class="form-select" id="taskType">
+                                <option value="call">📞 Call</option>
+                                <option value="email">📧 Email</option>
+                                <option value="meeting">🤝 Meeting</option>
+                                <option value="follow_up">📋 Follow-up</option>
+                                <option value="demo">🎯 Demo</option>
+                                <option value="proposal">📄 Proposal</option>
+                                <option value="contract">📋 Contract</option>
+                                <option value="research">🔍 Research</option>
+                                <option value="general">📝 General</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Priority</label>
+                            <select class="form-select" id="taskPriority">
+                                <option value="1">🔴 High</option>
+                                <option value="2">🟡 Medium-High</option>
+                                <option value="3" selected>🟢 Medium</option>
+                                <option value="4">🔵 Medium-Low</option>
+                                <option value="5">⚪ Low</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Due Date</label>
+                            <input type="date" class="form-control" id="taskDueDate">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Due Time</label>
+                            <input type="time" class="form-control" id="taskDueTime">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Estimated Duration (minutes)</label>
+                            <input type="number" class="form-control" id="taskDuration" min="5" step="5">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label class="form-label">Assigned To</label>
+                            <input type="text" class="form-control" id="taskAssignedTo" placeholder="Salesperson name">
+                        </div>
+                        
+                        <div class="col-12">
+                            <label class="form-label">Related Prospect</label>
+                            <select class="form-select" id="taskProspect">
+                                <option value="">No related prospect</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-12">
+                            <label class="form-label">Notes</label>
+                            <textarea class="form-control" id="taskNotes" rows="2"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveTask()">
+                    <i class="fas fa-save me-1"></i>Save Task
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task Detail Modal -->
+<div class="modal fade task-modal" id="taskDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskDetailTitle">Task Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="taskDetailContent">
+                <!-- Task details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="editCurrentTask()">
+                    <i class="fas fa-edit me-1"></i>Edit Task
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let currentTasks = [];
+let currentTaskId = null;
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    loadTasks();
+    loadTaskAnalytics();
+    loadProspectsForSelect();
+    
+    // Auto-load calendar view to show future tasks
+    setTimeout(() => {
+        loadCalendarView();
+    }, 1000);
+});
+
+// Load all tasks
+async function loadTasks() {
+    try {
+        const response = await fetch('/api/tasks');
+        if (response.ok) {
+            const data = await response.json();
+            currentTasks = data.tasks || [];
+            displayTasks(currentTasks);
+        } else {
+            throw new Error('Failed to load tasks');
+        }
+    } catch (error) {
+        console.error('Error loading tasks:', error);
+        showToast('Failed to load tasks', 'error');
+    }
+}
+
+// Display tasks
+function displayTasks(tasks) {
+    const container = document.getElementById('tasks-container');
+    
+    if (tasks.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No tasks found. Create your first task!</p>
+                <button class="btn btn-primary" onclick="showCreateTaskModal()">
+                    <i class="fas fa-plus me-2"></i>Create Task
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    const tasksHtml = tasks.map(task => generateTaskCard(task)).join('');
+    container.innerHTML = tasksHtml;
+}
+
+// Generate task card HTML
+function generateTaskCard(task) {
+    const dueDate = task.due_date ? new Date(task.due_date) : null;
+    const today = new Date();
+    const isOverdue = dueDate && dueDate < today && task.status !== 'completed';
+    const isDueToday = dueDate && dueDate.toDateString() === today.toDateString();
+    
+    let cardClass = `task-card priority-${task.priority || 3}`;
+    if (isOverdue) cardClass += ' overdue';
+    else if (isDueToday) cardClass += ' due-today';
+    if (task.status === 'completed') cardClass += ' completed';
+    
+    const typeIcon = getTaskTypeIcon(task.task_type);
+    const priorityClass = `priority-${task.priority}`;
+    const statusIcon = getStatusIcon(task.status);
+    
+    return `
+        <div class="${cardClass}" data-task-id="${task.id}" onclick="showTaskDetail('${task.id}')">
+            <div class="priority-indicator ${priorityClass}" title="Priority ${task.priority}"></div>
+            
+            <div class="d-flex align-items-start">
+                <div class="task-type-icon type-${task.task_type}">
+                    ${typeIcon}
+                </div>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="mb-1 fw-bold">${task.title}</h6>
+                        <span class="badge bg-${getStatusColor(task.status)}">${statusIcon} ${task.status.replace('_', ' ').toUpperCase()}</span>
+                    </div>
+                    
+                    ${task.description ? `<p class="text-muted mb-2">${task.description}</p>` : ''}
+                    
+                    <div class="row g-2 text-sm">
+                        ${dueDate ? `
+                            <div class="col-auto">
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>
+                                    ${formatDate(dueDate)} ${task.due_time ? task.due_time : ''}
+                                </small>
+                            </div>
+                        ` : ''}
+                        
+                        ${task.estimated_duration ? `
+                            <div class="col-auto">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    ${task.estimated_duration} min
+                                </small>
+                            </div>
+                        ` : ''}
+                        
+                        ${task.prospects?.name ? `
+                            <div class="col-auto">
+                                <small class="text-muted">
+                                    <i class="fas fa-user me-1"></i>
+                                    ${task.prospects.name}
+                                </small>
+                            </div>
+                        ` : ''}
+                        
+                        ${task.assigned_to ? `
+                            <div class="col-auto">
+                                <small class="text-muted">
+                                    <i class="fas fa-user-circle me-1"></i>
+                                    ${task.assigned_to}
+                                </small>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    ${task.progress_percentage > 0 ? `
+                        <div class="task-progress">
+                            <div class="task-progress-bar" style="width: ${task.progress_percentage}%"></div>
+                        </div>
+                        <small class="text-muted">${task.progress_percentage}% complete</small>
+                    ` : ''}
+                    
+                    <div class="quick-actions">
+                        <button class="btn btn-sm btn-outline-success" onclick="event.stopPropagation(); updateTaskStatus('${task.id}', 'completed')" ${task.status === 'completed' ? 'disabled' : ''}>
+                            <i class="fas fa-check"></i> Complete
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); editTask('${task.id}')">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); deleteTask('${task.id}')">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Helper functions
+function getTaskTypeIcon(type) {
+    const icons = {
+        'call': '📞',
+        'email': '📧',
+        'meeting': '🤝',
+        'follow_up': '📋',
+        'demo': '🎯',
+        'proposal': '📄',
+        'contract': '📋',
+        'research': '🔍',
+        'general': '📝'
+    };
+    return icons[type] || '📝';
+}
+
+function getPriorityLabel(priority) {
+    const labels = {
+        1: 'URGENT',
+        2: '7 DAYS',
+        3: 'NOT URGENT',
+        4: 'LOW'
+    };
+    return labels[priority] || 'NORMAL';
+}
+
+function getPriorityColor(priority) {
+    const colors = {
+        1: 'danger',   // Red - Urgent
+        2: 'warning',  // Orange - Within 7 days
+        3: 'success',  // Green - Not urgent
+        4: 'secondary' // Gray - Low priority
+    };
+    return colors[priority] || 'secondary';
+}
+
+function getStatusIcon(status) {
+    const icons = {
+        'pending': '⏳',
+        'in_progress': '🔄',
+        'completed': '✅',
+        'overdue': '⚠️',
+        'cancelled': '❌'
+    };
+    return icons[status] || '⏳';
+}
+
+function getStatusColor(status) {
+    const colors = {
+        'pending': 'secondary',
+        'in_progress': 'primary',
+        'completed': 'success',
+        'overdue': 'danger',
+        'cancelled': 'dark'
+    };
+    return colors[status] || 'secondary';
+}
+
+function formatDate(date) {
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    if (date.toDateString() === today.toDateString()) {
+        return 'Today';
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+        return 'Tomorrow';
+    } else {
+        return date.toLocaleDateString();
+    }
+}
+
+// Load task analytics
+async function loadTaskAnalytics() {
+    try {
+        const response = await fetch('/api/tasks/analytics');
+        if (response.ok) {
+            const analytics = await response.json();
+            updateTaskStats(analytics);
+        }
+    } catch (error) {
+        console.error('Error loading analytics:', error);
+    }
+}
+
+// Update task statistics
+function updateTaskStats(analytics) {
+    document.getElementById('total-tasks').textContent = analytics.total_tasks || 0;
+    document.getElementById('pending-tasks').textContent = analytics.by_status.pending || 0;
+    document.getElementById('overdue-tasks').textContent = analytics.overdue_count || 0;
+    document.getElementById('due-today-tasks').textContent = analytics.due_today || 0;
+}
+
+// Show create task modal
+function showCreateTaskModal() {
+    document.getElementById('taskModalTitle').textContent = 'Create New Task';
+    document.getElementById('taskForm').reset();
+    document.getElementById('taskId').value = '';
+    currentTaskId = null;
+    
+    const modal = new bootstrap.Modal(document.getElementById('taskModal'));
+    modal.show();
+}
+
+// Edit task
+function editTask(taskId) {
+    const task = currentTasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    document.getElementById('taskModalTitle').textContent = 'Edit Task';
+    document.getElementById('taskId').value = task.id;
+    document.getElementById('taskTitle').value = task.title;
+    document.getElementById('taskDescription').value = task.description || '';
+    document.getElementById('taskType').value = task.task_type;
+    document.getElementById('taskPriority').value = task.priority;
+    document.getElementById('taskDueDate').value = task.due_date || '';
+    document.getElementById('taskDueTime').value = task.due_time || '';
+    document.getElementById('taskDuration').value = task.estimated_duration || '';
+    document.getElementById('taskAssignedTo').value = task.assigned_to || '';
+    document.getElementById('taskProspect').value = task.prospect_id || '';
+    document.getElementById('taskNotes').value = task.notes || '';
+    
+    currentTaskId = taskId;
+    
+    const modal = new bootstrap.Modal(document.getElementById('taskModal'));
+    modal.show();
+}
+
+// Save task
+async function saveTask() {
+    const taskData = {
+        title: document.getElementById('taskTitle').value,
+        description: document.getElementById('taskDescription').value,
+        task_type: document.getElementById('taskType').value,
+        priority: parseInt(document.getElementById('taskPriority').value),
+        due_date: document.getElementById('taskDueDate').value || null,
+        due_time: document.getElementById('taskDueTime').value || null,
+        estimated_duration: document.getElementById('taskDuration').value ? parseInt(document.getElementById('taskDuration').value) : null,
+        assigned_to: document.getElementById('taskAssignedTo').value || null,
+        prospect_id: document.getElementById('taskProspect').value || null,
+        notes: document.getElementById('taskNotes').value || ''
+    };
+    
+    try {
+        let response;
+        if (currentTaskId) {
+            // Update existing task
+            response = await fetch(`/api/tasks/${currentTaskId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(taskData)
+            });
+        } else {
+            // Create new task
+            response = await fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(taskData)
+            });
+        }
+        
+        if (response.ok) {
+            showToast(currentTaskId ? 'Task updated successfully' : 'Task created successfully', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('taskModal')).hide();
+            loadTasks();
+            loadTaskAnalytics();
+        } else {
+            throw new Error('Failed to save task');
+        }
+    } catch (error) {
+        console.error('Error saving task:', error);
+        showToast('Failed to save task', 'error');
+    }
+}
+
+// Update task status
+async function updateTaskStatus(taskId, status) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        
+        if (response.ok) {
+            showToast(`Task marked as ${status}`, 'success');
+            loadTasks();
+            loadTaskAnalytics();
+        } else {
+            throw new Error('Failed to update task');
+        }
+    } catch (error) {
+        console.error('Error updating task:', error);
+        showToast('Failed to update task', 'error');
+    }
+}
+
+// Delete task
+async function deleteTask(taskId) {
+    if (!confirm('Are you sure you want to delete this task?')) return;
+    
+    try {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showToast('Task deleted successfully', 'success');
+            loadTasks();
+            loadTaskAnalytics();
+        } else {
+            throw new Error('Failed to delete task');
+        }
+    } catch (error) {
+        console.error('Error deleting task:', error);
+        showToast('Failed to delete task', 'error');
+    }
+}
+
+// Show task detail
+async function showTaskDetail(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}`);
+        if (response.ok) {
+            const data = await response.json();
+            const task = data.task;
+            
+            document.getElementById('taskDetailTitle').textContent = task.title;
+            document.getElementById('taskDetailContent').innerHTML = generateTaskDetailHTML(task);
+            
+            currentTaskId = taskId;
+            const modal = new bootstrap.Modal(document.getElementById('taskDetailModal'));
+            modal.show();
+        }
+    } catch (error) {
+        console.error('Error loading task detail:', error);
+        showToast('Failed to load task details', 'error');
+    }
+}
+
+// Generate task detail HTML
+function generateTaskDetailHTML(task) {
+    return `
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="task-type-icon type-${task.task_type} me-3">
+                        ${getTaskTypeIcon(task.task_type)}
+                    </div>
+                    <div>
+                        <h5 class="mb-1">${task.title}</h5>
+                        <span class="badge bg-${getStatusColor(task.status)}">${getStatusIcon(task.status)} ${task.status.replace('_', ' ').toUpperCase()}</span>
+                    </div>
+                </div>
+            </div>
+            
+            ${task.description ? `
+                <div class="col-12">
+                    <h6>Description</h6>
+                    <p class="text-muted">${task.description}</p>
+                </div>
+            ` : ''}
+            
+            <div class="col-md-6">
+                <h6>Task Details</h6>
+                <ul class="list-unstyled">
+                    <li><strong>Type:</strong> ${task.task_type}</li>
+                    <li><strong>Priority:</strong> ${task.priority}/5</li>
+                    <li><strong>Status:</strong> ${task.status}</li>
+                    ${task.due_date ? `<li><strong>Due:</strong> ${formatDate(new Date(task.due_date))} ${task.due_time || ''}</li>` : ''}
+                    ${task.estimated_duration ? `<li><strong>Duration:</strong> ${task.estimated_duration} minutes</li>` : ''}
+                </ul>
+            </div>
+            
+            <div class="col-md-6">
+                <h6>Assignment</h6>
+                <ul class="list-unstyled">
+                    ${task.assigned_to ? `<li><strong>Assigned to:</strong> ${task.assigned_to}</li>` : ''}
+                    ${task.prospects?.name ? `<li><strong>Related Prospect:</strong> ${task.prospects.name}</li>` : ''}
+                    <li><strong>Created:</strong> ${new Date(task.created_at).toLocaleDateString()}</li>
+                </ul>
+            </div>
+            
+            ${task.notes ? `
+                <div class="col-12">
+                    <h6>Notes</h6>
+                    <p class="text-muted">${task.notes}</p>
+                </div>
+            ` : ''}
+            
+            ${task.progress_percentage > 0 ? `
+                <div class="col-12">
+                    <h6>Progress</h6>
+                    <div class="task-progress mb-2">
+                        <div class="task-progress-bar" style="width: ${task.progress_percentage}%"></div>
+                    </div>
+                    <small class="text-muted">${task.progress_percentage}% complete</small>
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// Edit current task from detail modal
+function editCurrentTask() {
+    bootstrap.Modal.getInstance(document.getElementById('taskDetailModal')).hide();
+    setTimeout(() => editTask(currentTaskId), 300);
+}
+
+// Load prospects for select dropdown
+async function loadProspectsForSelect() {
+    try {
+        const response = await fetch('/api/prospects');
+        if (response.ok) {
+            const data = await response.json();
+            const select = document.getElementById('taskProspect');
+            
+            data.prospects.forEach(prospect => {
+                const option = document.createElement('option');
+                option.value = prospect.id;
+                option.textContent = prospect.name;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading prospects:', error);
+    }
+}
+
+// Filtering functions
+function filterTasks(type) {
+    // Reset filters
+    clearFilters();
+    
+    // Update active state for stat cards
+    document.querySelectorAll('.stat-card').forEach(card => {
+        card.classList.remove('active');
+    });
+    
+    const activeCard = document.querySelector(`[data-filter="${type}"]`);
+    if (activeCard) {
+        activeCard.classList.add('active');
+    }
+    
+    // Apply specific filter
+    switch(type) {
+        case 'pending':
+            document.getElementById('status-filter').value = 'pending';
+            break;
+        case 'overdue':
+            document.getElementById('due-filter').value = 'overdue';
+            break;
+        case 'due_today':
+            document.getElementById('due-filter').value = 'today';
+            break;
+        case 'all':
+            // No specific filter for 'all'
+            break;
+    }
+    
+    applyFilters();
+}
+
+function applyFilters() {
+    const status = document.getElementById('status-filter').value;
+    const priority = document.getElementById('priority-filter').value;
+    const type = document.getElementById('type-filter').value;
+    const due = document.getElementById('due-filter').value;
+    const search = document.getElementById('search-filter').value.toLowerCase();
+    
+    let filteredTasks = [...currentTasks];
+    
+    // Apply filters
+    if (status) filteredTasks = filteredTasks.filter(task => task.status === status);
+    if (priority) filteredTasks = filteredTasks.filter(task => task.priority == priority);
+    if (type) filteredTasks = filteredTasks.filter(task => task.task_type === type);
+    if (search) filteredTasks = filteredTasks.filter(task => 
+        task.title.toLowerCase().includes(search) || 
+        (task.description && task.description.toLowerCase().includes(search))
+    );
+    
+    // Due date filtering
+    if (due) {
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        filteredTasks = filteredTasks.filter(task => {
+            if (!task.due_date) return false;
+            const dueDate = new Date(task.due_date);
+            
+            switch(due) {
+                case 'overdue':
+                    return dueDate < today && task.status !== 'completed';
+                case 'today':
+                    return dueDate.toDateString() === today.toDateString();
+                case 'tomorrow':
+                    return dueDate.toDateString() === tomorrow.toDateString();
+                case 'this_week':
+                    const weekEnd = new Date(today);
+                    weekEnd.setDate(today.getDate() + 7);
+                    return dueDate >= today && dueDate <= weekEnd;
+                case 'next_week':
+                    const nextWeekStart = new Date(today);
+                    nextWeekStart.setDate(today.getDate() + 7);
+                    const nextWeekEnd = new Date(today);
+                    nextWeekEnd.setDate(today.getDate() + 14);
+                    return dueDate >= nextWeekStart && dueDate <= nextWeekEnd;
+                default:
+                    return true;
+            }
+        });
+    }
+    
+    displayTasks(filteredTasks);
+}
+
+function clearFilters() {
+    document.getElementById('status-filter').value = '';
+    document.getElementById('priority-filter').value = '';
+    document.getElementById('type-filter').value = '';
+    document.getElementById('due-filter').value = '';
+    document.getElementById('search-filter').value = '';
+    
+    // Reset active state for stat cards
+    document.querySelectorAll('.stat-card').forEach(card => {
+        card.classList.remove('active');
+    });
+    
+    displayTasks(currentTasks);
+}
+
+// Toast notification function
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 5000);
+}
+
+// Calendar view functions
+let calendarRange = 365; // Default to 1 year
+
+async function loadCalendarView() {
+    try {
+        const today = new Date();
+        const endDate = new Date();
+        endDate.setDate(today.getDate() + calendarRange);
+        
+        const response = await fetch(`/api/tasks/calendar?start_date=${today.toISOString().split('T')[0]}&end_date=${endDate.toISOString().split('T')[0]}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayCalendarView(data);
+        } else {
+            throw new Error('Failed to load calendar data');
+        }
+    } catch (error) {
+        console.error('Error loading calendar:', error);
+        showToast('Failed to load calendar view', 'error');
+    }
+}
+
+function setCalendarRange(days) {
+    calendarRange = days;
+    
+    // Update button states
+    document.querySelectorAll('[id^="range-"]').forEach(btn => btn.classList.remove('active'));
+    document.getElementById(`range-${days === 365 ? 'year' : days === 180 ? '6months' : '3months'}`).classList.add('active');
+    
+    // Reload calendar with new range
+    loadCalendarView();
+}
+
+function displayCalendarView(data) {
+    const container = document.getElementById('calendar-container');
+    const { tasks, tasks_by_month, total_tasks } = data;
+    
+    if (total_tasks === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="fas fa-calendar-check fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No future tasks scheduled in the selected time range</p>
+                <small class="text-muted">Tasks will appear here when prospects are marked as customers</small>
+            </div>
+        `;
+        return;
+    }
+    
+    // Create monthly timeline view
+    let calendarHtml = `
+        <div class="mb-3">
+            <h6 class="text-primary mb-2">📊 Overview: ${total_tasks} tasks scheduled</h6>
+        </div>
+        <div class="calendar-timeline">
+    `;
+    
+    // Sort months chronologically
+    const sortedMonths = Object.keys(tasks_by_month).sort();
+    
+    sortedMonths.forEach(monthKey => {
+        const monthTasks = tasks_by_month[monthKey];
+        const monthName = new Date(monthKey + '-01').toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long' 
+        });
+        
+        calendarHtml += `
+            <div class="month-section mb-4">
+                <div class="d-flex align-items-center mb-3">
+                    <h5 class="mb-0 fw-semibold text-dark">${monthName}</h5>
+                    <span class="badge bg-primary ms-2">${monthTasks.length} tasks</span>
+                </div>
+                <div class="row g-2">
+        `;
+        
+        monthTasks.forEach(task => {
+            const priorityColor = getPriorityColor(task.priority);
+            const typeIcon = getTaskTypeIcon(task.task_type);
+            const dueDate = new Date(task.due_date).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric' 
+            });
+            const prospectName = task.prospects?.name || 'Unknown Prospect';
+            
+            calendarHtml += `
+                <div class="col-md-6 col-lg-4">
+                    <div class="card border-start border-4 border-${priorityColor} h-100 calendar-task-card" data-task-id="${task.id}">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-${priorityColor} badge-sm">${dueDate}</span>
+                                <div class="d-flex gap-1">
+                                    <span class="text-muted">${typeIcon}</span>
+                                    <div class="dropdown">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle p-1" type="button" data-bs-toggle="dropdown" style="font-size: 0.7rem; line-height: 1;">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end">
+                                            <li><a class="dropdown-item" href="#" onclick="editCalendarTask('${task.id}')">
+                                                <i class="fas fa-edit me-2"></i>Edit Task
+                                            </a></li>
+                                            <li><a class="dropdown-item" href="#" onclick="completeCalendarTask('${task.id}')">
+                                                <i class="fas fa-check me-2"></i>Mark Complete
+                                            </a></li>
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li><a class="dropdown-item text-danger" href="#" onclick="deleteCalendarTask('${task.id}', '${task.title.replace(/'/g, "\\'")}')">
+                                                <i class="fas fa-trash me-2"></i>Delete Task
+                                            </a></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <h6 class="card-title mb-1" style="font-size: 0.9rem;">${task.title}</h6>
+                            <p class="card-text text-muted mb-2" style="font-size: 0.8rem;">
+                                ${prospectName}
+                            </p>
+                            ${task.description ? `<small class="text-muted">${task.description.substring(0, 80)}${task.description.length > 80 ? '...' : ''}</small>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        calendarHtml += `
+                </div>
+            </div>
+        `;
+    });
+    
+    calendarHtml += '</div>';
+    container.innerHTML = calendarHtml;
+}
+
+// Calendar task management functions
+async function deleteCalendarTask(taskId, taskTitle) {
+    if (!confirm(`Are you sure you want to delete "${taskTitle}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
+        });
+        
+        if (response.ok) {
+            showToast(`Task "${taskTitle}" deleted successfully`, 'success');
+            
+            // Remove the task card from the calendar view
+            const taskCard = document.querySelector(`[data-task-id="${taskId}"]`);
+            if (taskCard) {
+                taskCard.remove();
+            }
+            
+            // Refresh calendar to update counts
+            loadCalendarView();
+            
+            // Also refresh main task analytics
+            loadTaskAnalytics();
+        } else {
+            const errorText = await response.text();
+            throw new Error(`Failed to delete task: ${response.status} - ${errorText}`);
+        }
+    } catch (error) {
+        console.error('Error deleting task:', error);
+        showToast('Failed to delete task', 'error');
+    }
+}
+
+async function completeCalendarTask(taskId) {
+    try {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({
+                status: 'completed',
+                completed_at: new Date().toISOString()
+            })
+        });
+        
+        if (response.ok) {
+            showToast('Task marked as completed', 'success');
+            
+            // Remove the task card from calendar (completed tasks don't show in calendar)
+            const taskCard = document.querySelector(`[data-task-id="${taskId}"]`);
+            if (taskCard) {
+                taskCard.style.opacity = '0.5';
+                setTimeout(() => {
+                    taskCard.remove();
+                }, 500);
+            }
+            
+            // Refresh calendar and analytics
+            loadCalendarView();
+            loadTaskAnalytics();
+        } else {
+            const errorText = await response.text();
+            throw new Error(`Failed to complete task: ${response.status} - ${errorText}`);
+        }
+    } catch (error) {
+        console.error('Error completing task:', error);
+        showToast('Failed to complete task', 'error');
+    }
+}
+
+function editCalendarTask(taskId) {
+    // For now, just show a message that editing will open the main task modal
+    // In the future, this could open the task in the main task modal
+    showToast('Task editing: Go to main task list to edit this task', 'info');
+    
+    // Optional: Could implement opening the task modal directly
+    // showTaskDetail(taskId);
+}
+</script>
+{% endblock %}

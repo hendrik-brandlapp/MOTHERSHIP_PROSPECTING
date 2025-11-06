@@ -12,6 +12,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/whatsapp/webhook"
+  to = "/.netlify/functions/whatsapp-webhook"
+  status = 200
+
+[[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
@@ -23,3 +28,6 @@
 
 [functions]
   node_bundler = "esbuild"
+
+[functions."whatsapp-webhook"]
+  runtime = "python3.9"

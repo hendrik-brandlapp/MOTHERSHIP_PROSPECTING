@@ -499,6 +499,76 @@ class BaseModule:
 class CRMModule(BaseModule):
     """Module for handling CRM data - contact persons, companies, and actions"""
     
+    def get_companies(
+        self,
+        filter_by_created_since: str = None,
+        filter_by_updated_since: str = None,
+        filter_by_is_active: bool = None,
+        filter_by_is_customer: bool = None,
+        filter_by_is_supplier: bool = None,
+        order_by_name: str = None,
+        order_by_public_name: str = None,
+        per_page: int = 50,
+        page: int = 1,
+        **kwargs
+    ) -> Dict:
+        """
+        Get list of CRM companies
+        
+        Args:
+            filter_by_created_since: Filter by creation date (YYYY-MM-DD)
+            filter_by_updated_since: Filter by update date (YYYY-MM-DD)
+            filter_by_is_active: Filter by active status
+            filter_by_is_customer: Filter by customer status
+            filter_by_is_supplier: Filter by supplier status
+            order_by_name: Order by name (asc/desc)
+            order_by_public_name: Order by public name (asc/desc)
+            per_page: Number of results per page (default: 50)
+            page: Page number (default: 1)
+            **kwargs: Additional filter parameters
+            
+        Returns:
+            Companies data
+        """
+        params = {}
+        if filter_by_created_since:
+            params['filter_by_created_since'] = filter_by_created_since
+        if filter_by_updated_since:
+            params['filter_by_updated_since'] = filter_by_updated_since
+        if filter_by_is_active is not None:
+            params['filter_by_is_active'] = filter_by_is_active
+        if filter_by_is_customer is not None:
+            params['filter_by_is_customer'] = filter_by_is_customer
+        if filter_by_is_supplier is not None:
+            params['filter_by_is_supplier'] = filter_by_is_supplier
+        if order_by_name:
+            params['order_by_name'] = order_by_name
+        if order_by_public_name:
+            params['order_by_public_name'] = order_by_public_name
+        if per_page:
+            params['per_page'] = per_page
+        if page:
+            params['page'] = page
+        
+        # Add any additional parameters
+        params.update(kwargs)
+        
+        response = self.client.get('/api/public/v1/crm/crm-companies', params=params)
+        return self._handle_response(response, "Failed to fetch companies")
+    
+    def get_company(self, company_id: int) -> Dict:
+        """
+        Get specific company by ID (includes commercial info like price list and discounts)
+        
+        Args:
+            company_id: Company ID
+            
+        Returns:
+            Company data with commercial information
+        """
+        response = self.client.get(f'/api/public/v1/crm/crm-companies/{company_id}')
+        return self._handle_response(response, f"Failed to fetch company {company_id}")
+    
     def get_contact_persons(
         self,
         filter_by_created_since: str = None,
@@ -890,6 +960,134 @@ class SalesModule(BaseModule):
 class ProductsModule(BaseModule):
     """Module for handling Products data - composed product items, products, and inventory"""
     
+    def get_product_categories(
+        self,
+        filter_by_created_since: str = None,
+        filter_by_updated_since: str = None,
+        filter_by_is_active: bool = None,
+        order_by_name: str = None,
+        per_page: int = 50,
+        page: int = 1,
+        **kwargs
+    ) -> Dict:
+        """
+        Get list of product categories
+        
+        Args:
+            filter_by_created_since: Filter by creation date (YYYY-MM-DD)
+            filter_by_updated_since: Filter by update date (YYYY-MM-DD)
+            filter_by_is_active: Filter by active status
+            order_by_name: Order by name (asc/desc)
+            per_page: Number of results per page (default: 50)
+            page: Page number (default: 1)
+            **kwargs: Additional filter parameters
+            
+        Returns:
+            Product categories data
+        """
+        params = {}
+        if filter_by_created_since:
+            params['filter_by_created_since'] = filter_by_created_since
+        if filter_by_updated_since:
+            params['filter_by_updated_since'] = filter_by_updated_since
+        if filter_by_is_active is not None:
+            params['filter_by_is_active'] = filter_by_is_active
+        if order_by_name:
+            params['order_by_name'] = order_by_name
+        if per_page:
+            params['per_page'] = per_page
+        if page:
+            params['page'] = page
+        
+        # Add any additional parameters
+        params.update(kwargs)
+        
+        response = self.client.get('/api/public/v1/core/product-categories', params=params)
+        return self._handle_response(response, "Failed to fetch product categories")
+    
+    def get_product_category(self, category_id: int) -> Dict:
+        """
+        Get specific product category by ID
+        
+        Args:
+            category_id: Product category ID
+            
+        Returns:
+            Product category data
+        """
+        response = self.client.get(f'/api/public/v1/core/product-categories/{category_id}')
+        return self._handle_response(response, f"Failed to fetch product category {category_id}")
+    
+    def get_products(
+        self,
+        filter_by_created_since: str = None,
+        filter_by_updated_since: str = None,
+        filter_by_is_active: bool = None,
+        filter_by_is_sellable: bool = None,
+        filter_by_category: int = None,
+        order_by_name: str = None,
+        order_by_sku: str = None,
+        per_page: int = 50,
+        page: int = 1,
+        **kwargs
+    ) -> Dict:
+        """
+        Get list of products
+        
+        Args:
+            filter_by_created_since: Filter by creation date (YYYY-MM-DD)
+            filter_by_updated_since: Filter by update date (YYYY-MM-DD)
+            filter_by_is_active: Filter by active status
+            filter_by_is_sellable: Filter by sellable status
+            filter_by_category: Filter by product category ID
+            order_by_name: Order by name (asc/desc)
+            order_by_sku: Order by SKU (asc/desc)
+            per_page: Number of results per page (default: 50)
+            page: Page number (default: 1)
+            **kwargs: Additional filter parameters
+            
+        Returns:
+            Products data
+        """
+        params = {}
+        if filter_by_created_since:
+            params['filter_by_created_since'] = filter_by_created_since
+        if filter_by_updated_since:
+            params['filter_by_updated_since'] = filter_by_updated_since
+        if filter_by_is_active is not None:
+            params['filter_by_is_active'] = filter_by_is_active
+        if filter_by_is_sellable is not None:
+            params['filter_by_is_sellable'] = filter_by_is_sellable
+        if filter_by_category:
+            params['filter_by_category'] = filter_by_category
+        if order_by_name:
+            params['order_by_name'] = order_by_name
+        if order_by_sku:
+            params['order_by_sku'] = order_by_sku
+        if per_page:
+            params['per_page'] = per_page
+        if page:
+            params['page'] = page
+        
+        # Add any additional parameters
+        params.update(kwargs)
+        
+        response = self.client.get('/api/public/v1/core/products', params=params)
+        return self._handle_response(response, "Failed to fetch products")
+    
+    def get_product(self, product_id: int) -> Dict:
+        """
+        Get specific product by ID
+        
+        Args:
+            product_id: Product ID
+            
+        Returns:
+            Product data
+        """
+        response = self.client.get(f'/api/public/v1/core/products/{product_id}')
+        return self._handle_response(response, f"Failed to fetch product {product_id}")
+    
     def get_composed_product_items(
         self,
         filter_by_created_since: str = None,
@@ -1162,6 +1360,101 @@ class DeliveryOrdersModule(BaseModule):
 
 class PricingModule(BaseModule):
     """Module for handling Pricing data - price adjustments, discounts, and promotions"""
+    
+    def get_sales_price_lists(
+        self,
+        filter_by_created_since: str = None,
+        filter_by_updated_since: str = None,
+        filter_by_is_active: bool = None,
+        order_by_name: str = None,
+        per_page: int = 50,
+        page: int = 1,
+        **kwargs
+    ) -> Dict:
+        """
+        Get list of sales price lists (verkoopprijzen)
+        
+        Args:
+            filter_by_created_since: Filter by creation date (YYYY-MM-DD)
+            filter_by_updated_since: Filter by update date (YYYY-MM-DD)
+            filter_by_is_active: Filter by active status
+            order_by_name: Order by name (asc/desc)
+            per_page: Number of results per page (default: 50)
+            page: Page number (default: 1)
+            **kwargs: Additional filter parameters
+            
+        Returns:
+            Sales price lists data
+        """
+        params = {}
+        if filter_by_created_since:
+            params['filter_by_created_since'] = filter_by_created_since
+        if filter_by_updated_since:
+            params['filter_by_updated_since'] = filter_by_updated_since
+        if filter_by_is_active is not None:
+            params['filter_by_is_active'] = filter_by_is_active
+        if order_by_name:
+            params['order_by_name'] = order_by_name
+        if per_page:
+            params['per_page'] = per_page
+        if page:
+            params['page'] = page
+        
+        # Add any additional parameters
+        params.update(kwargs)
+        
+        response = self.client.get('/api/public/v1/core/sales-price-lists', params=params)
+        return self._handle_response(response, "Failed to fetch sales price lists")
+    
+    def get_sales_price_list(self, price_list_id: int) -> Dict:
+        """
+        Get specific sales price list by ID
+        
+        Args:
+            price_list_id: Sales price list ID
+            
+        Returns:
+            Sales price list data with products and prices
+        """
+        response = self.client.get(f'/api/public/v1/core/sales-price-lists/{price_list_id}')
+        return self._handle_response(response, f"Failed to fetch sales price list {price_list_id}")
+    
+    def get_sales_price_list_items(
+        self,
+        price_list_id: int = None,
+        filter_by_product: int = None,
+        per_page: int = 50,
+        page: int = 1,
+        **kwargs
+    ) -> Dict:
+        """
+        Get items/products in sales price lists with their prices
+        
+        Args:
+            price_list_id: Filter by specific price list ID
+            filter_by_product: Filter by product ID
+            per_page: Number of results per page (default: 50)
+            page: Page number (default: 1)
+            **kwargs: Additional filter parameters
+            
+        Returns:
+            Sales price list items with products and prices
+        """
+        params = {}
+        if price_list_id:
+            params['filter_by_sales_price_list'] = price_list_id
+        if filter_by_product:
+            params['filter_by_product'] = filter_by_product
+        if per_page:
+            params['per_page'] = per_page
+        if page:
+            params['page'] = page
+        
+        # Add any additional parameters
+        params.update(kwargs)
+        
+        response = self.client.get('/api/public/v1/core/sales-price-list-items', params=params)
+        return self._handle_response(response, "Failed to fetch sales price list items")
     
     def get_purchase_price_adjustments(
         self,

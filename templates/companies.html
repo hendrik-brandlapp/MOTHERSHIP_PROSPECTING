@@ -21,13 +21,25 @@
 
 <!-- Search and Filter -->
 <div class="row mb-4">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="input-group">
             <span class="input-group-text"><i class="fas fa-search"></i></span>
-            <input type="text" class="form-control" id="searchInput" placeholder="Search VAT numbers, company names..." onkeyup="filterCompanies()">
+            <input type="text" class="form-control" id="searchInput" placeholder="Search companies, addresses, VAT, email, phone..." onkeyup="filterCompanies()">
         </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-4">
+        <select class="form-select" id="salesYearFilter" onchange="loadCompanies()">
+            <option value="">All Companies</option>
+            <option value="2019">Sales Since 2019</option>
+            <option value="2020">Sales Since 2020</option>
+            <option value="2021">Sales Since 2021</option>
+            <option value="2022">Sales Since 2022</option>
+            <option value="2023">Sales Since 2023</option>
+            <option value="2024">Sales Since 2024</option>
+            <option value="2025">Sales Since 2025</option>
+        </select>
+    </div>
+    <div class="col-md-4">
         <select class="form-select" id="sortSelect" onchange="sortCompanies()">
             <option value="name">Sort by Name</option>
             <option value="id">Sort by ID</option>
@@ -125,13 +137,48 @@
                                 <td id="modal-company-name-detail"></td>
                             </tr>
                             <tr>
-                                <td><strong>Entity Version:</strong></td>
-                                <td id="modal-company-version"></td>
+                                <td><strong>VAT Number:</strong></td>
+                                <td id="modal-company-vat"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Status:</strong></td>
+                                <td id="modal-company-status"></td>
+                            </tr>
+                        </table>
+                        
+                        <h6 class="mt-3">Contact Information</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Phone:</strong></td>
+                                <td id="modal-company-phone"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Email:</strong></td>
+                                <td id="modal-company-email"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Website:</strong></td>
+                                <td id="modal-company-website"></td>
                             </tr>
                         </table>
                     </div>
                     <div class="col-md-6">
-                        <h6>Timestamps</h6>
+                        <h6>Address</h6>
+                        <div id="modal-company-address" class="mb-3"></div>
+                        
+                        <h6>Management</h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Account Manager:</strong></td>
+                                <td id="modal-company-manager"></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Priority:</strong></td>
+                                <td id="modal-company-priority"></td>
+                            </tr>
+                        </table>
+                        
+                        <h6 class="mt-3">Timestamps</h6>
                         <table class="table table-sm">
                             <tr>
                                 <td><strong>Created:</strong></td>
@@ -171,6 +218,8 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Auto-load companies
+    console.log('🚀 Page loaded, auto-loading companies...');
     loadCompanies();
     
     // View mode toggle
@@ -180,20 +229,33 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 async function loadCompanies() {
+    console.log('🔄 Loading companies...');
     showLoadingState();
     
     try {
-        const response = await fetch('/api/crm/companies');
+        // Build URL with optional year filter
+        let url = '/api/companies?_=' + Date.now();
+        const yearFilter = document.getElementById('salesYearFilter');
+        if (yearFilter && yearFilter.value) {
+            url += `&sales_since_year=${yearFilter.value}`;
+            console.log(`🗓️ Filtering companies with sales since ${yearFilter.value}`);
+        }
+        
+        console.log('📡 Fetching from', url);
+        const response = await fetch(url);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('📊 Received data:', data);
         
-        if (data.companies) {
-            companiesData = data.companies;
+        if (data.result && data.result.data) {
+            console.log('✅ Found companies:', data.result.data.length);
+            companiesData = data.result.data;
             filteredCompanies = [...companiesData];
+            console.log('🏢 Sample company:', companiesData[0]);
             displayCompanies();
             showCompaniesContainer();
             
@@ -251,7 +313,19 @@ function displayGridView() {
         return;
     }
     
-    const html = filteredCompanies.map(company => `
+    const html = filteredCompanies.map(company => {
+        // Build complete address string
+        const addressParts = [
+            company.address_line1,
+            company.address_line2,
+            company.city,
+            company.post_code,
+            company.country?.name
+        ].filter(part => part && part.trim());
+        
+        const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
+        
+        return `
         <div class="col-md-4 col-lg-3 mb-4">
             <div class="card h-100 company-card" onclick="showCompanyDetails(${company.id})">
                 <div class="card-body">
@@ -259,14 +333,26 @@ function displayGridView() {
                         <h6 class="card-title mb-0">${company.name || 'Unnamed Company'}</h6>
                         <span class="badge ${company.status?.name === 'Klant' ? 'bg-success' : 'bg-warning'}">${company.status?.name || 'Unknown'}</span>
                     </div>
+                    ${company.vat_number ? `<p class="card-text text-muted small mb-2">
+                        <i class="fas fa-file-invoice me-1"></i>
+                        VAT: ${company.vat_number}
+                    </p>` : ''}
                     <p class="card-text text-muted small mb-2">
                         <i class="fas fa-map-marker-alt me-1"></i>
-                        ${company.address_line1 || ''} ${company.city || ''} ${company.post_code || ''}
+                        ${fullAddress}
                     </p>
-                    <p class="card-text text-muted small mb-2">
+                    ${company.phone_number ? `<p class="card-text text-muted small mb-2">
                         <i class="fas fa-phone me-1"></i>
-                        ${company.phone_number || 'No phone'}
-                    </p>
+                        ${company.phone_number}
+                    </p>` : ''}
+                    ${company.email ? `<p class="card-text text-muted small mb-2">
+                        <i class="fas fa-envelope me-1"></i>
+                        ${company.email}
+                    </p>` : ''}
+                    ${company.website ? `<p class="card-text text-muted small mb-2">
+                        <i class="fas fa-globe me-1"></i>
+                        <a href="${company.website}" target="_blank" class="text-decoration-none">${company.website}</a>
+                    </p>` : ''}
                     <p class="card-text text-muted small mb-0">
                         <i class="fas fa-user me-1"></i>
                         ${company.account_manager?.name || 'No manager'}
@@ -280,7 +366,8 @@ function displayGridView() {
                 </div>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
     
     container.innerHTML = html;
 }
@@ -293,15 +380,35 @@ function displayListView() {
         return;
     }
     
-    const html = filteredCompanies.map(company => `
+    const html = filteredCompanies.map(company => {
+        // Build complete address string
+        const addressParts = [
+            company.address_line1,
+            company.address_line2,
+            company.city,
+            company.post_code,
+            company.country?.name
+        ].filter(part => part && part.trim());
+        
+        const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
+        
+        return `
         <tr onclick="showCompanyDetails(${company.id})" style="cursor: pointer;">
             <td><span class="badge bg-primary">${company.id}</span></td>
-            <td><strong>${company.name || 'Unnamed Company'}</strong></td>
-            <td>${company.address_line1 || ''} ${company.city || ''}</td>
+            <td>
+                <strong>${company.name || 'Unnamed Company'}</strong>
+                ${company.vat_number ? `<br><small class="text-muted">VAT: ${company.vat_number}</small>` : ''}
+            </td>
+            <td>
+                <div>${fullAddress}</div>
+                ${company.phone_number ? `<small class="text-muted"><i class="fas fa-phone me-1"></i>${company.phone_number}</small><br>` : ''}
+                ${company.email ? `<small class="text-muted"><i class="fas fa-envelope me-1"></i>${company.email}</small>` : ''}
+            </td>
             <td><span class="badge ${company.status?.name === 'Klant' ? 'bg-success' : 'bg-warning'}">${company.status?.name || 'Unknown'}</span></td>
             <td>${company.account_manager?.name || 'No manager'}</td>
         </tr>
-    `).join('');
+        `;
+    }).join('');
     
     tbody.innerHTML = html;
 }
@@ -316,8 +423,14 @@ function filterCompanies() {
         const matches = companyStr.includes(searchTerm) ||
                (company.name && company.name.toLowerCase().includes(searchTerm)) ||
                (company.address_line1 && company.address_line1.toLowerCase().includes(searchTerm)) ||
+               (company.address_line2 && company.address_line2.toLowerCase().includes(searchTerm)) ||
                (company.city && company.city.toLowerCase().includes(searchTerm)) ||
+               (company.post_code && company.post_code.toLowerCase().includes(searchTerm)) ||
+               (company.country?.name && company.country.name.toLowerCase().includes(searchTerm)) ||
+               (company.vat_number && company.vat_number.toLowerCase().includes(searchTerm)) ||
                (company.phone_number && company.phone_number.includes(searchTerm)) ||
+               (company.email && company.email.toLowerCase().includes(searchTerm)) ||
+               (company.website && company.website.toLowerCase().includes(searchTerm)) ||
                (company.account_manager?.name && company.account_manager.name.toLowerCase().includes(searchTerm)) ||
                company.id.toString().includes(searchTerm);
         
@@ -367,11 +480,38 @@ function showCompanyDetails(companyId) {
     
     if (!company) return;
     
+    // Build complete address string
+    const addressParts = [
+        company.address_line1,
+        company.address_line2,
+        company.city,
+        company.post_code,
+        company.country?.name
+    ].filter(part => part && part.trim());
+    
+    const fullAddress = addressParts.length > 0 ? 
+        `<div class="alert alert-light"><i class="fas fa-map-marker-alt me-2"></i>${addressParts.join('<br>')}</div>` : 
+        '<div class="text-muted">No address available</div>';
+    
     // Populate modal
-    document.getElementById('modal-company-name').textContent = company.name;
+    document.getElementById('modal-company-name').textContent = company.name || 'Unnamed Company';
     document.getElementById('modal-company-id').textContent = company.id;
-    document.getElementById('modal-company-name-detail').textContent = company.name;
-    document.getElementById('modal-company-version').textContent = company.entity_version;
+    document.getElementById('modal-company-name-detail').textContent = company.name || 'Unnamed Company';
+    document.getElementById('modal-company-vat').textContent = company.vat_number || 'Not available';
+    document.getElementById('modal-company-status').innerHTML = company.status?.name ? 
+        `<span class="badge ${company.status.name === 'Klant' ? 'bg-success' : 'bg-warning'}">${company.status.name}</span>` : 
+        '<span class="text-muted">Unknown</span>';
+    
+    document.getElementById('modal-company-phone').textContent = company.phone_number || 'Not available';
+    document.getElementById('modal-company-email').textContent = company.email || 'Not available';
+    document.getElementById('modal-company-website').innerHTML = company.website ? 
+        `<a href="${company.website}" target="_blank" class="text-decoration-none">${company.website}</a>` : 
+        'Not available';
+    
+    document.getElementById('modal-company-address').innerHTML = fullAddress;
+    document.getElementById('modal-company-manager').textContent = company.account_manager?.name || 'Not assigned';
+    document.getElementById('modal-company-priority').textContent = company.priority?.name || 'Not set';
+    
     document.getElementById('modal-company-created').textContent = new Date(company.created_at).toLocaleString();
     document.getElementById('modal-company-updated').textContent = new Date(company.updated_at).toLocaleString();
     

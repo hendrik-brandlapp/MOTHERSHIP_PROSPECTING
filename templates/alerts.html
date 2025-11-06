@@ -1,0 +1,1057 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Alerts - DOUANO{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-bell me-2 text-warning"></i>Customer Alerts & Insights</h2>
+                    <p class="text-muted mb-0">AI-powered pattern detection and customer intelligence</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="refreshAnalysis()">
+                        <i class="fas fa-sync-alt me-2"></i>Recalculate Alerts
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="loadAlerts()">
+                        <i class="fas fa-refresh me-2"></i>Reload
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="exportAlerts()">
+                        <i class="fas fa-download me-2"></i>Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading" class="text-center py-5">
+        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h5 class="text-muted">Analyzing customer patterns...</h5>
+        <p class="text-muted">This may take a few moments</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-message" class="alert alert-danger" style="display: none;">
+        <h5><i class="fas fa-exclamation-circle me-2"></i>Error</h5>
+        <p id="error-text" class="mb-0"></p>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content" style="display: none;">
+        <!-- Summary Dashboard -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4"><i class="fas fa-chart-pie me-2"></i>Alert Overview</h5>
+                        <div class="row text-center">
+                            <div class="col-md-2">
+                                <div class="p-3 bg-light rounded">
+                                    <h3 class="mb-1 text-primary" id="total-alerts">0</h3>
+                                    <small class="text-muted">Total Alerts</small>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="p-3 bg-danger bg-opacity-10 rounded">
+                                    <h3 class="mb-1 text-danger" id="high-priority">0</h3>
+                                    <small class="text-muted">High Priority</small>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="p-3 bg-warning bg-opacity-10 rounded">
+                                    <h3 class="mb-1 text-warning" id="medium-priority">0</h3>
+                                    <small class="text-muted">Medium Priority</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="p-3 bg-light rounded h-100">
+                                    <canvas id="alertTypeChart" height="80"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters and Search -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold"><i class="fas fa-search me-1"></i>Search</label>
+                                <input type="text" class="form-control" id="searchInput" placeholder="Search company name..." onkeyup="filterAlerts()">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold"><i class="fas fa-filter me-1"></i>Priority</label>
+                                <select class="form-select" id="priorityFilter" onchange="filterAlerts()">
+                                    <option value="">All Priorities</option>
+                                    <option value="HIGH">High</option>
+                                    <option value="MEDIUM">Medium</option>
+                                    <option value="LOW">Low</option>
+                                </select>
+        </div>
+        <div class="col-md-3">
+                                <label class="form-label fw-bold"><i class="fas fa-tag me-1"></i>Alert Type</label>
+                                <select class="form-select" id="typeFilter" onchange="filterAlerts()">
+                                    <option value="">All Types</option>
+                                    <option value="PATTERN_DISRUPTION">📈 Pattern Break</option>
+                                    <option value="HIGH_VALUE_AT_RISK">💎 High Value Risk</option>
+                                    <option value="DORMANT_CUSTOMER">🛏️ Dormant</option>
+                                    <option value="DECLINING_VALUE">📉 Declining</option>
+                                    <option value="INCREASING_GAP">⏰ Less Frequent</option>
+                                    <option value="ONE_TIME_CUSTOMER">👤 One-Timer</option>
+                                    <option value="PAYMENT_ISSUES">💰 Outstanding Balance</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold"><i class="fas fa-sort me-1"></i>Sort By</label>
+                                <select class="form-select" id="sortBy" onchange="sortAlerts()">
+                                    <option value="priority">Priority</option>
+                                    <option value="days">Days Since Order</option>
+                                    <option value="value">Lifetime Value</option>
+                                    <option value="name">Company Name</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
+                                    <i class="fas fa-times me-1"></i>Clear Filters
+                                </button>
+                </div>
+            </div>
+        </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Info -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <p class="text-muted mb-0">
+                    Showing <strong id="showing-count">0</strong> of <strong id="total-count">0</strong> alerts
+                    <span id="filter-badge" class="badge bg-info ms-2" style="display: none;">
+                        <i class="fas fa-filter me-1"></i>Filters Active
+                    </span>
+                    <span id="analysis-date" class="ms-3"></span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Alerts List -->
+        <div id="alerts-container" class="row">
+            <!-- Alert cards will be inserted here -->
+        </div>
+
+        <!-- No Results -->
+        <div id="no-results" class="text-center py-5" style="display: none;">
+            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+            <h4>No Alerts Found</h4>
+            <p class="text-muted">Either all customers are healthy or your filters are too restrictive</p>
+        </div>
+    </div>
+                </div>
+
+<!-- Alert Detail Modal -->
+<div class="modal fade" id="alertDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="alertModalTitle">Alert Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+            <div class="modal-body" id="alertModalBody">
+                <!-- Alert details will be loaded here -->
+                </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="viewInvoicesBtn">
+                    <i class="fas fa-file-invoice me-1"></i>View Invoices
+                </button>
+                <button type="button" class="btn btn-success" id="contactBtn">
+                    <i class="fas fa-envelope me-1"></i>Contact Customer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+/* Modern Notion-style Alert Cards */
+.alert-card-modern {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.alert-card-modern:hover {
+    border-color: #6c5ce7;
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.1);
+    transform: translateY(-2px);
+}
+
+.alert-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.company-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1a1a1a;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.company-subtitle {
+    font-size: 13px;
+    color: #8e8e8e;
+    display: block;
+    margin-top: 2px;
+}
+
+.tags {
+    display: flex;
+    gap: 6px;
+}
+
+.tag {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tag i {
+    font-size: 10px;
+}
+
+.tag-pattern_disruption { background: #fff4e6; color: #e67700; }
+.tag-high_value_at_risk { background: #ffe5e5; color: #d32f2f; }
+.tag-dormant_customer { background: #f0f0f0; color: #424242; }
+.tag-declining_value { background: #e3f2fd; color: #1976d2; }
+.tag-increasing_gap { background: #e8eaf6; color: #5e35b1; }
+.tag-one_time_customer { background: #f5f5f5; color: #757575; }
+.tag-payment_issues { background: #ffebee; color: #c62828; }
+
+.alert-description {
+    font-size: 14px;
+    color: #4a4a4a;
+    line-height: 1.6;
+    margin: 0 0 16px 0;
+}
+
+.metrics-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.metric-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a1a1a;
+    line-height: 1;
+}
+
+.metric-label {
+    font-size: 11px;
+    color: #8e8e8e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.alert-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-modern {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn-modern:hover {
+    transform: translateY(-1px);
+}
+
+.btn-primary {
+    background: #6c5ce7;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #5f4fd1;
+}
+
+.btn-secondary {
+    background: #f0f0f0;
+    color: #1a1a1a;
+}
+
+.btn-secondary:hover {
+    background: #e0e0e0;
+}
+
+.btn-ghost {
+    background: transparent;
+    color: #8e8e8e;
+}
+
+.btn-ghost:hover {
+    background: #f8f8f8;
+    color: #1a1a1a;
+}
+
+.alert-card.priority-HIGH {
+    border-left-color: #dc3545;
+}
+
+.alert-card.priority-MEDIUM {
+    border-left-color: #ffc107;
+}
+
+.alert-card.priority-LOW {
+    border-left-color: #17a2b8;
+}
+
+.alert-badge {
+    padding: 0.35rem 0.65rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.alert-metric {
+    background: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.alert-metric h6 {
+    font-size: 1.5rem;
+    margin-bottom: 0;
+}
+
+.action-button {
+    transition: all 0.2s ease;
+}
+
+.action-button:hover {
+    transform: scale(1.05);
+}
+
+.priority-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.priority-HIGH .priority-indicator {
+    background: #dc3545;
+    box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+    animation: pulse 2s infinite;
+}
+
+.priority-MEDIUM .priority-indicator {
+    background: #ffc107;
+}
+
+.priority-LOW .priority-indicator {
+    background: #17a2b8;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.alert-type-badge {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 0.35rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    white-space: nowrap;
+}
+
+.alert-type-badge i {
+    font-size: 0.85em;
+}
+
+.metric-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.metric-card h6 {
+    font-size: 1.75rem;
+    font-weight: bold;
+}
+
+.chart-container {
+    position: relative;
+    height: 80px;
+}
+</style>
+
+<script>
+let allAlerts = [];
+let filteredAlerts = [];
+let alertTypeChart = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadAlerts();
+});
+
+async function loadAlerts() {
+    try {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('error-message').style.display = 'none';
+        document.getElementById('main-content').style.display = 'none';
+        
+        // Fetch alerts from database (fast!)
+        const response = await fetch('/api/alerts?status=active');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Check if setup is required
+        if (data.setup_required) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-text').innerHTML = `
+                <strong><i class="fas fa-database me-2"></i>Database Setup Required</strong><br><br>
+                <p>The customer alerts table hasn't been created yet. Please run the SQL migration:</p>
+                <ol class="text-start ps-4 mb-3">
+                    <li>Open <a href="https://supabase.com" target="_blank" class="alert-link">Supabase Dashboard</a></li>
+                    <li>Go to <strong>SQL Editor</strong></li>
+                    <li>Copy SQL from <code>create_alerts_table_simple.sql</code></li>
+                    <li>Click <strong>RUN</strong></li>
+                    <li>Click <strong>Recalculate Alerts</strong> button below</li>
+                </ol>
+                <a href="https://supabase.com" target="_blank" class="btn btn-primary btn-sm mt-2">
+                    <i class="fas fa-external-link-alt me-1"></i>Open Supabase
+                </a>
+            `;
+            return;
+        }
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        allAlerts = data.alerts || [];
+        filteredAlerts = [...allAlerts];
+        
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+        
+        // Update summary
+        updateSummary(data.summary, data.analysis_date);
+        
+        // Display alerts
+        displayAlerts();
+        
+    } catch (error) {
+        console.error('Error loading alerts:', error);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-text').textContent = error.message;
+    }
+}
+
+async function refreshAnalysis() {
+    try {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('error-message').style.display = 'none';
+        document.getElementById('main-content').style.display = 'none';
+        
+        // This endpoint recalculates ALL alerts (slower but comprehensive)
+        const response = await fetch('/api/alerts/refresh', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        // Check if setup is required
+        if (data.setup_required) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error-message').style.display = 'block';
+            document.getElementById('error-text').innerHTML = `
+                <strong><i class="fas fa-exclamation-triangle me-2"></i>${data.error}</strong><br><br>
+                <p>${data.message}</p>
+                <p class="mb-3">Please follow these steps:</p>
+                <ol class="text-start ps-4 mb-3">
+                    <li>Open <a href="https://supabase.com" target="_blank" class="alert-link">Supabase Dashboard</a></li>
+                    <li>Click <strong>SQL Editor</strong> in the sidebar</li>
+                    <li>Click <strong>New Query</strong></li>
+                    <li>Copy the SQL from <code>create_alerts_table_simple.sql</code> in your project</li>
+                    <li>Paste and click <strong>RUN</strong></li>
+                    <li>Come back and try again</li>
+                </ol>
+                <a href="https://supabase.com" target="_blank" class="btn btn-primary btn-sm mt-2">
+                    <i class="fas fa-external-link-alt me-1"></i>Open Supabase Dashboard
+                </a>
+            `;
+            return;
+        }
+        
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Show success message
+        alert(`Analysis complete! ${data.summary.saved} new alerts detected, ${data.summary.updated} updated.`);
+        
+        // Reload alerts from database
+        await loadAlerts();
+        
+    } catch (error) {
+        console.error('Error refreshing alerts:', error);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-text').textContent = error.message;
+    }
+}
+
+function updateSummary(summary, analysisDate) {
+    document.getElementById('total-alerts').textContent = summary.total_alerts || 0;
+    document.getElementById('high-priority').textContent = summary.high_priority || 0;
+    document.getElementById('medium-priority').textContent = summary.medium_priority || 0;
+    document.getElementById('analysis-date').innerHTML = `<i class="fas fa-clock me-1"></i>Last analyzed: ${new Date(analysisDate).toLocaleString('nl-BE')}`;
+    
+    // Create alert type chart
+    const ctx = document.getElementById('alertTypeChart');
+    if (alertTypeChart) {
+        alertTypeChart.destroy();
+    }
+    
+    const typeLabels = Object.keys(summary.by_type || {}).map(formatAlertType);
+    const typeCounts = Object.values(summary.by_type || {});
+    
+    alertTypeChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: typeLabels,
+            datasets: [{
+                label: 'Alerts',
+                data: typeCounts,
+                backgroundColor: [
+                    'rgba(220, 53, 69, 0.7)',
+                    'rgba(255, 193, 7, 0.7)',
+                    'rgba(23, 162, 184, 0.7)',
+                    'rgba(40, 167, 69, 0.7)',
+                    'rgba(108, 117, 125, 0.7)',
+                    'rgba(102, 126, 234, 0.7)',
+                    'rgba(237, 100, 166, 0.7)'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { precision: 0 }
+                }
+            }
+        }
+    });
+}
+
+function displayAlerts() {
+    const container = document.getElementById('alerts-container');
+    const noResults = document.getElementById('no-results');
+    
+    document.getElementById('showing-count').textContent = filteredAlerts.length;
+    document.getElementById('total-count').textContent = allAlerts.length;
+    
+    // Update summary stats for filtered results
+    updateFilteredSummary();
+    
+    if (filteredAlerts.length === 0) {
+        container.innerHTML = '';
+        noResults.style.display = 'block';
+        return;
+    }
+    
+    noResults.style.display = 'none';
+    
+    container.innerHTML = filteredAlerts.map(alert => `
+        <div class="col-md-6 mb-3">
+            <div class="alert-card-modern" onclick="showAlertDetail(${JSON.stringify(alert).replace(/"/g, '&quot;')})">
+                <div class="alert-header">
+                        <div>
+                        <h6 class="company-name">${escapeHtml(alert.company_name)}</h6>
+                        ${alert.public_name && alert.public_name !== alert.company_name ? 
+                            `<span class="company-subtitle">${escapeHtml(alert.public_name)}</span>` : ''}
+                        </div>
+                    <div class="tags">
+                        <span class="tag tag-${alert.alert_type.toLowerCase()}" 
+                              data-bs-toggle="tooltip" 
+                              data-bs-placement="top" 
+                              data-bs-html="true"
+                              title="${getAlertTypeExplanation(alert.alert_type).replace(/"/g, '&quot;')}"
+                              style="cursor: help;">
+                            ${getAlertTypeIcon(alert.alert_type)} ${formatAlertType(alert.alert_type)}
+                            <i class="fas fa-question-circle ms-1" style="opacity: 0.6; font-size: 10px;"></i>
+                        </span>
+                    </div>
+                </div>
+                
+                <p class="alert-description">${escapeHtml(alert.description)}</p>
+                
+                <div class="metrics-row">
+                    ${alert.metrics.days_since_last_order !== undefined ? `
+                        <div class="metric">
+                            <span class="metric-value">${alert.metrics.days_since_last_order}d</span>
+                            <span class="metric-label">Since order</span>
+                        </div>
+                    ` : ''}
+                    ${alert.metrics.total_orders !== undefined ? `
+                        <div class="metric">
+                            <span class="metric-value">${alert.metrics.total_orders}</span>
+                            <span class="metric-label">Orders</span>
+                        </div>
+                    ` : ''}
+                    ${alert.metrics.lifetime_value !== undefined ? `
+                        <div class="metric">
+                            <span class="metric-value">€${(alert.metrics.lifetime_value / 1000).toFixed(1)}k</span>
+                            <span class="metric-label">Value</span>
+                    </div>
+                    ` : ''}
+                </div>
+                
+                <div class="alert-actions" onclick="event.stopPropagation()">
+                    <button class="btn-modern btn-primary" onclick="contactCustomer('${alert.email}', '${escapeHtml(alert.company_name)}', ${alert.id})">
+                        Contact
+                    </button>
+                    <button class="btn-modern btn-secondary" onclick="viewCompanyInvoices(${alert.company_id}, '${escapeHtml(alert.company_name)}')">
+                        Invoices
+                    </button>
+                    <button class="btn-modern btn-ghost" onclick="dismissAlert(${alert.id}, '${escapeHtml(alert.company_name)}')">
+                        Dismiss
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    // Initialize Bootstrap tooltips
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+}
+
+function showAlertDetail(alert) {
+    document.getElementById('alertModalTitle').innerHTML = `
+        ${escapeHtml(alert.company_name)}
+        ${alert.public_name && alert.public_name !== alert.company_name ? `<br><small class="text-muted">${escapeHtml(alert.public_name)}</small>` : ''}
+    `;
+    
+    document.getElementById('alertModalBody').innerHTML = `
+        <div class="mb-4">
+            <div class="d-flex gap-2 mb-3">
+                <span class="tag tag-${alert.alert_type.toLowerCase()}">${getAlertTypeIcon(alert.alert_type)} ${formatAlertType(alert.alert_type)}</span>
+                <span class="badge bg-${getPriorityColor(alert.priority)}">${alert.priority} PRIORITY</span>
+            </div>
+            
+            <p style="font-size: 15px; line-height: 1.7; color: #4a4a4a;">
+                ${escapeHtml(alert.description)}
+            </p>
+        </div>
+        
+        <div class="mb-4">
+            <h6 class="text-uppercase" style="font-size: 12px; color: #8e8e8e; font-weight: 600; margin-bottom: 12px;">Key Metrics</h6>
+            <div class="row g-3">
+                ${Object.entries(alert.metrics).map(([key, value]) => `
+                    <div class="col-6 col-md-4">
+                        <div class="p-3 border rounded">
+                            <div style="font-size: 24px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px;">
+                                ${formatMetricValue(key, value)}
+                            </div>
+                            <div style="font-size: 11px; color: #8e8e8e; text-transform: uppercase;">
+                                ${formatMetricKey(key)}
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+                    </div>
+                </div>
+        
+        <div class="mb-4">
+            <h6 class="text-uppercase" style="font-size: 12px; color: #8e8e8e; font-weight: 600; margin-bottom: 12px;">Recommended Action</h6>
+            <div class="p-3 rounded" style="background: #f8f9fa; border-left: 3px solid #6c5ce7;">
+                <p class="mb-0" style="font-size: 14px; line-height: 1.6; color: #4a4a4a;">
+                    ${escapeHtml(alert.recommendation)}
+                </p>
+            </div>
+        </div>
+        
+        ${alert.email ? `
+            <div>
+                <h6 class="text-uppercase" style="font-size: 12px; color: #8e8e8e; font-weight: 600; margin-bottom: 12px;">Contact</h6>
+                <p class="mb-0" style="font-size: 14px; color: #4a4a4a;">
+                    <i class="fas fa-envelope me-2"></i>${escapeHtml(alert.email)}
+                </p>
+            </div>
+        ` : ''}
+    `;
+    
+    document.getElementById('contactBtn').onclick = () => {
+        contactCustomer(alert.email, alert.company_name, alert.id);
+        bootstrap.Modal.getInstance(document.getElementById('alertDetailModal')).hide();
+    };
+    
+    document.getElementById('viewInvoicesBtn').onclick = () => {
+        viewCompanyInvoices(alert.company_id, alert.company_name);
+        bootstrap.Modal.getInstance(document.getElementById('alertDetailModal')).hide();
+    };
+    
+    new bootstrap.Modal(document.getElementById('alertDetailModal')).show();
+}
+
+function filterAlerts() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const priorityFilter = document.getElementById('priorityFilter').value;
+    const typeFilter = document.getElementById('typeFilter').value;
+    
+    // Show/hide filter badge
+    const filterBadge = document.getElementById('filter-badge');
+    if (searchTerm || priorityFilter || typeFilter) {
+        filterBadge.style.display = 'inline-block';
+    } else {
+        filterBadge.style.display = 'none';
+    }
+    
+    filteredAlerts = allAlerts.filter(alert => {
+        const matchesSearch = !searchTerm || 
+            alert.company_name.toLowerCase().includes(searchTerm) ||
+            (alert.public_name && alert.public_name.toLowerCase().includes(searchTerm)) ||
+            (alert.email && alert.email.toLowerCase().includes(searchTerm)) ||
+            alert.description.toLowerCase().includes(searchTerm);
+        
+        const matchesPriority = !priorityFilter || alert.priority === priorityFilter;
+        const matchesType = !typeFilter || alert.alert_type === typeFilter;
+        
+        return matchesSearch && matchesPriority && matchesType;
+    });
+    
+    sortAlerts();
+}
+
+function sortAlerts() {
+    const sortBy = document.getElementById('sortBy').value;
+    
+    filteredAlerts.sort((a, b) => {
+        switch (sortBy) {
+            case 'priority':
+                const priorityOrder = {'HIGH': 3, 'MEDIUM': 2, 'LOW': 1};
+                return priorityOrder[b.priority] - priorityOrder[a.priority];
+            case 'days':
+                return (b.metrics.days_since_last_order || 0) - (a.metrics.days_since_last_order || 0);
+            case 'value':
+                return (b.metrics.lifetime_value || 0) - (a.metrics.lifetime_value || 0);
+            case 'name':
+                return a.company_name.localeCompare(b.company_name);
+            default:
+                return 0;
+        }
+    });
+    
+    displayAlerts();
+}
+
+function clearFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('priorityFilter').value = '';
+    document.getElementById('typeFilter').value = '';
+    filterAlerts();
+}
+
+function updateFilteredSummary() {
+    // Calculate summary stats for currently visible (filtered) alerts
+    const highCount = filteredAlerts.filter(a => a.priority === 'HIGH').length;
+    const mediumCount = filteredAlerts.filter(a => a.priority === 'MEDIUM').length;
+    const lowCount = filteredAlerts.filter(a => a.priority === 'LOW').length;
+    
+    document.getElementById('high-priority').textContent = highCount;
+    document.getElementById('medium-priority').textContent = mediumCount;
+    
+    // Update the by-type counts
+    const typeCounts = {};
+    filteredAlerts.forEach(alert => {
+        if (!typeCounts[alert.alert_type]) {
+            typeCounts[alert.alert_type] = 0;
+        }
+        typeCounts[alert.alert_type]++;
+    });
+    
+    // Update chart if needed
+    if (alertTypeChart) {
+        const typeLabels = Object.keys(typeCounts).map(formatAlertType);
+        const typeValues = Object.values(typeCounts);
+        
+        alertTypeChart.data.labels = typeLabels;
+        alertTypeChart.data.datasets[0].data = typeValues;
+        alertTypeChart.update();
+    }
+}
+
+function viewCompanyInvoices(companyId, companyName) {
+    // Navigate to data page with company filter
+    // Store filter in sessionStorage so the data page can pick it up
+    sessionStorage.setItem('filterCompanyId', companyId);
+    sessionStorage.setItem('filterCompanyName', companyName);
+    window.location.href = '/data';
+}
+
+async function contactCustomer(email, companyName, alertId) {
+    if (email && email !== 'null') {
+        const subject = encodeURIComponent(`Follow-up: ${companyName}`);
+        const body = encodeURIComponent(`Dear ${companyName},\n\nWe wanted to reach out regarding your account.\n\nBest regards,\nYour Team`);
+        window.open(`mailto:${email}?subject=${subject}&body=${body}`);
+        
+        // Mark alert as actioned
+        try {
+            await fetch(`/api/alerts/${alertId}/action`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    actioned_by: 'user',
+                    notes: 'Customer contacted via email'
+                })
+            });
+            
+            // Remove from display
+            allAlerts = allAlerts.filter(a => a.id !== alertId);
+            filterAlerts();
+            showToast('Alert marked as actioned', 'success');
+        } catch (error) {
+            console.error('Error marking alert as actioned:', error);
+        }
+    } else {
+        alert('No email address available for this customer.');
+    }
+}
+
+function viewCompany(companyId) {
+    window.location.href = `/data#company-${companyId}`;
+}
+
+async function dismissAlert(alertId, companyName) {
+    if (!confirm(`Dismiss alert for ${companyName}?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/alerts/${alertId}/dismiss`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                dismissed_by: 'user',
+                notes: 'Dismissed from alerts page'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Remove from current display
+            allAlerts = allAlerts.filter(a => a.id !== alertId);
+            filterAlerts();
+            
+            // Show success message
+            showToast('Alert dismissed successfully', 'success');
+        } else {
+            showToast('Failed to dismiss alert: ' + (data.error || 'Unknown error'), 'danger');
+        }
+        
+    } catch (error) {
+        console.error('Error dismissing alert:', error);
+        showToast('Error dismissing alert: ' + error.message, 'danger');
+    }
+}
+
+function showToast(message, type = 'info') {
+    // Simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type} position-fixed top-0 end-0 m-3`;
+    toast.style.zIndex = '9999';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+function exportAlerts() {
+    // Convert alerts to CSV
+    const headers = ['Company', 'Priority', 'Type', 'Description', 'Days Since Order', 'Total Orders', 'Email'];
+    const rows = filteredAlerts.map(a => [
+        a.company_name,
+        a.priority,
+        a.type,
+        a.description,
+        a.metrics.days_since_last_order || '',
+        a.metrics.total_orders || '',
+        a.email || ''
+    ]);
+    
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `customer_alerts_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+}
+
+function getPriorityColor(priority) {
+    switch(priority) {
+        case 'HIGH': return 'danger';
+        case 'MEDIUM': return 'warning';
+        case 'LOW': return 'info';
+        default: return 'secondary';
+    }
+}
+
+function formatAlertType(type) {
+    const types = {
+        'PATTERN_DISRUPTION': 'Pattern Break',
+        'HIGH_VALUE_AT_RISK': 'High Value Risk',
+        'DORMANT_CUSTOMER': 'Dormant',
+        'DECLINING_VALUE': 'Declining',
+        'INCREASING_GAP': 'Less Frequent',
+        'ONE_TIME_CUSTOMER': 'One-Timer',
+        'PAYMENT_ISSUES': 'Outstanding'
+    };
+    return types[type] || type;
+}
+
+function getAlertTypeBadgeClass(type) {
+    const classes = {
+        'PATTERN_DISRUPTION': 'bg-warning text-dark',
+        'HIGH_VALUE_AT_RISK': 'bg-danger text-white',
+        'DORMANT_CUSTOMER': 'bg-dark text-white',
+        'DECLINING_VALUE': 'bg-info text-white',
+        'INCREASING_GAP': 'bg-primary text-white',
+        'ONE_TIME_CUSTOMER': 'bg-secondary text-white',
+        'PAYMENT_ISSUES': 'bg-danger text-white'
+    };
+    return classes[type] || 'bg-secondary text-white';
+}
+
+function getAlertTypeIcon(type) {
+    const icons = {
+        'PATTERN_DISRUPTION': '<i class="fas fa-chart-line me-1"></i>',
+        'HIGH_VALUE_AT_RISK': '<i class="fas fa-gem me-1"></i>',
+        'DORMANT_CUSTOMER': '<i class="fas fa-bed me-1"></i>',
+        'DECLINING_VALUE': '<i class="fas fa-arrow-down me-1"></i>',
+        'INCREASING_GAP': '<i class="fas fa-clock me-1"></i>',
+        'ONE_TIME_CUSTOMER': '<i class="fas fa-user-slash me-1"></i>',
+        'PAYMENT_ISSUES': '<i class="fas fa-euro-sign me-1"></i>'
+    };
+    return icons[type] || '<i class="fas fa-exclamation-triangle me-1"></i>';
+}
+
+function getAlertTypeExplanation(type) {
+    const explanations = {
+        'PATTERN_DISRUPTION': 'We calculate the average time between orders for this customer. If they haven\'t ordered in more than 2× their usual interval (and at least 14 days late), this alert triggers.',
+        'HIGH_VALUE_AT_RISK': 'Customers with €5,000+ lifetime value who haven\'t ordered in 60+ days. These are your most valuable customers showing signs of churn.',
+        'DORMANT_CUSTOMER': 'Regular customers (5+ orders) who haven\'t ordered in 120+ days. They used to be active but have completely stopped purchasing.',
+        'DECLINING_VALUE': 'We compare the last 3 order values to earlier orders. If average order value has dropped by 20% or more, this alert triggers.',
+        'INCREASING_GAP': 'Time between recent orders is 30+ days longer than their historical average. Orders are becoming less frequent.',
+        'ONE_TIME_CUSTOMER': 'Customers who made exactly 1 purchase, 90+ days ago, and never returned. Potential to win them back.',
+        'PAYMENT_ISSUES': 'Outstanding unpaid balance exceeds €500 across invoices. May indicate cash flow problems or disputes.'
+    };
+    return explanations[type] || 'Alert detected based on customer behavior analysis.';
+}
+
+function formatMetricKey(key) {
+    return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+}
+
+function formatMetricValue(key, value) {
+    if (key.includes('date')) {
+        return new Date(value).toLocaleDateString('nl-BE');
+    } else if (key.includes('value') || key.includes('amount') || key.includes('balance')) {
+        return '€' + parseFloat(value).toLocaleString('nl-BE', {minimumFractionDigits: 2});
+    } else if (key.includes('percentage')) {
+        return parseFloat(value).toFixed(1) + '%';
+    } else if (typeof value === 'number') {
+        return Math.round(value).toLocaleString('nl-BE');
+    }
+    return value;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+</script>
+{% endblock %}

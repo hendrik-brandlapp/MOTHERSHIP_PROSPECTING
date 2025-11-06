@@ -1,0 +1,875 @@
+{% extends 'base.html' %}
+
+{% block title %}Maps AI 3D · DOUANO{% endblock %}
+
+{% block extra_head %}
+<!-- Google Maps 3D API -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places,marker&v=beta&loading=async" async defer></script>
+
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        overflow: hidden;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .app-container {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        height: 100vh;
+        width: 100vw;
+        position: fixed;
+        top: 0;
+        left: 0;
+        background: #000;
+    }
+
+    /* Chat Sidebar */
+    .chat-sidebar {
+        display: flex;
+        flex-direction: column;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-right: 1px solid rgba(102, 126, 234, 0.2);
+        overflow: hidden;
+        z-index: 1000;
+    }
+
+    .chat-header {
+        background: var(--primary-gradient);
+        padding: 1.5rem;
+        color: white;
+        text-align: center;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .chat-header h1 {
+        color: white !important;
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .chat-header p {
+        color: rgba(255, 255, 255, 0.9) !important;
+        margin: 0.5rem 0 0 0;
+        font-size: 0.875rem;
+    }
+
+    .location-info {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 20px;
+        font-size: 0.75rem;
+        color: white;
+        margin-top: 0.75rem;
+        backdrop-filter: blur(10px);
+    }
+
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+        background: rgba(22, 33, 62, 0.5);
+    }
+
+    .chat-messages::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .chat-messages::-webkit-scrollbar-thumb {
+        background: rgba(102, 126, 234, 0.5);
+        border-radius: 3px;
+    }
+
+    .message {
+        display: flex;
+        gap: 0.75rem;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .message.user {
+        flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 1rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .message.user .message-avatar {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+
+    .message.assistant .message-avatar {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+    }
+
+    .message-content {
+        max-width: 75%;
+        padding: 1rem;
+        border-radius: 16px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        backdrop-filter: blur(10px);
+    }
+
+    .message.user .message-content {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.9), rgba(118, 75, 162, 0.9));
+        color: white;
+        border-bottom-right-radius: 4px;
+    }
+
+    .message.assistant .message-content {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border-bottom-left-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .message-content p {
+        margin: 0;
+        line-height: 1.6;
+        font-size: 0.9rem;
+        color: inherit !important;
+    }
+
+    .chat-input-container {
+        padding: 1.25rem;
+        background: rgba(22, 33, 62, 0.8);
+        border-top: 1px solid rgba(102, 126, 234, 0.2);
+        flex-shrink: 0;
+        backdrop-filter: blur(10px);
+    }
+
+    .chat-input-wrapper {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-end;
+    }
+
+    .chat-input {
+        flex: 1;
+        resize: none;
+        border: 2px solid rgba(102, 126, 234, 0.3);
+        border-radius: 12px;
+        padding: 0.875rem;
+        font-size: 0.9rem;
+        min-height: 48px;
+        max-height: 120px;
+        transition: all 0.2s ease;
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
+        font-family: inherit;
+    }
+
+    .chat-input::placeholder {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .chat-input:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .send-button {
+        height: 48px;
+        width: 48px;
+        border-radius: 12px;
+        background: var(--primary-gradient);
+        border: none;
+        color: white;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .send-button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }
+
+    .send-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* 3D Map Container */
+    .map-3d-container {
+        position: relative;
+        background: #000;
+        overflow: hidden;
+    }
+
+    gmp-map-3d {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Map Overlay UI */
+    .map-overlay {
+        position: absolute;
+        top: 2rem;
+        left: 2rem;
+        z-index: 100;
+        pointer-events: none;
+    }
+
+    .map-overlay > * {
+        pointer-events: auto;
+    }
+
+    .location-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        padding: 1.5rem;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        max-width: 350px;
+        margin-bottom: 1rem;
+        animation: fadeInScale 0.4s ease-out;
+    }
+
+    @keyframes fadeInScale {
+        from {
+            opacity: 0;
+            transform: scale(0.9) translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    }
+
+    .location-card h3 {
+        margin: 0 0 0.75rem 0;
+        font-size: 1.25rem;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .location-rating {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .stars {
+        color: #fbbf24;
+        font-size: 1.1rem;
+    }
+
+    .rating-text {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+    }
+
+    .location-address {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .location-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        font-size: 0.813rem;
+        font-weight: 500;
+    }
+
+    .location-status.open {
+        background: rgba(16, 185, 129, 0.15);
+        color: #059669;
+    }
+
+    .location-status.closed {
+        background: rgba(239, 68, 68, 0.15);
+        color: #dc2626;
+    }
+
+    /* Map Controls */
+    .map-controls {
+        position: absolute;
+        bottom: 2rem;
+        right: 2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        z-index: 100;
+    }
+
+    .map-control-btn {
+        width: 48px;
+        height: 48px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        color: var(--text-primary);
+        font-size: 1.1rem;
+    }
+
+    .map-control-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        background: white;
+    }
+
+    /* Loading State */
+    .loading-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+    }
+
+    .loading-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid rgba(102, 126, 234, 0.3);
+        border-top-color: #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+        display: flex;
+        gap: 0.5rem;
+        padding: 0.75rem;
+    }
+
+    .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.6);
+        animation: typing 1.4s infinite;
+    }
+
+    .typing-dot:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    .typing-dot:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+
+    @keyframes typing {
+        0%, 60%, 100% {
+            transform: translateY(0);
+        }
+        30% {
+            transform: translateY(-10px);
+        }
+    }
+
+    /* Markers on 3D Map */
+    .map-marker-3d {
+        position: absolute;
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .map-marker-3d:hover {
+        transform: rotate(-45deg) scale(1.1);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .marker-number {
+        transform: rotate(45deg);
+        color: white;
+        font-weight: 700;
+        font-size: 0.875rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+        .app-container {
+            grid-template-columns: 1fr;
+            grid-template-rows: 50vh 50vh;
+        }
+
+        .map-overlay {
+            top: 1rem;
+            left: 1rem;
+        }
+
+        .location-card {
+            max-width: 280px;
+        }
+
+        .map-controls {
+            bottom: 1rem;
+            right: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="app-container">
+    <!-- Chat Sidebar -->
+    <div class="chat-sidebar">
+        <div class="chat-header">
+            <h1><i class="fas fa-globe-americas me-2"></i>Maps AI 3D</h1>
+            <p>Explore the world in photorealistic 3D</p>
+            <div class="location-info" id="location-info" style="display: none;">
+                <i class="fas fa-map-marker-alt"></i>
+                <span id="location-text">Detecting location...</span>
+            </div>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+            <div class="message assistant">
+                <div class="message-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="message-content">
+                    <p>🌍 Welcome to Maps AI 3D! I can take you anywhere in the world with photorealistic 3D views. Try asking me to:</p>
+                    <p style="margin-top: 0.75rem;">• "Show me the Eiffel Tower in Paris"<br>• "Find kombucha bars in Ghent"<br>• "Take me to the Golden Gate Bridge"</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-container">
+            <div class="chat-input-wrapper">
+                <textarea 
+                    class="chat-input" 
+                    id="user-input" 
+                    placeholder="Where would you like to explore?"
+                    rows="1"
+                ></textarea>
+                <button class="send-button" id="send-button" onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3D Map Container -->
+    <div class="map-3d-container">
+        <gmp-map-3d 
+            id="map3d"
+            center="51.0543,3.7174"
+            range="1000"
+            tilt="60"
+            heading="0"
+        ></gmp-map-3d>
+
+        <!-- Map Overlay for Location Info -->
+        <div class="map-overlay" id="map-overlay"></div>
+
+        <!-- Map Controls -->
+        <div class="map-controls">
+            <button class="map-control-btn" onclick="resetCamera()" title="Reset view">
+                <i class="fas fa-home"></i>
+            </button>
+            <button class="map-control-btn" onclick="clearLocations()" title="Clear locations">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loading-overlay" style="display: none;">
+            <div class="loading-spinner"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let map3d;
+    let userLocation = { lat: 51.0543, lng: 3.7174 }; // Ghent default
+    let currentLocations = [];
+    let isMapReady = false;
+
+    // Initialize 3D Map
+    async function initMap3D() {
+        map3d = document.getElementById('map3d');
+        
+        // Wait for map to be ready
+        await customElements.whenDefined('gmp-map-3d');
+        
+        map3d.addEventListener('gmp-load', () => {
+            console.log('3D Map loaded!');
+            isMapReady = true;
+            
+            // Get user location
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        document.getElementById('location-info').style.display = 'flex';
+                        document.getElementById('location-text').textContent = 
+                            `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
+                    },
+                    (error) => console.log('Location access denied:', error)
+                );
+            }
+        });
+    }
+
+    // Camera control utilities
+    function flyToLocation(lat, lng, range = 500, tilt = 65, heading = 0, duration = 3000) {
+        if (!isMapReady) return;
+        
+        const startCenter = map3d.center;
+        const startRange = map3d.range;
+        const startTilt = map3d.tilt;
+        const startHeading = map3d.heading;
+        
+        const endCenter = { lat, lng, altitude: 0 };
+        const startTime = Date.now();
+        
+        function animate() {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            // Easing function for smooth animation
+            const eased = 1 - Math.pow(1 - progress, 3);
+            
+            // Interpolate values
+            map3d.center = {
+                lat: startCenter.lat + (endCenter.lat - startCenter.lat) * eased,
+                lng: startCenter.lng + (endCenter.lng - startCenter.lng) * eased,
+                altitude: 0
+            };
+            map3d.range = startRange + (range - startRange) * eased;
+            map3d.tilt = startTilt + (tilt - startTilt) * eased;
+            map3d.heading = startHeading + (heading - startHeading) * eased;
+            
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        }
+        
+        animate();
+    }
+
+    function frameLocations(locations) {
+        if (!isMapReady || locations.length === 0) return;
+        
+        if (locations.length === 1) {
+            const loc = locations[0];
+            flyToLocation(loc.lat, loc.lng, 400, 70, 0);
+            return;
+        }
+        
+        // Calculate bounds
+        let minLat = locations[0].lat;
+        let maxLat = locations[0].lat;
+        let minLng = locations[0].lng;
+        let maxLng = locations[0].lng;
+        
+        locations.forEach(loc => {
+            minLat = Math.min(minLat, loc.lat);
+            maxLat = Math.max(maxLat, loc.lat);
+            minLng = Math.min(minLng, loc.lng);
+            maxLng = Math.max(maxLng, loc.lng);
+        });
+        
+        const centerLat = (minLat + maxLat) / 2;
+        const centerLng = (minLng + maxLng) / 2;
+        const latDiff = maxLat - minLat;
+        const lngDiff = maxLng - minLng;
+        const maxDiff = Math.max(latDiff, lngDiff);
+        
+        // Calculate range to fit all locations
+        const range = Math.max(maxDiff * 111000 * 1.5, 800); // 111km per degree, with padding
+        
+        flyToLocation(centerLat, centerLng, range, 60, 0);
+    }
+
+    function displayLocationCard(location) {
+        const overlay = document.getElementById('map-overlay');
+        const card = document.createElement('div');
+        card.className = 'location-card';
+        
+        const stars = location.rating ? '★'.repeat(Math.round(location.rating)) : '';
+        const ratingText = location.rating ? 
+            `${location.rating} (${location.user_ratings_total || 0} reviews)` : 
+            'No ratings';
+        
+        card.innerHTML = `
+            <h3>
+                <i class="fas fa-map-marker-alt" style="color: #667eea;"></i>
+                ${location.name}
+            </h3>
+            ${location.rating ? `
+                <div class="location-rating">
+                    <span class="stars">${stars}</span>
+                    <span class="rating-text">${ratingText}</span>
+                </div>
+            ` : ''}
+            <div class="location-address">
+                <i class="fas fa-location-dot" style="color: #667eea; margin-top: 2px;"></i>
+                <span>${location.formatted_address || location.vicinity || 'Address not available'}</span>
+            </div>
+            ${location.opening_hours ? `
+                <span class="location-status ${location.opening_hours.open_now ? 'open' : 'closed'}">
+                    <i class="fas fa-clock"></i>
+                    ${location.opening_hours.open_now ? 'Open now' : 'Closed'}
+                </span>
+            ` : ''}
+        `;
+        
+        // Clear previous cards and add new one
+        overlay.innerHTML = '';
+        overlay.appendChild(card);
+        
+        // Auto-remove after 10 seconds
+        setTimeout(() => {
+            card.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => card.remove(), 300);
+        }, 10000);
+    }
+
+    // Chat functions
+    const textarea = document.getElementById('user-input');
+    textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+
+    textarea.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    function addMessage(role, content) {
+        const messagesContainer = document.getElementById('chat-messages');
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${role}`;
+        
+        messageDiv.innerHTML = `
+            <div class="message-avatar">
+                <i class="fas fa-${role === 'user' ? 'user' : 'robot'}"></i>
+            </div>
+            <div class="message-content">
+                <p>${content}</p>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function addTypingIndicator() {
+        const messagesContainer = document.getElementById('chat-messages');
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message assistant';
+        typingDiv.id = 'typing-indicator';
+        
+        typingDiv.innerHTML = `
+            <div class="message-avatar">
+                <i class="fas fa-robot"></i>
+            </div>
+            <div class="message-content">
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(typingDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        const indicator = document.getElementById('typing-indicator');
+        if (indicator) indicator.remove();
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const message = input.value.trim();
+        
+        if (!message) return;
+        
+        input.disabled = true;
+        sendButton.disabled = true;
+        
+        addMessage('user', message);
+        input.value = '';
+        input.style.height = 'auto';
+        
+        addTypingIndicator();
+        document.getElementById('loading-overlay').style.display = 'flex';
+        
+        try {
+            const response = await fetch('/api/maps-ai/chat-3d', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: message,
+                    location: userLocation
+                })
+            });
+            
+            const data = await response.json();
+            
+            removeTypingIndicator();
+            document.getElementById('loading-overlay').style.display = 'none';
+            
+            if (data.success) {
+                addMessage('assistant', data.response);
+                
+                // Handle tool calls
+                if (data.tool_results) {
+                    data.tool_results.forEach(tool => {
+                        if (tool.type === 'frameEstablishingShot' && tool.location) {
+                            flyToLocation(
+                                tool.location.lat,
+                                tool.location.lng,
+                                tool.range || 500,
+                                tool.tilt || 65,
+                                tool.heading || 0
+                            );
+                        } else if (tool.type === 'frameLocations' && tool.locations) {
+                            currentLocations = tool.locations;
+                            frameLocations(tool.locations);
+                            
+                            // Display first location card
+                            if (tool.locations.length > 0) {
+                                displayLocationCard(tool.locations[0]);
+                            }
+                        }
+                    });
+                }
+                
+                // Handle places from grounding
+                if (data.places && data.places.length > 0) {
+                    const locations = data.places.map(p => ({
+                        lat: p.geometry.location.lat,
+                        lng: p.geometry.location.lng,
+                        name: p.name,
+                        rating: p.rating,
+                        user_ratings_total: p.user_ratings_total,
+                        formatted_address: p.formatted_address,
+                        vicinity: p.vicinity,
+                        opening_hours: p.opening_hours
+                    }));
+                    
+                    currentLocations = locations;
+                    frameLocations(locations);
+                    
+                    if (locations.length > 0) {
+                        displayLocationCard(locations[0]);
+                    }
+                }
+            } else {
+                addMessage('assistant', `Error: ${data.error || 'Failed to get response'}`);
+            }
+        } catch (error) {
+            removeTypingIndicator();
+            document.getElementById('loading-overlay').style.display = 'none';
+            addMessage('assistant', `Error: ${error.message}`);
+            console.error('Error:', error);
+        } finally {
+            input.disabled = false;
+            sendButton.disabled = false;
+            input.focus();
+        }
+    }
+
+    function resetCamera() {
+        if (userLocation) {
+            flyToLocation(userLocation.lat, userLocation.lng, 1000, 60, 0);
+        }
+    }
+
+    function clearLocations() {
+        currentLocations = [];
+        document.getElementById('map-overlay').innerHTML = '';
+    }
+
+    // Initialize when page loads
+    window.addEventListener('load', () => {
+        initMap3D();
+        document.getElementById('user-input').focus();
+    });
+</script>
+{% endblock %}
+

@@ -1,0 +1,755 @@
+{% extends 'base.html' %}
+
+{% block title %}Maps AI Enhanced · DOUANO{% endblock %}
+
+{% block extra_head %}
+<!-- Google Maps JavaScript API -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places,marker&v=weekly" async defer></script>
+
+<style>
+    .maps-ai-container {
+        display: grid;
+        grid-template-columns: 400px 1fr;
+        height: calc(100vh - 120px);
+        gap: 0;
+        max-width: 100%;
+        margin: 0 auto;
+    }
+
+    /* Chat Sidebar */
+    .chat-sidebar {
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        overflow: hidden;
+    }
+
+    .chat-header {
+        background: var(--primary-gradient);
+        padding: 1.5rem;
+        color: white;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .chat-header h1 {
+        color: white !important;
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .chat-header p {
+        color: rgba(255, 255, 255, 0.9) !important;
+        margin: 0.5rem 0 0 0;
+        font-size: 0.875rem;
+    }
+
+    .location-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        font-size: 0.75rem;
+        color: white;
+        margin-top: 0.5rem;
+    }
+
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        background: var(--surface-alt);
+    }
+
+    .chat-messages::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .chat-messages::-webkit-scrollbar-thumb {
+        background: var(--primary-color);
+        border-radius: 3px;
+    }
+
+    .message {
+        display: flex;
+        gap: 0.75rem;
+        animation: messageSlide 0.3s ease-out;
+    }
+
+    @keyframes messageSlide {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .message.user {
+        flex-direction: row-reverse;
+    }
+
+    .message-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 1rem;
+    }
+
+    .message.user .message-avatar {
+        background: var(--primary-gradient);
+        color: white;
+    }
+
+    .message.assistant .message-avatar {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+    }
+
+    .message-content {
+        max-width: 85%;
+        padding: 0.875rem 1rem;
+        border-radius: 12px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .message.user .message-content {
+        background: var(--primary-color);
+        color: white;
+        border-bottom-right-radius: 4px;
+    }
+
+    .message.assistant .message-content {
+        background: var(--surface);
+        color: var(--text-primary);
+        border-bottom-left-radius: 4px;
+    }
+
+    .message-content p {
+        margin: 0;
+        line-height: 1.5;
+        font-size: 0.9rem;
+    }
+
+    .chat-input-container {
+        padding: 1rem;
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+
+    .chat-input-wrapper {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-end;
+    }
+
+    .chat-input {
+        flex: 1;
+        resize: none;
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        padding: 0.75rem;
+        font-size: 0.9rem;
+        min-height: 45px;
+        max-height: 120px;
+        transition: all 0.2s ease;
+    }
+
+    .chat-input:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        outline: none;
+    }
+
+    .send-button {
+        height: 45px;
+        width: 45px;
+        border-radius: 12px;
+        background: var(--primary-gradient);
+        border: none;
+        color: white;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .send-button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .send-button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Map Container */
+    .map-container {
+        position: relative;
+        background: #f0f0f0;
+    }
+
+    #map {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Place Cards */
+    .place-cards {
+        position: absolute;
+        bottom: 2rem;
+        left: 2rem;
+        right: 2rem;
+        display: flex;
+        gap: 1rem;
+        overflow-x: auto;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        box-shadow: var(--shadow-xl);
+        max-height: 300px;
+        z-index: 10;
+    }
+
+    .place-cards::-webkit-scrollbar {
+        height: 6px;
+    }
+
+    .place-cards::-webkit-scrollbar-thumb {
+        background: var(--primary-color);
+        border-radius: 3px;
+    }
+
+    .place-card {
+        min-width: 280px;
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .place-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-xl);
+    }
+
+    .place-image {
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+    }
+
+    .place-info {
+        padding: 1rem;
+    }
+
+    .place-name {
+        font-weight: 600;
+        font-size: 1rem;
+        margin: 0 0 0.5rem 0;
+        color: var(--text-primary);
+    }
+
+    .place-rating {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .stars {
+        color: #fbbf24;
+    }
+
+    .place-address {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .place-status {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 6px;
+        margin-top: 0.5rem;
+        display: inline-block;
+    }
+
+    .place-status.open {
+        background: rgba(16, 185, 129, 0.1);
+        color: #059669;
+    }
+
+    .place-status.closed {
+        background: rgba(239, 68, 68, 0.1);
+        color: #dc2626;
+    }
+
+    /* Map Controls */
+    .map-controls {
+        position: absolute;
+        top: 2rem;
+        right: 2rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        z-index: 10;
+    }
+
+    .map-control-btn {
+        width: 40px;
+        height: 40px;
+        background: white;
+        border: none;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+
+    .map-control-btn:hover {
+        background: var(--surface-alt);
+        box-shadow: var(--shadow-lg);
+    }
+
+    /* Typing Indicator */
+    .typing-indicator {
+        display: flex;
+        gap: 0.5rem;
+        padding: 0.75rem;
+    }
+
+    .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-secondary);
+        animation: typing 1.4s infinite;
+    }
+
+    .typing-dot:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+
+    .typing-dot:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+
+    @keyframes typing {
+        0%, 60%, 100% {
+            transform: translateY(0);
+        }
+        30% {
+            transform: translateY(-10px);
+        }
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+        .maps-ai-container {
+            grid-template-columns: 1fr;
+            grid-template-rows: 300px 1fr;
+        }
+
+        .chat-sidebar {
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .place-cards {
+            bottom: 1rem;
+            left: 1rem;
+            right: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="maps-ai-container">
+    <!-- Chat Sidebar -->
+    <div class="chat-sidebar">
+        <div class="chat-header">
+            <h1><i class="fas fa-map-marked-alt me-2"></i>Maps AI</h1>
+            <p>Interactive location-aware assistant</p>
+            <div class="location-badge" id="location-badge" style="display: none;">
+                <i class="fas fa-map-marker-alt"></i>
+                <span id="location-text">Location detected</span>
+            </div>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+            <div class="message assistant">
+                <div class="message-avatar">
+                    <i class="fas fa-map"></i>
+                </div>
+                <div class="message-content">
+                    <p>👋 Hi! I can help you discover places, plan trips, and explore locations on the map. Try asking me about restaurants, hotels, or activities in any city!</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-container">
+            <div class="chat-input-wrapper">
+                <textarea 
+                    class="chat-input" 
+                    id="user-input" 
+                    placeholder="Ask about places or plan your trip..."
+                    rows="1"
+                ></textarea>
+                <button class="send-button" id="send-button" onclick="sendMessage()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map Container -->
+    <div class="map-container">
+        <div id="map"></div>
+        
+        <!-- Map Controls -->
+        <div class="map-controls">
+            <button class="map-control-btn" onclick="recenterMap()" title="Recenter">
+                <i class="fas fa-crosshairs"></i>
+            </button>
+            <button class="map-control-btn" onclick="clearMarkers()" title="Clear markers">
+                <i class="fas fa-eraser"></i>
+            </button>
+        </div>
+
+        <!-- Place Cards -->
+        <div class="place-cards" id="place-cards" style="display: none;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let map;
+    let markers = [];
+    let userLocation = null;
+    let placesService;
+    let infoWindow;
+    const conversationHistory = [];
+
+    // Initialize Google Map
+    function initMap() {
+        const defaultLocation = { lat: 51.0396, lng: 3.7296 }; // Gent default
+        
+        map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 13,
+            center: defaultLocation,
+            mapTypeControl: true,
+            fullscreenControl: false,
+            streetViewControl: true,
+            zoomControl: true,
+            styles: [
+                {
+                    featureType: 'poi',
+                    elementType: 'labels',
+                    stylers: [{ visibility: 'on' }]
+                }
+            ]
+        });
+
+        placesService = new google.maps.places.PlacesService(map);
+        infoWindow = new google.maps.InfoWindow();
+
+        // Get user location
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    userLocation = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    map.setCenter(userLocation);
+                    document.getElementById('location-badge').style.display = 'inline-flex';
+                    document.getElementById('location-text').textContent = 
+                        `${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)}`;
+                    
+                    // Add user location marker
+                    new google.maps.Marker({
+                        position: userLocation,
+                        map: map,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 8,
+                            fillColor: '#4285F4',
+                            fillOpacity: 1,
+                            strokeColor: '#ffffff',
+                            strokeWeight: 2,
+                        },
+                        title: 'Your Location'
+                    });
+                },
+                (error) => console.log('Location access denied:', error)
+            );
+        }
+    }
+
+    // Auto-resize textarea
+    const textarea = document.getElementById('user-input');
+    textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+
+    // Send message on Enter
+    textarea.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    function addMessage(role, content) {
+        const messagesContainer = document.getElementById('chat-messages');
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${role}`;
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.innerHTML = role === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-map"></i>';
+        
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+        
+        const textP = document.createElement('p');
+        textP.textContent = content;
+        messageContent.appendChild(textP);
+        
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(messageContent);
+        
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function addTypingIndicator() {
+        const messagesContainer = document.getElementById('chat-messages');
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'message assistant';
+        typingDiv.id = 'typing-indicator';
+        
+        typingDiv.innerHTML = `
+            <div class="message-avatar">
+                <i class="fas fa-map"></i>
+            </div>
+            <div class="message-content">
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(typingDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        const indicator = document.getElementById('typing-indicator');
+        if (indicator) indicator.remove();
+    }
+
+    function displayPlaces(places) {
+        const placeCardsContainer = document.getElementById('place-cards');
+        placeCardsContainer.innerHTML = '';
+        placeCardsContainer.style.display = 'flex';
+
+        places.forEach((place, index) => {
+            const card = document.createElement('div');
+            card.className = 'place-card';
+            card.onclick = () => focusOnPlace(index);
+
+            const imageUrl = place.photo_url || 'https://via.placeholder.com/280x140?text=No+Image';
+            const rating = place.rating || 'N/A';
+            const ratingCount = place.user_ratings_total || 0;
+            const stars = '⭐'.repeat(Math.round(rating));
+
+            card.innerHTML = `
+                <img src="${imageUrl}" alt="${place.name}" class="place-image" onerror="this.src='https://via.placeholder.com/280x140?text=No+Image'">
+                <div class="place-info">
+                    <h3 class="place-name">${place.name}</h3>
+                    <div class="place-rating">
+                        <span class="stars">${stars}</span>
+                        <span>${rating} (${ratingCount})</span>
+                    </div>
+                    <p class="place-address">
+                        <i class="fas fa-map-marker-alt"></i>
+                        ${place.vicinity || place.formatted_address || 'Address not available'}
+                    </p>
+                    ${place.opening_hours ? `
+                        <span class="place-status ${place.opening_hours.open_now ? 'open' : 'closed'}">
+                            ${place.opening_hours.open_now ? '● Open now' : '● Closed'}
+                        </span>
+                    ` : ''}
+                </div>
+            `;
+
+            placeCardsContainer.appendChild(card);
+        });
+    }
+
+    function addMarkersForPlaces(places) {
+        clearMarkers();
+
+        const bounds = new google.maps.LatLngBounds();
+
+        places.forEach((place, index) => {
+            const marker = new google.maps.Marker({
+                position: place.geometry.location,
+                map: map,
+                title: place.name,
+                animation: google.maps.Animation.DROP,
+                label: {
+                    text: (index + 1).toString(),
+                    color: 'white',
+                    fontSize: '14px',
+                    fontWeight: 'bold'
+                }
+            });
+
+            marker.addListener('click', () => {
+                const content = `
+                    <div style="max-width: 250px;">
+                        <h3 style="margin: 0 0 0.5rem 0;">${place.name}</h3>
+                        <p style="margin: 0 0 0.5rem 0; color: #666;">${place.vicinity || place.formatted_address}</p>
+                        ${place.rating ? `<p style="margin: 0; color: #fbbf24;">★ ${place.rating} (${place.user_ratings_total || 0} reviews)</p>` : ''}
+                        <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + (place.vicinity || ''))}&query_place_id=${place.place_id}" target="_blank" style="display: inline-block; margin-top: 0.5rem; color: #667eea;">
+                            View on Google Maps →
+                        </a>
+                    </div>
+                `;
+                infoWindow.setContent(content);
+                infoWindow.open(map, marker);
+            });
+
+            markers.push(marker);
+            bounds.extend(place.geometry.location);
+        });
+
+        if (places.length > 0) {
+            map.fitBounds(bounds);
+            if (places.length === 1) {
+                map.setZoom(15);
+            }
+        }
+    }
+
+    function focusOnPlace(index) {
+        if (markers[index]) {
+            map.panTo(markers[index].getPosition());
+            map.setZoom(16);
+            google.maps.event.trigger(markers[index], 'click');
+        }
+    }
+
+    function clearMarkers() {
+        markers.forEach(marker => marker.setMap(null));
+        markers = [];
+        document.getElementById('place-cards').style.display = 'none';
+    }
+
+    function recenterMap() {
+        if (userLocation) {
+            map.setCenter(userLocation);
+            map.setZoom(13);
+        }
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const message = input.value.trim();
+        
+        if (!message) return;
+        
+        input.disabled = true;
+        sendButton.disabled = true;
+        
+        addMessage('user', message);
+        conversationHistory.push({ role: 'user', content: message });
+        
+        input.value = '';
+        input.style.height = 'auto';
+        
+        addTypingIndicator();
+        
+        try {
+            const response = await fetch('/api/maps-ai/chat-enhanced', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: message,
+                    location: userLocation,
+                    history: conversationHistory
+                })
+            });
+            
+            const data = await response.json();
+            
+            removeTypingIndicator();
+            
+            if (data.success) {
+                addMessage('assistant', data.response);
+                conversationHistory.push({ role: 'assistant', content: data.response });
+                
+                if (data.places && data.places.length > 0) {
+                    addMarkersForPlaces(data.places);
+                    displayPlaces(data.places);
+                }
+            } else {
+                addMessage('assistant', `Error: ${data.error || 'Failed to get response'}`);
+            }
+        } catch (error) {
+            removeTypingIndicator();
+            addMessage('assistant', `Error: ${error.message}`);
+            console.error('Error:', error);
+        } finally {
+            input.disabled = false;
+            sendButton.disabled = false;
+            input.focus();
+        }
+    }
+
+    // Initialize map when page loads
+    window.addEventListener('load', initMap);
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('user-input').focus();
+    });
+</script>
+{% endblock %}
+

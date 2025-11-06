@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}2024 Sales Data - DOUANO{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-database me-2 text-primary"></i>2024 Sales Data</h2>
+                    <p class="text-muted mb-0">Raw invoice data extraction and management</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4" id="stats-container" style="display: none;">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-file-invoice fa-2x text-primary"></i>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Total Invoices</h6>
+                            <h3 class="mb-0" id="stat-total-invoices">-</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-euro-sign fa-2x text-success"></i>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Total Revenue</h6>
+                            <h3 class="mb-0" id="stat-revenue">-</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-building fa-2x text-info"></i>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Unique Companies</h6>
+                            <h3 class="mb-0" id="stat-companies">-</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Control Panel -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0"><i class="fas fa-sync-alt me-2"></i>Data Synchronization</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h6 class="fw-bold mb-2">Sync 2024 Invoice Data</h6>
+                            <p class="text-muted mb-3">
+                                This will fetch all sales invoices from 2024 and store them in the Supabase database.
+                                The raw JSON data from each invoice will be preserved for analysis.
+                            </p>
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Note:</strong> This operation may take a few minutes depending on the number of invoices.
+                                Existing records will be updated, new ones will be inserted.
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <button class="btn btn-primary btn-lg" id="btn-sync" onclick="startSync()">
+                                <i class="fas fa-download me-2"></i>Start Sync
+                            </button>
+                            <button class="btn btn-outline-secondary btn-lg mt-2" onclick="loadStats()">
+                                <i class="fas fa-chart-bar me-2"></i>Refresh Stats
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Progress Area -->
+                    <div id="sync-progress" style="display: none;" class="mt-4">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="spinner-border text-primary me-3" role="status">
+                                <span class="visually-hidden">Syncing...</span>
+                            </div>
+                            <div>
+                                <h6 class="mb-1">Sync in Progress...</h6>
+                                <p class="text-muted mb-0" id="sync-status">Fetching invoice data...</p>
+                            </div>
+                        </div>
+                        <div class="progress" style="height: 25px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 100%">
+                                Please wait...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Result Area -->
+                    <div id="sync-result" style="display: none;" class="mt-4">
+                        <!-- Results will be shown here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load stats on page load
+    loadStats();
+});
+
+async function loadStats() {
+    try {
+        const response = await fetch('/api/2024-sales-stats');
+        
+        if (response.ok) {
+            const stats = await response.json();
+            
+            // Show stats containers
+            document.getElementById('stats-container').style.display = 'flex';
+            
+            // Update stats
+            document.getElementById('stat-total-invoices').textContent = stats.total_invoices || 0;
+            document.getElementById('stat-revenue').textContent = '€' + (stats.total_revenue || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2});
+            document.getElementById('stat-companies').textContent = stats.unique_companies || 0;
+        } else {
+            console.log('No stats available yet');
+        }
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+
+async function startSync() {
+    const btnSync = document.getElementById('btn-sync');
+    const progressDiv = document.getElementById('sync-progress');
+    const resultDiv = document.getElementById('sync-result');
+    
+    // Disable button and show progress
+    btnSync.disabled = true;
+    progressDiv.style.display = 'block';
+    resultDiv.style.display = 'none';
+    
+    try {
+        document.getElementById('sync-status').textContent = 'Fetching invoices from Douano API...';
+        
+        const response = await fetch('/api/sync-2024-invoices', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const result = await response.json();
+        
+        // Hide progress
+        progressDiv.style.display = 'none';
+        
+        // Show result
+        resultDiv.style.display = 'block';
+        
+        if (result.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i>Sync Completed Successfully!</h5>
+                    <hr>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <p class="mb-0"><strong>Total Fetched:</strong> ${result.total_fetched}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <p class="mb-0"><strong>New Records:</strong> ${result.saved}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <p class="mb-0"><strong>Updated:</strong> ${result.updated}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <p class="mb-0"><strong>Errors:</strong> ${result.errors}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Refresh stats
+            setTimeout(() => loadStats(), 1000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Sync Failed</h5>
+                    <p class="mb-0">${result.error || result.message || 'Unknown error'}</p>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        progressDiv.style.display = 'none';
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    } finally {
+        btnSync.disabled = false;
+    }
+}
+</script>
+{% endblock %}

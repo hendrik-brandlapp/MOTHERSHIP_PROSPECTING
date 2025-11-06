@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transport Methods Test - DUANO Frontend</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .section h3 { margin-top: 0; color: #333; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        button { background: #007bff; color: white; border: none; padding: 10px 15px; border-radius: 3px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .loading { color: #666; font-style: italic; }
+        .error { color: #dc3545; }
+        .success { color: #28a745; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚚 Transport Methods Test Page</h1>
+        <p>This page tests the new transport methods functionality with the official Duano API.</p>
+        
+        <div class="section">
+            <h3>1. Official Transport Methods API</h3>
+            <button onclick="testOfficialTransportMethods()">Test Official Transport Methods</button>
+            <div id="official-result" class="loading">Click button to test...</div>
+        </div>
+        
+        <div class="section">
+            <h3>2. Enhanced Delivery Methods (All Sources)</h3>
+            <button onclick="testDeliveryMethods()">Test Enhanced Delivery Methods</button>
+            <div id="delivery-result" class="loading">Click button to test...</div>
+        </div>
+        
+        <div class="section">
+            <h3>3. Debug Transport Methods</h3>
+            <button onclick="testDebugTransportMethods()">Test Debug Transport Methods</button>
+            <div id="debug-result" class="loading">Click button to test...</div>
+        </div>
+        
+        <div class="section">
+            <h3>4. Explore Order Endpoints</h3>
+            <button onclick="testOrdersSummary()">Explore All Order Endpoints</button>
+            <div id="orders-summary-result" class="loading">Click to explore different endpoints for orders...</div>
+        </div>
+        
+        <div class="section">
+            <h3>5. Find Transport Method Data</h3>
+            <button onclick="testFindTransportMethods()">Find Endpoint with Transport Methods</button>
+            <div id="find-transport-result" class="loading">Click to find the endpoint that contains transport method data...</div>
+        </div>
+        
+        <div class="section">
+            <h3>6. Company Transport Method Linking (Purchase Orders)</h3>
+            <label for="company-id">Company ID:</label>
+            <input type="number" id="company-id" placeholder="Enter company ID" value="2892">
+            <p><small>Try company ID 2892 (SAS FRUITOFOOD) - we know this company has purchase orders with transport methods!</small></p>
+            <button onclick="testCompanyOrders()">Test Company Purchase Orders with Transport Methods</button>
+            <div id="company-result" class="loading">Enter company ID and click button to test...</div>
+        </div>
+    </div>
+
+    <script>
+        async function testOfficialTransportMethods() {
+            const resultDiv = document.getElementById('official-result');
+            resultDiv.innerHTML = '<span class="loading">Loading official transport methods...</span>';
+            
+            try {
+                const response = await fetch('/api/transport-methods');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Success!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">❌ Error: ${data.error || 'Unknown error'}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testDeliveryMethods() {
+            const resultDiv = document.getElementById('delivery-result');
+            resultDiv.innerHTML = '<span class="loading">Loading enhanced delivery methods...</span>';
+            
+            try {
+                const response = await fetch('/api/delivery-methods');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const methods = data.result || [];
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Success! Found ${methods.length} delivery methods</div>
+                        <p><strong>Data Sources:</strong> ${data.data_sources ? data.data_sources.join(', ') : 'N/A'}</p>
+                        ${data.warnings ? `<p><strong>Warnings:</strong> ${data.warnings.join(', ')}</p>` : ''}
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">❌ Error: ${data.error || 'Unknown error'}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testDebugTransportMethods() {
+            const resultDiv = document.getElementById('debug-result');
+            resultDiv.innerHTML = '<span class="loading">Loading debug transport methods...</span>';
+            
+            try {
+                const response = await fetch('/api/debug/transport-methods');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Debug data loaded!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">❌ Error: ${data.error || 'Unknown error'}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testOrdersSummary() {
+            const resultDiv = document.getElementById('orders-summary-result');
+            resultDiv.innerHTML = '<span class="loading">Exploring order endpoints...</span>';
+            
+            try {
+                const response = await fetch('/api/debug/orders-summary');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Endpoint exploration completed!</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">❌ Error: ${data.error || 'Unknown error'}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testFindTransportMethods() {
+            const resultDiv = document.getElementById('find-transport-result');
+            resultDiv.innerHTML = '<span class="loading">Searching for transport method data...</span>';
+            
+            try {
+                const response = await fetch('/api/debug/find-transport-methods');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Search completed! Found ${data.total_unique_transport_methods} unique transport methods</div>
+                        <p><strong>Transport Methods Found:</strong> ${data.found_transport_methods.join(', ')}</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">❌ Error: ${data.error || 'Unknown error'}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function testCompanyOrders() {
+            const companyId = document.getElementById('company-id').value;
+            const resultDiv = document.getElementById('company-result');
+            
+            if (!companyId) {
+                resultDiv.innerHTML = '<div class="error">❌ Please enter a company ID</div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = `<span class="loading">Loading purchase orders for company ${companyId} with transport methods...</span>`;
+            
+            try {
+                const response = await fetch(`/api/companies/${companyId}/orders`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const orders = data.result?.data || [];
+                    const ordersWithTransport = orders.filter(order => 
+                        order.extracted_transport_method || order.transport_method || order.transport_method_source
+                    );
+                    
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Success! Found ${orders.length} orders, ${ordersWithTransport.length} with transport method info</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="error">❌ Error: ${data.error || 'Unknown error'}</div>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Network Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

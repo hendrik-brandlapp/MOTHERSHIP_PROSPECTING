@@ -13,7 +13,15 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
+<div class="container-fluid px-4">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 class="h2 mb-1 fw-bold text-dark">Analytics</h1>
+      <p class="text-muted mb-0">Visualize sales data and generate insights</p>
+    </div>
+  </div>
+
   <div class="row g-3 align-items-end mb-3">
     <div class="col-md-3">
       <label class="form-label">Company</label>
@@ -83,8 +91,11 @@
   </div>
 
   <div id="vizChartsContainer" class="d-flex flex-column gap-3"></div>
-</div>
 
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
 <script>
 let charts = [];
 // Build in-platform dropdowns like on Sales page
@@ -297,6 +308,419 @@ async function productSource(q){
 // Attach dropdowns on load
 attachDropdown({wrapperId:'vizCompanyWrapper', inputId:'vizCompany', toggleId:'vizCompanyToggle', panelId:'vizCompanyDropdown', source:companySource, onResolveMap:updateCompanyMap});
 attachDropdown({wrapperId:'vizProductWrapper', inputId:'vizProduct', toggleId:'vizProductToggle', panelId:'vizProductDropdown', source:productSource});
+
+// Delivery Analytics Functions
+async function loadDeliveryMethods() {
+  console.log('🔄 Loading delivery methods from DUANO API...');
+  const select = document.getElementById('deliveryMethods');
+  
+  try {
+    console.log('📡 Fetching from /api/delivery-methods');
+    const response = await fetch('/api/delivery-methods?_=' + Date.now());
+    
+    if (!response.ok) {
+      if (response.status === 401) {
+        select.innerHTML = '<option value="">❌ Please log in to load delivery methods</option>';
+        console.error('❌ Authentication required - user must log in first');
+        return;
+      }
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    console.log('📊 Received delivery methods data:', data);
+    
+    // Check if it's an authentication error in the response
+    if (data.error && data.error.includes('authenticated')) {
+      select.innerHTML = '<option value="">❌ Please log in to load delivery methods</option>';
+      console.error('❌ Not authenticated - user must log in first');
+      return;
+    }
+    
+    select.innerHTML = '';
+    if (data.result && Array.isArray(data.result) && data.result.length > 0) {
+      data.result.forEach(method => {
+        const option = document.createElement('option');
+        option.value = method.value;
+        option.textContent = method.label;
+        select.appendChild(option);
+      });
+      console.log(`✅ Successfully loaded ${data.result.length} real delivery methods from DUANO`);
+      console.log('📋 Delivery methods:', data.result.map(m => m.label).join(', '));
+      
+      // Log any warnings from DUANO API
+      if (data.warnings) {
+        console.warn('⚠️ DUANO API warnings:', data.warnings);
+      }
+    } else {
+      console.error('❌ Data structure issue:', data);
+      console.error('❌ data.result type:', typeof data.result, data.result);
+      
+      // Try to show what we got
+      if (data.result) {
+        select.innerHTML = `<option value="">❌ Got ${data.result.length || 'unknown'} delivery methods but format is wrong</option>`;
+      } else {
+        select.innerHTML = '<option value="">❌ No delivery methods found in DUANO response</option>';
+      }
+      console.warn('⚠️ No delivery methods returned from DUANO API');
+    }
+    
+  } catch (error) {
+    console.error('❌ Failed to load delivery methods from DUANO:', error);
+    select.innerHTML = '<option value="">❌ Failed to load delivery methods - check authentication</option>';
+  }
+}
+
+function formatWeekLabel(weekStart) {
+  const date = new Date(weekStart);
+  const endDate = new Date(date);
+  endDate.setDate(date.getDate() + 6);
+  
+  const options = { month: 'short', day: 'numeric' };
+  return `${date.toLocaleDateString('en-US', options)} - ${endDate.toLocaleDateString('en-US', options)}`;
+}
+
+function createDeliveryTable(data) {
+  const { delivery_methods, time_periods, data: deliveryData, summary } = data;
+  
+  if (!delivery_methods.length || !time_periods.length) {
+    return '<div class="alert alert-info">No delivery data found for the selected criteria.</div>';
+  }
+  
+  let html = '<table class="table table-striped table-hover">';
+  
+  // Header
+  html += '<thead class="table-dark"><tr><th>Delivery Method</th>';
+  time_periods.forEach(period => {
+    const label = formatWeekLabel(period);
+    html += `<th class="text-center">${label}</th>`;
+  });
+  html += '<th class="text-center">Total Addresses</th><th class="text-center">Total Amount</th></tr></thead>';
+  
+  // Body
+  html += '<tbody>';
+  delivery_methods.forEach(method => {
+    html += `<tr><td><strong>${method}</strong></td>`;
+    
+    time_periods.forEach(period => {
+      const addresses = deliveryData[method] && deliveryData[method][period] ? deliveryData[method][period] : [];
+      
+      if (addresses.length > 0) {
+        // Create collapsible cell with address list
+        const addressList = addresses.map(addr => 
+          `<div class="small mb-1">
+            <strong>${addr.customer}</strong><br>
+            <span class="text-muted">${addr.address}</span><br>
+            <small class="text-success">€${(addr.amount || 0).toFixed(2)} (#${addr.invoice_id || 'N/A'})</small>
+            ${addr.source ? `<br><small class="text-info">Source: ${addr.source}</small>` : ''}
+          </div>`
+        ).join('');
+        
+        html += `<td class="text-center">
+          <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-${method.replace(/[^a-zA-Z0-9]/g, '')}-${period}" aria-expanded="false">
+            ${addresses.length} address${addresses.length !== 1 ? 'es' : ''}
+          </button>
+          <div class="collapse mt-2" id="collapse-${method.replace(/[^a-zA-Z0-9]/g, '')}-${period}">
+            <div class="card card-body small">
+              ${addressList}
+            </div>
+          </div>
+        </td>`;
+      } else {
+        html += '<td class="text-center text-muted">0</td>';
+      }
+    });
+    
+    // Total columns
+    const totalAddresses = summary[method] ? summary[method].total_addresses : 0;
+    
+    // Calculate total amount for this method
+    let totalAmount = 0;
+    if (deliveryData[method]) {
+      Object.values(deliveryData[method]).forEach(addresses => {
+        addresses.forEach(addr => {
+          totalAmount += (addr.amount || 0);
+        });
+      });
+    }
+    
+    html += `<td class="text-center"><strong>${totalAddresses}</strong></td>`;
+    html += `<td class="text-center"><strong>€${totalAmount.toFixed(2)}</strong></td>`;
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  
+  // Add summary stats
+  const totalAddresses = Object.values(summary).reduce((sum, s) => sum + s.total_addresses, 0);
+  
+  // Calculate grand total amount
+  let grandTotalAmount = 0;
+  delivery_methods.forEach(method => {
+    if (deliveryData[method]) {
+      Object.values(deliveryData[method]).forEach(addresses => {
+        addresses.forEach(addr => {
+          grandTotalAmount += (addr.amount || 0);
+        });
+      });
+    }
+  });
+  
+  html += `<div class="mt-3 p-3 bg-light rounded">
+    <div class="row">
+      <div class="col-md-4">
+        <strong>Summary:</strong> ${totalAddresses} total addresses across ${delivery_methods.length} delivery methods
+      </div>
+      <div class="col-md-4 text-center">
+        <strong>Total Value:</strong> €${grandTotalAmount.toFixed(2)}
+      </div>
+      <div class="col-md-4 text-end">
+        <strong>Time Period:</strong> ${time_periods.length} ${document.getElementById('deliveryGroupBy').value}${time_periods.length !== 1 ? 's' : ''}
+      </div>
+    </div>`;
+    
+  // Add data sources information if available
+  if (data.data_sources && data.data_sources.length > 0) {
+    html += `<div class="row mt-2">
+      <div class="col-12">
+        <small class="text-muted">
+          <strong>Data Sources:</strong> ${data.data_sources.join(', ')}
+        </small>
+      </div>
+    </div>`;
+  }
+  
+  html += `</div>`;
+  
+  return html;
+}
+
+// Delivery Load Button Event
+document.getElementById('deliveryLoad').addEventListener('click', async () => {
+  const methodsSelect = document.getElementById('deliveryMethods');
+  const selectedMethods = Array.from(methodsSelect.selectedOptions).map(option => option.value);
+  const startDate = document.getElementById('deliveryStart').value;
+  const endDate = document.getElementById('deliveryEnd').value;
+  const groupBy = document.getElementById('deliveryGroupBy').value;
+  
+  if (selectedMethods.length === 0) {
+    alert('Please select at least one delivery method.');
+    return;
+  }
+  
+  const params = new URLSearchParams();
+  params.set('filter_by_delivery_methods', selectedMethods.join(','));
+  if (startDate) params.set('filter_by_start_date', startDate);
+  if (endDate) params.set('filter_by_end_date', endDate);
+  params.set('group_by', groupBy);
+  
+  try {
+    document.getElementById('deliveryLoad').innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Loading...';
+    
+    const response = await fetch(`/api/analytics/deliveries?${params.toString()}`);
+    const data = await response.json();
+    
+    if (data.error) {
+      alert('Error loading delivery data: ' + data.error);
+      return;
+    }
+    
+    const tableHtml = createDeliveryTable(data.result);
+    document.getElementById('deliveryTableContainer').innerHTML = tableHtml;
+    document.getElementById('deliveryResultsContainer').style.display = 'block';
+    
+  } catch (error) {
+    console.error('Error loading delivery analytics:', error);
+    alert('Error loading delivery data. Please try again.');
+  } finally {
+    document.getElementById('deliveryLoad').innerHTML = '<i class="fas fa-chart-table me-1"></i>Load Data';
+  }
+});
+
+// Delivery Clear Button Event
+document.getElementById('deliveryClear').addEventListener('click', () => {
+  document.getElementById('deliveryResultsContainer').style.display = 'none';
+  document.getElementById('deliveryTableContainer').innerHTML = '';
+});
+
+
+// Load delivery methods on page load
+document.addEventListener('DOMContentLoaded', () => {
+  loadDeliveryMethods();
+});
+
+// Orders by Delivery Method Chart Functions
+let ordersByMethodChart = null;
+
+async function loadOrdersByDeliveryMethod() {
+  const startDate = document.getElementById('ordersByMethodStart').value;
+  const endDate = document.getElementById('ordersByMethodEnd').value;
+  
+  const params = new URLSearchParams();
+  if (startDate) params.set('filter_by_start_date', startDate);
+  if (endDate) params.set('filter_by_end_date', endDate);
+  
+  try {
+    document.getElementById('ordersByMethodLoad').innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Loading...';
+    
+    const response = await fetch(`/api/orders-by-delivery-method?${params.toString()}`);
+    const data = await response.json();
+    
+    if (data.error) {
+      alert('Error loading orders data: ' + data.error);
+      return;
+    }
+    
+    createOrdersByMethodChart(data.result);
+    createOrdersByMethodSummary(data.summary, data.warnings);
+    createOrdersByMethodTable(data.result);
+    
+    document.getElementById('ordersByMethodResultsContainer').style.display = 'block';
+    
+  } catch (error) {
+    console.error('Error loading orders by delivery method:', error);
+    alert('Error loading orders data. Please try again.');
+  } finally {
+    document.getElementById('ordersByMethodLoad').innerHTML = '<i class="fas fa-chart-pie me-1"></i>Load Chart';
+  }
+}
+
+function createOrdersByMethodChart(data) {
+  const ctx = document.getElementById('ordersByMethodChart').getContext('2d');
+  
+  // Destroy existing chart if it exists
+  if (ordersByMethodChart) {
+    ordersByMethodChart.destroy();
+  }
+  
+  // Prepare chart data
+  const labels = data.map(item => item.delivery_method);
+  const counts = data.map(item => item.order_count);
+  const colors = [
+    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+    '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+  ];
+  
+  ordersByMethodChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: counts,
+        backgroundColor: colors.slice(0, labels.length),
+        borderWidth: 2,
+        borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: 'Distribution of Orders by Delivery Method'
+        },
+        legend: {
+          position: 'bottom'
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.label || '';
+              const value = context.parsed;
+              const total = context.dataset.data.reduce((a, b) => a + b, 0);
+              const percentage = ((value / total) * 100).toFixed(1);
+              return `${label}: ${value} orders (${percentage}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function createOrdersByMethodSummary(summary, warnings) {
+  let html = `
+    <div class="alert alert-info">
+      <div class="row">
+        <div class="col-md-4">
+          <strong>Total Orders:</strong> ${summary.total_orders}
+        </div>
+        <div class="col-md-4">
+          <strong>Delivery Methods:</strong> ${summary.total_delivery_methods}
+        </div>
+        <div class="col-md-4">
+          <strong>Data Sources:</strong> ${summary.data_sources.join(', ')}
+        </div>
+      </div>
+    </div>
+  `;
+  
+  if (warnings && warnings.length > 0) {
+    html += `
+      <div class="alert alert-warning">
+        <strong>Warnings:</strong>
+        <ul class="mb-0">
+          ${warnings.map(warning => `<li>${warning}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+  
+  document.getElementById('ordersByMethodSummary').innerHTML = html;
+}
+
+function createOrdersByMethodTable(data) {
+  let html = `
+    <div class="table-responsive">
+      <table class="table table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>Delivery Method</th>
+            <th class="text-end">Order Count</th>
+            <th class="text-end">Percentage</th>
+            <th class="text-end">Total Amount</th>
+            <th>Sample Orders</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+  
+  data.forEach(item => {
+    const sampleOrders = item.sample_orders.map(order => 
+      `${order.customer} (${order.date || 'No date'}) - €${order.amount || 0}`
+    ).join('<br>');
+    
+    html += `
+      <tr>
+        <td><strong>${item.delivery_method}</strong></td>
+        <td class="text-end"><span class="badge bg-primary">${item.order_count}</span></td>
+        <td class="text-end">${item.percentage}%</td>
+        <td class="text-end">€${item.total_amount.toFixed(2)}</td>
+        <td><small>${sampleOrders || 'No sample orders'}</small></td>
+      </tr>
+    `;
+  });
+  
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+  
+  document.getElementById('ordersByMethodTable').innerHTML = html;
+}
+
+// Event Listeners for Orders by Delivery Method
+document.getElementById('ordersByMethodLoad').addEventListener('click', loadOrdersByDeliveryMethod);
+
+document.getElementById('ordersByMethodClear').addEventListener('click', () => {
+  document.getElementById('ordersByMethodResultsContainer').style.display = 'none';
+  if (ordersByMethodChart) {
+    ordersByMethodChart.destroy();
+    ordersByMethodChart = null;
+  }
+  document.getElementById('ordersByMethodSummary').innerHTML = '';
+  document.getElementById('ordersByMethodTable').innerHTML = '';
+});
 </script>
 {% endblock %}
 

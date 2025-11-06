@@ -4,113 +4,301 @@
 
 {% block extra_head %}
 <style>
+    /* Map and Results Styling */
     #map {
         width: 100%;
         height: 680px;
-        border-radius: 16px;
-    }
-    .gm-style .gm-style-iw-c {
-        border-radius: 10px !important;
-    }
-    .list-group-item small { color: #64748b; }
-    .results-scroll { max-height: 600px; overflow: auto; }
-    .result-item { cursor: pointer; }
-    .result-item:hover { background: #f8fafc; }
-    .photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .photo-grid img { width: 100%; height: 110px; object-fit: cover; border-radius: 8px; }
-    .loading-overlay { position: absolute; inset: 0; background: rgba(255,255,255,0.75); display: none; align-items: center; justify-content: center; z-index: 5; border-radius: 12px; }
-    .loading-overlay.show { display: flex; }
-    .spinner { width: 28px; height: 28px; border: 3px solid #d1d5db; border-top-color: #111827; border-radius: 50%; animation: spin .9s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .prospect-card { 
-        border: 1px solid #e5e7eb; 
-        border-radius: 8px; 
-        padding: 16px; 
-        margin-bottom: 16px; 
-        background: #fff;
-    }
-    .prospect-card:hover { 
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
-        transform: translateY(-2px); 
-        transition: all 0.2s ease;
-    }
-    .prospect-status { 
-        font-size: 12px; 
-        padding: 4px 8px; 
-        border-radius: 4px; 
-        font-weight: 500;
-    }
-    .status-new { background: #dbeafe; color: #1e40af; }
-    .status-contacted { background: #fef3c7; color: #d97706; }
-    .status-qualified { background: #d1fae5; color: #065f46; }
-    .status-converted { background: #ecfdf5; color: #047857; }
-    .tab-pane { display: none; }
-    .tab-pane.active { display: block; }
-    .nav-tabs .nav-link.active { background-color: #fff; border-color: #dee2e6 #dee2e6 #fff; }
-    .enrichment-dropdown { 
-        border-top: 1px solid #e9ecef; 
-        margin-top: 1rem; 
-        padding-top: 1rem; 
-    }
-    .prospect-detail-header h5 { 
-        color: #495057; 
-        font-weight: 600; 
-    }
-    @media (max-width: 992px) {
-        #map { height: 420px; }
-        .results-scroll { max-height: 360px; }
+        border-radius: 20px;
+        box-shadow: var(--shadow-lg);
+        overflow: hidden;
     }
     
-    /* Enhanced UI Improvements */
-    .btn {
+    .gm-style .gm-style-iw-c {
         border-radius: 12px !important;
-        font-weight: 500;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .results-scroll { 
+        max-height: 600px; 
+        overflow: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--primary-color) transparent;
+    }
+    
+    .results-scroll::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .results-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    .results-scroll::-webkit-scrollbar-thumb {
+        background: var(--primary-color);
+        border-radius: 3px;
+    }
+    
+    .result-item { 
+        cursor: pointer; 
+        border-radius: 12px;
+        transition: all 0.2s ease;
+        border: 1px solid var(--border);
+        margin-bottom: 0.5rem;
+    }
+    
+    .result-item:hover { 
+        background: var(--surface-alt);
+        border-color: var(--primary-color);
+        transform: translateY(-1px);
+        box-shadow: var(--shadow);
+    }
+    
+    .photo-grid { 
+        display: grid; 
+        grid-template-columns: repeat(3, 1fr); 
+        gap: 12px; 
+    }
+    
+    .photo-grid img { 
+        width: 100%; 
+        height: 120px; 
+        object-fit: cover; 
+        border-radius: 12px; 
+    }
+    
+    .loading-overlay { 
+        position: absolute; 
+        inset: 0; 
+        background: rgba(255,255,255,0.9); 
+        backdrop-filter: blur(10px);
+        display: none; 
+        align-items: center; 
+        justify-content: center; 
+        z-index: 5; 
+        border-radius: inherit; 
+    }
+    
+    .loading-overlay.show { display: flex; }
+    
+    .spinner { 
+        width: 32px; 
+        height: 32px; 
+        border: 3px solid var(--border); 
+        border-top-color: var(--primary-color); 
+        border-radius: 50%; 
+        animation: spin 1s linear infinite; 
+    }
+    
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    /* Modern Prospect Cards */
+    .prospect-card { 
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        background: white;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .prospect-card:hover { 
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+        border-color: var(--primary-color);
+    }
+    
+    /* Enhanced Pipeline Status Badges - More Prominent */
+    .prospect-status {
+        font-size: 0.85rem;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        font-weight: 700;
+        text-transform: none;
+        letter-spacing: 0.3px;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border: 2px solid rgba(255,255,255,0.3);
+        position: relative;
+        z-index: 1;
+    }
+
+    /* Status icons */
+    .prospect-status .status-icon {
+        font-size: 1.1rem;
+        font-weight: bold;
+    }
+    
+    .status-new_leads { 
+        background: #e0f2fe; 
+        color: #0277bd;
+    }
+    
+    .status-first_contact { 
+        background: #fff3e0; 
+        color: #f57c00;
+    }
+    
+    .status-meeting_planned { 
+        background: #f3e5f5; 
+        color: #7b1fa2;
+    }
+    
+    .status-follow_up { 
+        background: #e8f5e8; 
+        color: #2e7d32;
+    }
+    
+    .status-customer { 
+        background: #e8f5e8; 
+        color: #1b5e20;
+    }
+    
+    .status-ex_customer { 
+        background: #ffebee; 
+        color: #c62828;
+    }
+    
+    .status-contact_later { 
+        background: #fff8e1; 
+        color: #f9a825;
+    }
+    
+    .status-unqualified { 
+        background: #fafafa; 
+        color: #424242;
+    }
+    
+    /* Pipeline Overview Cards */
+    .pipeline-overview {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e5e7eb;
+    }
+    
+    .pipeline-stage {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+        transition: all 0.2s ease;
+        cursor: pointer;
         position: relative;
         overflow: hidden;
     }
     
-    .btn::before {
+    .pipeline-stage:hover {
+        background: #f1f5f9;
+        border-color: #3b82f6;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .pipeline-stage.active {
+        background: #eff6ff;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .pipeline-stage-inactive {
+        background: #f9fafb;
+        border-color: #d1d5db;
+        opacity: 0.8;
+    }
+    
+    .pipeline-stage-inactive:hover {
+        background: #f3f4f6;
+        border-color: #9ca3af;
+        opacity: 1;
+    }
+    
+    .pipeline-stage-inactive .stage-icon {
+        opacity: 0.7;
+    }
+    
+    .pipeline-stage-inactive .stage-label {
+        color: #6b7280;
+        font-size: 0.75rem;
+    }
+    
+    /* Active dropdown item styling */
+    .dropdown-item.active {
+        background-color: #e3f2fd;
+        color: #1976d2;
+        font-weight: 500;
+    }
+    
+    .pipeline-stage .stage-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    
+    .pipeline-stage .stage-count {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+        color: #1f2937;
+    }
+    
+    .pipeline-stage .stage-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+    }
+    
+    .pipeline-stage::before {
         content: '';
         position: absolute;
         top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-        transition: left 0.5s;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        opacity: 0;
+        transition: opacity 0.2s ease;
     }
     
-    .btn:hover::before {
-        left: 100%;
+    .pipeline-stage:hover::before,
+    .pipeline-stage.active::before {
+        opacity: 1;
     }
     
-    .btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    /* Tab Navigation */
+    .nav-pills .nav-link {
+        border-radius: 8px;
+        font-weight: 500;
+        padding: 0.75rem 1.5rem;
+        transition: all 0.2s ease;
+        color: #6b7280;
+        background: transparent;
     }
     
-    .prospect-card {
-        border-radius: 16px !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        border: 1px solid #f1f5f9 !important;
-        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        background: rgba(255,255,255,0.9);
-        backdrop-filter: blur(10px);
+    .nav-pills .nav-link:hover:not(.active) {
+        background: #f3f4f6;
+        color: #374151;
     }
     
-    .prospect-card:hover {
-        box-shadow: 0 12px 40px rgba(0,0,0,0.1) !important;
-        transform: translateY(-4px) !important;
-        border-color: #e2e8f0 !important;
+    .nav-pills .nav-link.active {
+        background: var(--primary-color);
+        color: white;
     }
     
+    /* Notes Section */
     .notes-section {
-        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
-        border-radius: 12px;
-        padding: 16px;
-        margin-top: 16px;
-        border: 1px solid #e2e8f0;
+        background: #f9fafb;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1rem;
+        border: 1px solid #e5e7eb;
     }
     
     .notes-textarea {
@@ -118,9 +306,10 @@
         background: transparent;
         resize: vertical;
         min-height: 80px;
-        font-size: 14px;
-        line-height: 1.5;
+        font-size: 0.95rem;
+        line-height: 1.6;
         width: 100%;
+        font-family: inherit;
     }
     
     .notes-textarea:focus {
@@ -128,171 +317,288 @@
         box-shadow: none;
     }
     
-    .form-control, .form-select {
-        border-radius: 12px !important;
-        border: 2px solid #f1f5f9;
-        transition: all 0.3s ease;
-    }
-    
-    .form-control:focus, .form-select:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-    
-    .status-badge {
-        border-radius: 20px;
-        padding: 6px 12px;
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
+    /* Action Buttons */
     .card-actions {
         display: flex;
-        gap: 8px;
+        gap: 0.75rem;
         flex-wrap: wrap;
-        margin-top: 12px;
+        margin-top: 1.25rem;
     }
     
     .card-actions .btn {
         font-size: 0.875rem;
-        padding: 6px 16px;
-    }
-    
-    /* Navigation styling */
-    .nav-pills .nav-link {
+        padding: 0.625rem 1.25rem;
         border-radius: 12px;
         font-weight: 500;
-        padding: 12px 24px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        color: #6b7280;
-        background: transparent;
-        border: 2px solid transparent;
     }
     
-    .nav-pills .nav-link:hover:not(.active) {
-        background-color: #f3f4f6;
-        color: #374151;
-        transform: translateY(-1px);
+    
+    /* Enrichment Status */
+    .enrichment-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        padding: 0.5rem 1rem;
+        border-radius: 50px;
+        font-weight: 500;
     }
     
-    .nav-pills .nav-link.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-        border-color: transparent;
+    .enrichment-status.completed {
+        background: rgba(16, 185, 129, 0.1);
+        color: #065f46;
+    }
+    
+    .enrichment-status.in-progress {
+        background: rgba(59, 130, 246, 0.1);
+        color: #1e40af;
+    }
+    
+    .enrichment-status.failed {
+        background: rgba(239, 68, 68, 0.1);
+        color: #991b1b;
+    }
+    
+    .enrichment-status.pending {
+        background: rgba(156, 163, 175, 0.1);
+        color: #4b5563;
+    }
+    
+    /* Clickable Elements */
+    .clickable-text {
+        color: #2563eb !important;
+        text-decoration: underline;
+        text-decoration-color: rgba(37, 99, 235, 0.4);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: 600;
+    }
+    
+    .clickable-text:hover {
+        text-decoration-color: #2563eb;
+        color: #1d4ed8 !important;
+    }
+    
+    /* Responsive Design */
+    @media (max-width: 992px) {
+        #map { height: 450px; }
+        .results-scroll { max-height: 400px; }
+        .prospect-card { padding: 1.25rem; margin-bottom: 1.25rem; }
+        .nav-pills .nav-link { padding: 0.75rem 1.5rem; }
+    }
+    
+    @media (max-width: 576px) {
+        .main-container { padding: 1.5rem; }
+        .filter-controls { padding: 1.25rem; }
+        .card-actions { gap: 0.5rem; }
+        .card-actions .btn { font-size: 0.8rem; padding: 0.5rem 1rem; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex align-items-center justify-content-between bg-white rounded-3 shadow-sm p-3">
-                <ul class="nav nav-pills" id="prospectTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="search-tab" data-bs-toggle="tab" data-bs-target="#search-content" type="button" role="tab">
-                            <i class="fas fa-search me-2"></i>Search Prospects
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="database-tab" data-bs-toggle="tab" data-bs-target="#database-content" type="button" role="tab">
-                            <i class="fas fa-database me-2"></i>Prospect Database
-                        </button>
-                    </li>
-
-
-                </ul>
-            </div>
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold text-dark">Prospecting</h1>
+            <p class="text-muted mb-0">Discover and manage potential business opportunities</p>
         </div>
     </div>
+
+    <!-- Tab Navigation -->
+    <ul class="nav nav-pills mb-4" id="prospectTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="search-tab" data-bs-toggle="tab" data-bs-target="#search-content" type="button" role="tab">
+                <i class="fas fa-search me-2"></i>Search Prospects
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="database-tab" data-bs-toggle="tab" data-bs-target="#database-content" type="button" role="tab">
+                <i class="fas fa-database me-2"></i>Prospect Database
+            </button>
+        </li>
+    </ul>
     
-    <div class="row">
-        <div class="col-12">
-                <div class="tab-content">
-                    <!-- Search Tab -->
-                    <div class="tab-pane active" id="search-content">
-                        <div class="d-flex align-items-center gap-3 mb-3">
-                            <i class="fas fa-magnifying-glass"></i>
-                            <input class="form-control" id="prospect-search" placeholder="Search e.g. 'vegan antwerp' (Google Places)" style="flex: 1;">
-                        </div>
-                        {% if not google_maps_api_key %}
-                        <div class="alert alert-warning">
-                            <strong>Warning:</strong> Google Maps API key not configured. Please set GOOGLE_MAPS_API_KEY in your .env file.
-                        </div>
-                        {% endif %}
-                        <div class="row g-3">
-                            <div class="col-lg-7">
-                                <div class="position-relative">
-                                    <div id="map" style="background: #f8f9fa; display: flex; align-items: center; justify-content: center; min-height: 400px;">
-                                        <div class="text-center">
-                                            <div class="spinner mb-2"></div>
-                                            <p class="text-muted">Loading Google Maps...</p>
-                                        </div>
-                                    </div>
-                                    <div id="map-loading" class="loading-overlay"><div class="spinner"></div></div>
-                                </div>
-                            </div>
-                            <div class="col-lg-5">
-                                <div class="row g-3">
-                                    <div class="col-12">
-                                        <div class="position-relative">
-                                            <div id="results-loading" class="loading-overlay"><div class="spinner"></div></div>
-                                            <div class="results-scroll list-group" id="result-list"></div>
-                                        </div>
-                                        <div id="selection-details" class="mt-2 small text-muted">Type a query (e.g., 'vegan antwerp') and press Enter. Results will appear here and on the map.</div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="position-relative">
-                                            <div id="detail-loading" class="loading-overlay"><div class="spinner"></div></div>
-                                            <div id="detail-panel" class="p-3 border rounded-3 bg-white">Click a result or marker to view details.</div>
-                                        </div>
-                                    </div>
-                                </div>
+    <!-- Tab Content -->
+    <div class="tab-content">
+        <!-- Search Tab -->
+        <div class="tab-pane active" id="search-content">
+            <!-- Search Input -->
+            <div class="d-flex align-items-center gap-3 mb-4">
+                <i class="fas fa-search text-primary"></i>
+                <input class="form-control" id="prospect-search" placeholder="Search e.g. 'vegan antwerp' (Google Places)" style="flex: 1;">
+            </div>
+            
+            {% if not google_maps_api_key %}
+            <div class="alert alert-warning">
+                <strong>Warning:</strong> Google Maps API key not configured. Please set GOOGLE_MAPS_API_KEY in your .env file.
+            </div>
+            {% endif %}
+            
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="position-relative">
+                        <div id="map" style="background: #f8f9fa; display: flex; align-items: center; justify-content: center; min-height: 500px;">
+                            <div class="text-center">
+                                <div class="spinner mb-2"></div>
+                                <p class="text-muted">Loading Google Maps...</p>
                             </div>
                         </div>
+                        <div id="map-loading" class="loading-overlay"><div class="spinner"></div></div>
                     </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="position-relative mb-3">
+                        <div id="results-loading" class="loading-overlay"><div class="spinner"></div></div>
+                        <div class="results-scroll list-group" id="result-list"></div>
+                    </div>
+                    <div id="selection-details" class="small text-muted mb-3">Type a query (e.g., 'vegan antwerp') and press Enter. Results will appear here and on the map.</div>
+                    <div class="position-relative">
+                        <div id="detail-loading" class="loading-overlay"><div class="spinner"></div></div>
+                        <div id="detail-panel" class="p-3 border rounded bg-white">Click a result or marker to view details.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
                     
-                    <!-- Database Tab -->
-                    <div class="tab-pane" id="database-content">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="d-flex align-items-center gap-3 flex-wrap">
-                                <input type="text" class="form-control" id="prospect-filter" placeholder="Filter prospects..." style="width: 250px;">
-                                <select class="form-select" id="status-filter" style="width: 130px;">
-                                    <option value="">All Statuses</option>
-                                    <option value="new">New</option>
-                                    <option value="contacted">Contacted</option>
-                                    <option value="qualified">Qualified</option>
-                                    <option value="converted">Converted</option>
-                                </select>
-                                <select class="form-select" id="city-filter" style="width: 130px;">
-                                    <option value="">All Cities</option>
-                                </select>
-                                <select class="form-select" id="keyword-filter" style="width: 150px;">
-                                    <option value="">All Keywords</option>
-                                </select>
-                                <button class="btn btn-outline-secondary rounded-pill btn-sm" onclick="clearAllFilters()">
-                                    <i class="fas fa-times me-1"></i>Clear Filters
-                                </button>
-                            </div>
-                            <div class="btn-group">
-                                <button class="btn btn-primary rounded-pill shadow-sm" onclick="refreshProspects()">
-                                    <i class="fas fa-sync-alt me-2"></i>Refresh
-                                </button>
-                                <button class="btn btn-success rounded-pill shadow-sm" onclick="retryFailedEnrichments()">
-                                    <i class="fas fa-magic me-2"></i>Retry Enrichment
-                                </button>
+        <!-- Database Tab -->
+        <div class="tab-pane" id="database-content">
+            <!-- Pipeline Overview -->
+            <div class="pipeline-overview">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h6 class="mb-1 fw-semibold text-dark">📈 Sales Pipeline</h6>
+                        <small class="text-muted">Track your prospects through each stage</small>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="refreshPipelineStats()">
+                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                    </button>
+                </div>
+                <!-- Active Pipeline Stages -->
+                <div class="mb-3">
+                    <h6 class="mb-2 text-muted fw-normal" style="font-size: 0.8rem;">ACTIVE PIPELINE</h6>
+                    <div class="row g-2" id="active-pipeline-stats">
+                        <div class="col-6 col-lg-2">
+                            <div class="pipeline-stage" onclick="filterByStatus('new_leads')">
+                                <span class="stage-icon">🔍</span>
+                                <div class="stage-count" id="count-new_leads">-</div>
+                                <div class="stage-label">New Leads</div>
                             </div>
                         </div>
-                        <div id="prospects-container">
-                            <div class="text-center py-5">
-                                <i class="fas fa-database fa-3x text-muted mb-3"></i>
-                                <p class="text-muted">Loading prospects...</p>
+                        <div class="col-6 col-lg-2">
+                            <div class="pipeline-stage" onclick="filterByStatus('visited')">
+                                <span class="stage-icon">👁️</span>
+                                <div class="stage-count" id="count-visited">-</div>
+                                <div class="stage-label">Visited</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <div class="pipeline-stage" onclick="filterByStatus('first_contact')">
+                                <span class="stage-icon">🤝</span>
+                                <div class="stage-count" id="count-first_contact">-</div>
+                                <div class="stage-label">First Contact</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <div class="pipeline-stage" onclick="filterByStatus('meeting_planned')">
+                                <span class="stage-icon">📅</span>
+                                <div class="stage-count" id="count-meeting_planned">-</div>
+                                <div class="stage-label">Meeting Planned</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <div class="pipeline-stage" onclick="filterByStatus('follow_up')">
+                                <span class="stage-icon">✍️</span>
+                                <div class="stage-count" id="count-follow_up">-</div>
+                                <div class="stage-label">Follow-up</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-2">
+                            <div class="pipeline-stage" onclick="filterByStatus('customer')">
+                                <span class="stage-icon">🌱</span>
+                                <div class="stage-count" id="count-customer">-</div>
+                                <div class="stage-label">Customer</div>
                             </div>
                         </div>
                     </div>
+                </div>
+                
+                <!-- Inactive/Archive Stages -->
+                <div>
+                    <h6 class="mb-2 text-muted fw-normal" style="font-size: 0.8rem;">INACTIVE & ARCHIVE</h6>
+                    <div class="row g-2" id="inactive-pipeline-stats">
+                        <div class="col-6 col-lg-4">
+                            <div class="pipeline-stage pipeline-stage-inactive" onclick="filterByStatus('ex_customer')">
+                                <span class="stage-icon">🔙</span>
+                                <div class="stage-count" id="count-ex_customer">-</div>
+                                <div class="stage-label">Ex-Customer</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-4">
+                            <div class="pipeline-stage pipeline-stage-inactive" onclick="filterByStatus('contact_later')">
+                                <span class="stage-icon">⏳</span>
+                                <div class="stage-count" id="count-contact_later">-</div>
+                                <div class="stage-label">Contact Later</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-4">
+                            <div class="pipeline-stage pipeline-stage-inactive" onclick="filterByStatus('unqualified')">
+                                <span class="stage-icon">❌</span>
+                                <div class="stage-count" id="count-unqualified">-</div>
+                                <div class="stage-label">Unqualified</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enhanced Filter Controls -->
+            <div class="d-flex flex-wrap align-items-center gap-3 mb-4 p-3 bg-white rounded border">
+                <input type="text" class="form-control" id="prospect-filter" placeholder="Filter prospects..." style="max-width: 250px;">
+                <select class="form-select" id="status-filter" style="max-width: 180px;">
+                    <option value="">All Statuses</option>
+                    <option value="new_leads">🔍 New Leads</option>
+                    <option value="visited">👁️ Visited</option>
+                    <option value="first_contact">🤝 First Contact</option>
+                    <option value="meeting_planned">📅 Meeting Planned</option>
+                    <option value="follow_up">✍️ Follow-up</option>
+                    <option value="customer">🌱 Customer</option>
+                    <option value="ex_customer">🔙 Ex-Customer</option>
+                    <option value="contact_later">⏳ Contact Later</option>
+                    <option value="unqualified">❌ Unqualified</option>
+                </select>
+                <select class="form-select" id="region-filter" style="max-width: 150px;">
+                    <option value="">All Regions</option>
+                </select>
+                <select class="form-select" id="prospect-type-filter" style="max-width: 150px;">
+                    <option value="">All Types</option>
+                </select>
+                <select class="form-select" id="city-filter" style="max-width: 150px;">
+                    <option value="">All Cities</option>
+                </select>
+                <select class="form-select" id="keyword-filter" style="max-width: 150px;">
+                    <option value="">All Keywords</option>
+                </select>
+                <div class="ms-auto d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="clearAllFilters()">
+                        <i class="fas fa-times me-1"></i>Clear
+                    </button>
+                    <button class="btn btn-primary" onclick="refreshProspects()">
+                        <i class="fas fa-sync-alt me-2"></i>Refresh
+                    </button>
+                    <button class="btn btn-success" onclick="retryFailedEnrichments()">
+                        <i class="fas fa-sparkles me-2"></i>Enrich
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Prospects Container -->
+            <div id="prospects-container">
+                <div class="text-center py-5">
+                    <i class="fas fa-database fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">Loading prospects...</p>
+                </div>
             </div>
         </div>
     </div>
@@ -555,6 +861,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load prospects on page load (but don't wait for it to complete)
     setTimeout(() => {
         loadProspects();
+        loadPipelineStats();
     }, 1000);
 });
 
@@ -853,9 +1160,14 @@ async function loadProspects() {
     }
 }
 
+
 // Display prospects in the database tab
 function displayProspects(prospects) {
     const container = document.getElementById('prospects-container');
+    
+    console.log('Displaying prospects:', prospects.length);
+    console.log('Prospect statuses:', prospects.map(p => p.status));
+    
     
     if (prospects.length === 0) {
         container.innerHTML = `
@@ -868,38 +1180,82 @@ function displayProspects(prospects) {
     }
     
     const prospectsHtml = prospects.map(prospect => `
-        <div class="prospect-card" data-id="${prospect.id}">
+        <div class="prospect-card" data-id="${prospect.id}" data-status="${prospect.status || 'new_leads'}">
             <div class="d-flex justify-content-between align-items-start mb-2">
                 <div class="flex-grow-1">
-                    <h6 class="mb-1">${prospect.name || 'Unnamed Prospect'}</h6>
+                    <!-- PROMINENT STATUS BADGE with Quick Change - Now at the top -->
+                    <div class="mb-2 d-flex align-items-center gap-2">
+                        <span class="prospect-status status-${prospect.status || 'new_leads'}">
+                            <span class="status-icon">${getStatusIcon(prospect.status || 'new_leads')}</span>
+                            ${getStatusDisplay(prospect.status || 'new_leads')}
+                        </span>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Change Status">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="updateProspectStatus('${prospect.id}', 'new_leads', event)">🔍 New Leads</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="updateProspectStatus('${prospect.id}', 'visited', event)">👁️ Visited</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="updateProspectStatus('${prospect.id}', 'first_contact', event)">🤝 First Contact</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="updateProspectStatus('${prospect.id}', 'meeting_planned', event)">📅 Meeting Planned</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="updateProspectStatus('${prospect.id}', 'follow_up', event)">✍️ Follow-up</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="updateProspectStatus('${prospect.id}', 'customer', event)">🌱 Customer</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="updateProspectStatus('${prospect.id}', 'ex_customer', event)">🔙 Ex-Customer</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" onclick="showContactLaterModal('${prospect.id}'); event.preventDefault();">⏳ Contact Later</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="showUnqualifiedModal('${prospect.id}'); event.preventDefault();">❌ Unqualified</a></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <h6 class="mb-1">
+                        <span class="clickable-text"
+                              onclick="searchCompanyByName('${(prospect.name || 'Unnamed Prospect').replace(/'/g, "\\'")}'"
+                              title="Click to search in Companies">${prospect.name || 'Unnamed Prospect'}</span>
+                    </h6>
                     <small class="text-muted">${prospect.address || 'No address'}</small>
-                    
+
                     <!-- Tags Section -->
                     <div class="mt-2">
-                        ${prospect.tags?.city?.length ? prospect.tags.city.map(city => 
+                        ${prospect.tags?.city?.length ? prospect.tags.city.map(city =>
                             `<span class="badge bg-primary me-1 mb-1 rounded-pill" style="font-size: 10px;">
                                 <i class="fas fa-map-marker-alt me-1"></i>${city}
                             </span>`
                         ).join('') : ''}
-                        ${prospect.tags?.keywords?.length ? prospect.tags.keywords.slice(0, 3).map(keyword => 
+                        ${prospect.tags?.keywords?.length ? prospect.tags.keywords.slice(0, 3).map(keyword =>
                             `<span class="badge bg-info me-1 mb-1 rounded-pill" style="font-size: 10px;">
                                 <i class="fas fa-tag me-1"></i>${keyword}
                             </span>`
                         ).join('') : ''}
-                        ${prospect.search_query ? 
+                        ${prospect.search_query ?
                             `<span class="badge bg-secondary me-1 mb-1 rounded-pill" style="font-size: 9px;" title="Search Query">
                                 <i class="fas fa-search me-1"></i>${prospect.search_query.length > 15 ? prospect.search_query.substring(0, 15) + '...' : prospect.search_query}
                             </span>` : ''}
+                        
+                        <!-- Less prominent status tags -->
+                        <div class="mt-1">
+                            ${prospect.status === 'contact_later' ? 
+                                `<span class="badge bg-light text-dark border me-1 mb-1" style="font-size: 8px; opacity: 0.7;" title="Contact Later">
+                                    <i class="fas fa-clock me-1"></i>Contact Later
+                                </span>` : ''}
+                            ${prospect.status === 'unqualified' ? 
+                                `<span class="badge bg-light text-dark border me-1 mb-1" style="font-size: 8px; opacity: 0.7;" title="Unqualified">
+                                    <i class="fas fa-times me-1"></i>Unqualified
+                                </span>` : ''}
+                        </div>
                     </div>
                 </div>
-                <span class="prospect-status status-${prospect.status || 'new'}">${(prospect.status || 'new').toUpperCase()}</span>
             </div>
             
             <div class="row g-3 mt-2">
                 <div class="col-md-6">
-                    ${prospect.enriched_data?.vat ? `<div class="d-flex align-items-center justify-content-between">
-                        <span><strong>VAT:</strong> ${prospect.enriched_data.vat}</span>
-                        <button class="btn btn-sm btn-outline-primary rounded-pill ms-2" 
+                    ${prospect.enriched_data?.vat ? `<div class="d-flex align-items-center justify-content-between mb-2">
+                        <span><strong>VAT:</strong> 
+                            <span class="clickable-text" 
+                                  onclick="searchCompanyByVat('${prospect.enriched_data.vat}')" 
+                                  title="Click to search in Companies">${prospect.enriched_data.vat}</span>
+                        </span>
+                        <button class="btn btn-sm btn-outline-primary" 
                                 onclick="searchCompanyByVat('${prospect.enriched_data.vat}')" 
                                 title="Search VAT in Companies">
                             <i class="fas fa-search"></i>
@@ -913,15 +1269,19 @@ function displayProspects(prospects) {
                     ${prospect.enriched_data?.directors ? `<div><strong>Directors:</strong> ${
                         Array.isArray(prospect.enriched_data.directors) 
                             ? prospect.enriched_data.directors.map(director => 
-                                `<span class="director-link text-primary text-decoration-underline" 
-                                      style="cursor: pointer;" 
-                                      onclick="searchDirectorInCrm('${director.replace(/'/g, "\\'")}')" 
-                                      title="Search in CRM">${director}</span>`
+                                director && typeof director === 'string' 
+                                    ? `<span class="director-link text-primary text-decoration-underline" 
+                                          style="cursor: pointer;" 
+                                          onclick="searchDirectorInCrm('${director.replace(/'/g, "\\'")}')" 
+                                          title="Search in CRM">${director}</span>`
+                                    : `<span>${director || 'Unknown'}</span>`
                               ).join(', ')
-                            : `<span class="director-link text-primary text-decoration-underline" 
-                                     style="cursor: pointer;" 
-                                     onclick="searchDirectorInCrm('${prospect.enriched_data.directors.replace(/'/g, "\\'")}')" 
-                                     title="Search in CRM">${prospect.enriched_data.directors}</span>`
+                            : prospect.enriched_data.directors && typeof prospect.enriched_data.directors === 'string'
+                                ? `<span class="director-link text-primary text-decoration-underline" 
+                                         style="cursor: pointer;" 
+                                         onclick="searchDirectorInCrm('${prospect.enriched_data.directors.replace(/'/g, "\\'")}')" 
+                                         title="Search in CRM">${prospect.enriched_data.directors}</span>`
+                                : `<span>${prospect.enriched_data.directors || 'Unknown'}</span>`
                     }</div>` : ''}
                     <div class="small text-muted mt-2">Added: ${new Date(prospect.created_at).toLocaleDateString()}</div>
                 </div>
@@ -1002,15 +1362,7 @@ function displayProspects(prospects) {
             </div>
             
             <div class="card-actions">
-                <button class="btn btn-outline-primary rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'contacted')">
-                    <i class="fas fa-phone me-1"></i>Contacted
-                </button>
-                <button class="btn btn-outline-success rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'qualified')">
-                    <i class="fas fa-check me-1"></i>Qualified
-                </button>
-                <button class="btn btn-outline-warning rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'converted')">
-                    <i class="fas fa-star me-1"></i>Converted
-                </button>
+                ${generateStatusActions(prospect)}
                 <button class="btn btn-outline-danger rounded-pill" onclick="deleteProspect('${prospect.id}')">
                     <i class="fas fa-trash me-1"></i>Delete
                 </button>
@@ -1068,27 +1420,6 @@ function updateFilterDropdowns(prospects) {
 }
 
 // Update prospect status
-async function updateProspectStatus(prospectId, newStatus) {
-    try {
-        const response = await fetch(`/api/prospects/${prospectId}`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ status: newStatus })
-        });
-        
-        if (response.ok) {
-            showToast(`Prospect status updated to ${newStatus}`, 'success');
-            loadProspects(); // Refresh the list
-        } else {
-            throw new Error('Failed to update prospect status');
-        }
-    } catch (error) {
-        console.error('Error updating prospect:', error);
-        showToast('Failed to update prospect status', 'error');
-    }
-}
 
 // Delete prospect
 async function deleteProspect(prospectId) {
@@ -1258,6 +1589,16 @@ document.addEventListener('DOMContentLoaded', function() {
         keywordFilter.addEventListener('change', filterProspects);
     }
     
+    const regionFilter = document.getElementById('region-filter');
+    if (regionFilter) {
+        regionFilter.addEventListener('change', filterProspects);
+    }
+    
+    const prospectTypeFilter = document.getElementById('prospect-type-filter');
+    if (prospectTypeFilter) {
+        prospectTypeFilter.addEventListener('change', filterProspects);
+    }
+    
 
 });
 
@@ -1266,12 +1607,22 @@ function filterProspects() {
     const statusFilter = document.getElementById('status-filter')?.value || '';
     const cityFilter = document.getElementById('city-filter')?.value || '';
     const keywordFilter = document.getElementById('keyword-filter')?.value || '';
+    const regionFilter = document.getElementById('region-filter')?.value || '';
+    const prospectTypeFilter = document.getElementById('prospect-type-filter')?.value || '';
     const prospects = document.querySelectorAll('.prospect-card');
     
     prospects.forEach(card => {
         const name = card.querySelector('h6')?.textContent.toLowerCase() || '';
         const address = card.querySelector('.text-muted')?.textContent.toLowerCase() || '';
-        const status = card.querySelector('.prospect-status')?.textContent.toLowerCase() || '';
+        // Use data attribute instead of parsing text
+        const status = card.getAttribute('data-status') || '';
+        
+        // Debug: log what we're matching
+        if (statusFilter === 'new_leads') {
+            console.log('Card data-status:', status);
+            console.log('Looking for:', statusFilter);
+            console.log('Match:', status === statusFilter);
+        }
         
         // Get tag badges for city and keyword filtering
         const cityBadges = card.querySelectorAll('.badge.bg-primary');
@@ -1281,11 +1632,16 @@ function filterProspects() {
         const keywords = Array.from(keywordBadges).map(badge => badge.textContent.replace('🏷️', '').trim());
         
         const matchesText = name.includes(filterText) || address.includes(filterText);
-        const matchesStatus = !statusFilter || status.includes(statusFilter);
+        const matchesStatus = !statusFilter || status === statusFilter;
         const matchesCity = !cityFilter || cities.some(city => city.includes(cityFilter));
         const matchesKeyword = !keywordFilter || keywords.some(keyword => keyword.includes(keywordFilter));
         
-        card.style.display = matchesText && matchesStatus && matchesCity && matchesKeyword ? 'block' : 'none';
+        // For region and prospect type, we'd need to add these to the card data attributes
+        // For now, we'll implement basic matching
+        const matchesRegion = !regionFilter; // TODO: implement region matching when data is available
+        const matchesType = !prospectTypeFilter; // TODO: implement type matching when data is available
+        
+        card.style.display = matchesText && matchesStatus && matchesCity && matchesKeyword && matchesRegion && matchesType ? 'block' : 'none';
     });
     
     // Update visible count
@@ -1293,13 +1649,15 @@ function filterProspects() {
     const totalCount = prospects.length;
     
     // Show filter summary if any filters are active
-    const hasActiveFilters = filterText || statusFilter || cityFilter || keywordFilter;
+    const hasActiveFilters = filterText || statusFilter || cityFilter || keywordFilter || regionFilter || prospectTypeFilter;
     if (hasActiveFilters) {
         showFilterSummary(visibleCount, totalCount, {
             text: filterText,
             status: statusFilter,
             city: cityFilter,
-            keyword: keywordFilter
+            keyword: keywordFilter,
+            region: regionFilter,
+            type: prospectTypeFilter
         });
     }
 }
@@ -1310,6 +1668,8 @@ function clearAllFilters() {
     document.getElementById('status-filter').value = '';
     document.getElementById('city-filter').value = '';
     document.getElementById('keyword-filter').value = '';
+    document.getElementById('region-filter').value = '';
+    document.getElementById('prospect-type-filter').value = '';
     filterProspects();
     hideFilterSummary();
 }
@@ -1326,6 +1686,8 @@ function showFilterSummary(visible, total, filters) {
     if (filters.status) activeFilters.push(`Status: ${filters.status}`);
     if (filters.city) activeFilters.push(`City: ${filters.city}`);
     if (filters.keyword) activeFilters.push(`Keyword: ${filters.keyword}`);
+    if (filters.region) activeFilters.push(`Region: ${filters.region}`);
+    if (filters.type) activeFilters.push(`Type: ${filters.type}`);
     
     const summary = document.createElement('div');
     summary.id = 'filter-summary';
@@ -1389,6 +1751,547 @@ window.setTimeout(function() {
     }
 }, 10000); // 10 second timeout
 
+// Enhanced Pipeline Functions
+
+// Status display mapping with icons
+function getStatusDisplay(status) {
+    const statusMap = {
+        'new_leads': 'New Leads',
+        'visited': 'Visited',
+        'first_contact': 'First Contact',
+        'meeting_planned': 'Meeting Planned',
+        'follow_up': 'Follow-up',
+        'customer': 'Customer',
+        'ex_customer': 'Ex-Customer',
+        'contact_later': 'Contact Later',
+        'unqualified': 'Unqualified'
+    };
+    return statusMap[status] || status;
+}
+
+// Status icon mapping
+function getStatusIcon(status) {
+    const iconMap = {
+        'new_leads': '🔍',
+        'visited': '👁️',
+        'first_contact': '🤝',
+        'meeting_planned': '📅',
+        'follow_up': '✍️',
+        'customer': '🌱',
+        'ex_customer': '🔙',
+        'contact_later': '⏳',
+        'unqualified': '❌'
+    };
+    return iconMap[status] || '❓';
+}
+
+// Generate appropriate action buttons based on current status
+function generateStatusActions(prospect) {
+    const currentStatus = prospect.status || 'new_leads';
+    let actions = [];
+    
+    switch(currentStatus) {
+        case 'new_leads':
+            actions = [
+                `<button class="btn btn-outline-primary rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'first_contact')">
+                    🤝 First Contact
+                </button>`,
+                `<button class="btn btn-outline-warning rounded-pill" onclick="showContactLaterModal('${prospect.id}')">
+                    ⏳ Contact Later
+                </button>`,
+                `<button class="btn btn-outline-secondary rounded-pill" onclick="showUnqualifiedModal('${prospect.id}')">
+                    ❌ Unqualified
+                </button>`
+            ];
+            break;
+        case 'first_contact':
+            actions = [
+                `<button class="btn btn-outline-success rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'meeting_planned')">
+                    📅 Schedule Meeting
+                </button>`,
+                `<button class="btn btn-outline-info rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'follow_up')">
+                    ✍️ Follow-up
+                </button>`,
+                `<button class="btn btn-outline-warning rounded-pill" onclick="showContactLaterModal('${prospect.id}')">
+                    ⏳ Contact Later
+                </button>`
+            ];
+            break;
+        case 'meeting_planned':
+            actions = [
+                `<button class="btn btn-outline-info rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'follow_up')">
+                    ✍️ Follow-up
+                </button>`,
+                `<button class="btn btn-outline-success rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'customer')">
+                    🌱 Convert to Customer
+                </button>`
+            ];
+            break;
+        case 'follow_up':
+            actions = [
+                `<button class="btn btn-outline-success rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'customer')">
+                    🌱 Convert to Customer
+                </button>`,
+                `<button class="btn btn-outline-primary rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'first_contact')">
+                    🤝 More Contact Needed
+                </button>`
+            ];
+            break;
+        case 'customer':
+            actions = [
+                `<button class="btn btn-outline-danger rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'ex_customer')">
+                    🔙 Mark as Ex-Customer
+                </button>`
+            ];
+            break;
+        case 'ex_customer':
+            actions = [
+                `<button class="btn btn-outline-success rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'customer')">
+                    🌱 Reactivate
+                </button>`,
+                `<button class="btn btn-outline-primary rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'first_contact')">
+                    🤝 Re-contact
+                </button>`
+            ];
+            break;
+        case 'contact_later':
+            actions = [
+                `<button class="btn btn-outline-primary rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'first_contact')">
+                    🤝 Contact Now
+                </button>`,
+                `<button class="btn btn-outline-info rounded-pill" onclick="showContactLaterModal('${prospect.id}')">
+                    ⏳ Reschedule
+                </button>`
+            ];
+            break;
+        case 'unqualified':
+            actions = [
+                `<button class="btn btn-outline-primary rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'new_leads')">
+                    🔍 Requalify
+                </button>`
+            ];
+            break;
+        default:
+            actions = [
+                `<button class="btn btn-outline-primary rounded-pill" onclick="updateProspectStatus('${prospect.id}', 'first_contact')">
+                    🤝 Contact
+                </button>`
+            ];
+    }
+    
+    return actions.join('');
+}
+
+// Load pipeline statistics
+async function loadPipelineStats() {
+    try {
+        console.log('Loading pipeline stats...');
+        const response = await fetch('/api/prospects/pipeline-stats');
+        console.log('Pipeline stats response:', response.status);
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Pipeline stats data:', data);
+            updatePipelineDisplay(data.stats);
+        } else {
+            const errorText = await response.text();
+            console.error('Failed to load pipeline stats:', response.status, errorText);
+        }
+    } catch (error) {
+        console.error('Error loading pipeline stats:', error);
+    }
+}
+
+// Update pipeline display with current stats
+function updatePipelineDisplay(stats) {
+    console.log('Updating pipeline display with stats:', stats);
+    const stages = ['new_leads', 'visited', 'first_contact', 'meeting_planned', 'follow_up', 'customer', 'ex_customer', 'contact_later', 'unqualified'];
+
+    stages.forEach(stage => {
+        const countElement = document.getElementById(`count-${stage}`);
+        if (countElement) {
+            const stageStats = stats[stage] || { count: 0, percentage: 0 };
+            console.log(`Setting ${stage}: ${stageStats.count}`);
+            countElement.textContent = stageStats.count;
+            countElement.parentElement.title = `${stageStats.count} prospects (${stageStats.percentage}%)`;
+        } else {
+            console.warn(`Element count-${stage} not found`);
+        }
+    });
+}
+
+
+// Refresh pipeline stats
+function refreshPipelineStats() {
+    loadPipelineStats();
+}
+
+// Filter prospects by status (from pipeline overview)
+function filterByStatus(status) {
+    const statusFilter = document.getElementById('status-filter');
+    if (statusFilter) {
+        statusFilter.value = status;
+        filterProspects();
+    }
+}
+
+// Show contact later modal
+function showContactLaterModal(prospectId) {
+    const modalHtml = `
+        <div class="modal fade" id="contactLaterModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">⏳ Schedule Contact Later</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Contact Date</label>
+                            <input type="date" class="form-control" id="contactLaterDate" min="${new Date().toISOString().split('T')[0]}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Reason / Notes</label>
+                            <select class="form-select" id="contactLaterReason">
+                                <option value="">Select a reason...</option>
+                                <option value="Seasonal business">Seasonal business</option>
+                                <option value="Budget constraints">Budget constraints</option>
+                                <option value="Currently satisfied with supplier">Currently satisfied with supplier</option>
+                                <option value="Expansion planned">Expansion planned</option>
+                                <option value="Contract renewal period">Contract renewal period</option>
+                                <option value="Management change expected">Management change expected</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Additional Notes</label>
+                            <textarea class="form-control" id="contactLaterNotes" rows="3" placeholder="Any additional details..."></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Suggested contact timeframe</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="timeframe" id="timeframe2" value="2">
+                                <label class="btn btn-outline-primary" for="timeframe2">2 months</label>
+                                
+                                <input type="radio" class="btn-check" name="timeframe" id="timeframe3" value="3" checked>
+                                <label class="btn btn-outline-primary" for="timeframe3">3 months</label>
+                                
+                                <input type="radio" class="btn-check" name="timeframe" id="timeframe6" value="6">
+                                <label class="btn btn-outline-primary" for="timeframe6">6 months</label>
+                                
+                                <input type="radio" class="btn-check" name="timeframe" id="timeframe12" value="12">
+                                <label class="btn btn-outline-primary" for="timeframe12">12 months</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-warning" onclick="saveContactLater('${prospectId}')">
+                            <i class="fas fa-clock me-1"></i>Schedule Contact
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('contactLaterModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Set default date based on selected timeframe
+    const updateDate = () => {
+        const selectedTimeframe = document.querySelector('input[name="timeframe"]:checked')?.value || 3;
+        const futureDate = new Date();
+        futureDate.setMonth(futureDate.getMonth() + parseInt(selectedTimeframe));
+        document.getElementById('contactLaterDate').value = futureDate.toISOString().split('T')[0];
+    };
+    
+    // Update date when timeframe changes
+    document.querySelectorAll('input[name="timeframe"]').forEach(radio => {
+        radio.addEventListener('change', updateDate);
+    });
+    
+    // Set initial date
+    updateDate();
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('contactLaterModal'));
+    modal.show();
+}
+
+// Save contact later
+async function saveContactLater(prospectId) {
+    const date = document.getElementById('contactLaterDate').value;
+    const reason = document.getElementById('contactLaterReason').value;
+    const notes = document.getElementById('contactLaterNotes').value;
+    
+    if (!date) {
+        alert('Please select a contact date');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/prospects/${prospectId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                status: 'contact_later',
+                contact_later_date: date,
+                contact_later_reason: reason + (notes ? ' - ' + notes : ''),
+                last_contact_date: new Date().toISOString().split('T')[0]
+            })
+        });
+        
+        if (response.ok) {
+            showToast('⏳ Contact later scheduled successfully with automatic task created', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('contactLaterModal')).hide();
+            loadProspects();
+            loadPipelineStats();
+            
+            // Show notification about task creation
+            setTimeout(() => {
+                showToast('📋 Follow-up task automatically created in Tasks tab', 'info');
+            }, 2000);
+        } else {
+            throw new Error('Failed to schedule contact');
+        }
+    } catch (error) {
+        console.error('Error scheduling contact:', error);
+        showToast('Failed to schedule contact: ' + error.message, 'error');
+    }
+}
+
+// Show unqualified modal
+function showUnqualifiedModal(prospectId) {
+    // Load unqualified reasons first
+    fetch('/api/unqualified-reasons')
+        .then(response => response.json())
+        .then(data => {
+            const reasons = data.reasons || [];
+            const reasonOptions = reasons.map(reason => 
+                `<option value="${reason.reason_code}">${reason.reason_text}</option>`
+            ).join('');
+            
+            const modalHtml = `
+                <div class="modal fade" id="unqualifiedModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">❌ Mark as Unqualified</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Why is this prospect unqualified?</label>
+                                    <select class="form-select" id="unqualifiedReason" required>
+                                        <option value="">Select a reason...</option>
+                                        ${reasonOptions}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Additional Details</label>
+                                    <textarea class="form-control" id="unqualifiedDetails" rows="3" placeholder="Provide more context about why this prospect is not suitable..."></textarea>
+                                </div>
+                                <div class="alert alert-info">
+                                    <small>
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        This information helps improve future prospecting efforts.
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-danger" onclick="saveUnqualified('${prospectId}')">
+                                    <i class="fas fa-times me-1"></i>Mark Unqualified
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Remove existing modal if any
+            const existingModal = document.getElementById('unqualifiedModal');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            
+            // Add modal to body
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('unqualifiedModal'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Error loading unqualified reasons:', error);
+            showToast('Failed to load unqualified reasons', 'error');
+        });
+}
+
+// Save unqualified
+async function saveUnqualified(prospectId) {
+    const reason = document.getElementById('unqualifiedReason').value;
+    const details = document.getElementById('unqualifiedDetails').value;
+    
+    if (!reason) {
+        alert('Please select a reason for marking as unqualified');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/prospects/${prospectId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                status: 'unqualified',
+                unqualified_reason: reason,
+                unqualified_details: details,
+                last_contact_date: new Date().toISOString().split('T')[0]
+            })
+        });
+        
+        if (response.ok) {
+            showToast('Prospect marked as unqualified', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('unqualifiedModal')).hide();
+            loadProspects();
+            loadPipelineStats();
+        } else {
+            throw new Error('Failed to mark as unqualified');
+        }
+    } catch (error) {
+        console.error('Error marking as unqualified:', error);
+        showToast('Failed to mark as unqualified: ' + error.message, 'error');
+    }
+}
+
+// Update a specific prospect card's status without refreshing the entire list
+function updateProspectCardStatus(prospectId, newStatus) {
+    const prospectCard = document.querySelector(`[data-id="${prospectId}"]`);
+    if (!prospectCard) {
+        console.warn('Prospect card not found:', prospectId);
+        return;
+    }
+    
+    // Update the data-status attribute
+    prospectCard.setAttribute('data-status', newStatus);
+    
+    // Find and update the status badge
+    const statusBadge = prospectCard.querySelector('.prospect-status');
+    if (statusBadge) {
+        // Update the status badge classes
+        statusBadge.className = `prospect-status status-${newStatus}`;
+        
+        // Update the icon and text
+        const statusIcon = statusBadge.querySelector('.status-icon');
+        const statusText = statusBadge.querySelector('.status-text') || statusBadge.childNodes[statusBadge.childNodes.length - 1];
+        
+        if (statusIcon) {
+            statusIcon.textContent = getStatusIcon(newStatus);
+        }
+        
+        // Update the text content (remove icon first, then add new text)
+        const textContent = statusBadge.textContent.replace(/^[^\w\s]+\s*/, ''); // Remove existing icon
+        statusBadge.innerHTML = `<span class="status-icon">${getStatusIcon(newStatus)}</span> ${getStatusDisplay(newStatus)}`;
+    }
+    
+    // Update the dropdown selection to reflect the new status
+    const dropdown = prospectCard.querySelector('.dropdown-menu');
+    if (dropdown) {
+        const dropdownItems = dropdown.querySelectorAll('.dropdown-item');
+        dropdownItems.forEach(item => {
+            item.classList.remove('active'); // Remove any existing active states
+        });
+        
+        // Mark the new status as active (optional visual feedback)
+        const newActiveItem = dropdown.querySelector(`[onclick*="'${newStatus}'"]`);
+        if (newActiveItem) {
+            newActiveItem.classList.add('active');
+        }
+    }
+    
+    console.log(`Updated prospect card ${prospectId} to status: ${newStatus}`);
+    
+    // Also update the prospect in the allProspects array to keep data in sync
+    if (typeof allProspects !== 'undefined' && allProspects) {
+        const prospectIndex = allProspects.findIndex(p => p.id === prospectId);
+        if (prospectIndex !== -1) {
+            allProspects[prospectIndex].status = newStatus;
+            console.log(`Updated allProspects array for prospect ${prospectId}`);
+        }
+    }
+}
+
+// Enhanced update prospect status function
+async function updateProspectStatus(prospectId, newStatus, event) {
+    // Prevent dropdown from closing if called from dropdown
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    try {
+        const updateData = {
+            status: newStatus
+        };
+        
+        console.log('Updating prospect:', prospectId, 'to status:', newStatus);
+        
+        const response = await fetch(`/api/prospects/${prospectId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'  // Add this header to indicate AJAX request
+            },
+            credentials: 'same-origin',  // Include cookies/session
+            body: JSON.stringify(updateData)
+        });
+        
+        if (response.ok) {
+            showToast(`${getStatusIcon(newStatus)} Status updated to ${getStatusDisplay(newStatus)}`, 'success');
+            
+            // Show automated task notification for certain status changes
+            if (newStatus === 'visited' || newStatus === 'first_contact') {
+                setTimeout(() => {
+                    showToast('🤖 Automated follow-up tasks created: Send email, Check reply, Call', 'info');
+                }, 1500);
+            } else if (newStatus === 'customer') {
+                setTimeout(() => {
+                    showToast('🤖 Customer success tasks scheduled: 1-month, 3-month, and 6-month check-ins. <a href="/tasks" class="text-white"><u>View in Tasks Calendar</u></a>', 'info');
+                }, 1500);
+                
+                // Debug: Check if tasks were actually created
+                setTimeout(() => {
+                    console.log(`🔍 Debug: Check tasks for prospect ${prospectId} at: /api/tasks/debug/${prospectId}`);
+                }, 2000);
+            }
+            
+            // Update the specific prospect card without refreshing the entire list
+            updateProspectCardStatus(prospectId, newStatus);
+            
+            // Only refresh pipeline stats
+            loadPipelineStats();
+        } else {
+            const errorText = await response.text();
+            console.error('API Error:', response.status, errorText);
+            throw new Error(`Failed to update prospect status: ${response.status} - ${errorText}`);
+        }
+    } catch (error) {
+        console.error('Error updating prospect:', error);
+        showToast('Failed to update prospect status', 'error');
+    }
+}
+
 // No action buttons; user triggers search with Enter, clicks list items or markers
 </script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initMap" onerror="handleMapError()"></script>
@@ -1419,6 +2322,20 @@ async function searchCompanyByVat(vatNumber) {
         showToast(`Navigating to Companies page to search for VAT ${vatNumber}`, 'info');
     } catch (error) {
         console.error('Error searching company by VAT:', error);
+        showToast('Failed to search company: ' + error.message, 'error');
+    }
+}
+
+// Search company by name
+async function searchCompanyByName(companyName) {
+    try {
+        // Navigate to the Companies page with company name search parameter
+        const companiesUrl = `/companies?search=${encodeURIComponent(companyName)}`;
+        window.location.href = companiesUrl;
+        
+        showToast(`Navigating to Companies page to search for "${companyName}"`, 'info');
+    } catch (error) {
+        console.error('Error searching company by name:', error);
         showToast('Failed to search company: ' + error.message, 'error');
     }
 }

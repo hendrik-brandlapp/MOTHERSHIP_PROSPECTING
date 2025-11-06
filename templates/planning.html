@@ -1,0 +1,1357 @@
+{% extends "base.html" %}
+
+{% block title %}Planning - DOUANO{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold text-dark">Planning</h1>
+            <p class="text-muted mb-0">Visualize company locations and plan your routes</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" onclick="loadCompaniesData()">
+                <i class="fas fa-download me-2"></i>Load Data
+            </button>
+            <button class="btn btn-success" onclick="visualizeSelectedCompanies()">
+                <i class="fas fa-map-marked-alt me-2"></i>Visualize
+            </button>
+            <button class="btn btn-outline-secondary" onclick="clearMap()">
+                <i class="fas fa-eraser me-2"></i>Clear
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="row g-3">
+        <!-- Top Row: Map (Full Width, More Square) -->
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-white border-bottom">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="fas fa-map me-2"></i>Location Map
+                        </h6>
+                        <div class="d-flex align-items-center gap-3">
+                            <small class="text-muted">
+                                <span id="map-markers-count-display">0</span> items on map
+                            </small>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="refreshCompaniesCache()">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="map" style="height: 500px; border-radius: 0 0 12px 12px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: Selection Controls and Details -->
+        <div class="col-lg-7">
+            <!-- Selection Summary Card -->
+            <div class="card mb-3" id="selection-summary-card" style="display: none;">
+                <div class="card-body p-3">
+                    <h6 class="card-title mb-2">
+                        <i class="fas fa-chart-bar me-2"></i>Selection Summary
+                    </h6>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="text-center p-2 bg-primary bg-opacity-10 rounded">
+                                <div class="fw-bold text-primary" id="summary-companies-selected">0</div>
+                                <small class="text-muted">Companies</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center p-2 bg-success bg-opacity-10 rounded">
+                                <div class="fw-bold text-success" id="summary-prospects-selected">0</div>
+                                <small class="text-muted">Prospects</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Company & Prospect Selection -->
+            <div class="card">
+                <div class="card-header bg-white border-bottom">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="fas fa-layer-group me-2"></i>Select Items
+                        </h6>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary btn-sm" onclick="selectAllItems()">
+                                <i class="fas fa-check-double me-1"></i>All
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="deselectAllItems()">
+                                <i class="fas fa-times me-1"></i>None
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <!-- Tabs -->
+                    <ul class="nav nav-tabs nav-fill border-0" id="selection-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="companies-tab" data-bs-toggle="pill" data-bs-target="#companies-panel" type="button" role="tab">
+                                <i class="fas fa-building me-1"></i>Companies 
+                                <span class="badge bg-primary ms-1" id="companies-count">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="prospects-tab" data-bs-toggle="pill" data-bs-target="#prospects-panel" type="button" role="tab">
+                                <i class="fas fa-search me-1"></i>Prospects 
+                                <span class="badge bg-success ms-1" id="prospects-count">0</span>
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <!-- Tab Content -->
+                    <div class="tab-content" id="selection-tab-content">
+                        <!-- Companies Tab -->
+                        <div class="tab-pane fade show active p-3" id="companies-panel" role="tabpanel">
+                            <!-- Search and Filter -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-7">
+                                    <input type="text" class="form-control form-control-sm" id="company-filter" placeholder="Search companies...">
+                                </div>
+                                <div class="col-5">
+                                    <select class="form-select form-select-sm" id="region-filter">
+                                        <option value="">All Regions</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Selection Status -->
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted">
+                                    <span id="selected-companies-count">0</span> of <span id="total-companies">0</span> selected
+                                </small>
+                                <small class="text-muted">
+                                    <i class="fas fa-map-marker-alt text-success me-1"></i><span id="map-markers-count">0</span> on map
+                                </small>
+                            </div>
+                            
+                            <!-- Companies List -->
+                            <div id="companies-list" style="max-height: 300px; overflow-y: auto;" class="border rounded p-2">
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-download fa-2x mb-2"></i>
+                                    <p class="mb-0">Click "Load Data" to start</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Prospects Tab -->
+                        <div class="tab-pane fade p-3" id="prospects-panel" role="tabpanel">
+                            <!-- Search -->
+                            <div class="mb-3">
+                                <input type="text" class="form-control form-control-sm" id="prospect-filter" placeholder="Search prospects...">
+                            </div>
+                            
+                            <!-- Selection Status -->
+                            <div class="mb-2">
+                                <small class="text-muted">
+                                    <span id="selected-prospects-count">0</span> of <span id="total-prospects">0</span> selected
+                                </small>
+                            </div>
+                            
+                            <!-- Prospects List -->
+                            <div id="prospects-list" style="max-height: 300px; overflow-y: auto;" class="border rounded p-2">
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-download fa-2x mb-2"></i>
+                                    <p class="mb-0">Load data to see prospects</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Details Panel -->
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-white border-bottom">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Details
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="company-details">
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-mouse-pointer fa-2x mb-3"></i>
+                            <p class="mb-0">Select companies/prospects and click "Visualize" to see them on the map</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Mapbox GL JS -->
+<link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+<script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+
+<script>
+// Global variables
+let map;
+let companies = [];
+let prospects = [];
+let filteredCompanies = [];
+let filteredProspects = [];
+let selectedCompanies = new Set();
+let selectedProspects = new Set();
+let markers = [];
+const mapboxToken = '{{ mapbox_api_key }}';
+
+// Cache configuration
+const COMPANIES_CACHE_KEY = 'duano_companies_cache_v1';
+const COMPANIES_CACHE_TIME_KEY = 'duano_companies_cache_time_v1';
+const PROSPECTS_CACHE_KEY = 'duano_prospects_cache_v1';
+const PROSPECTS_CACHE_TIME_KEY = 'duano_prospects_cache_time_v1';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Initialize map on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initializeMap();
+    
+    // Filter input event listeners
+    const companyFilter = document.getElementById('company-filter');
+    const regionFilter = document.getElementById('region-filter');
+    const prospectFilter = document.getElementById('prospect-filter');
+    
+    if (companyFilter) {
+        companyFilter.addEventListener('input', debounce(filterCompanies, 300));
+    }
+    
+    if (regionFilter) {
+        regionFilter.addEventListener('change', filterCompanies);
+    }
+    
+    if (prospectFilter) {
+        prospectFilter.addEventListener('input', debounce(filterProspects, 300));
+    }
+    
+    // Auto-load companies if cached data exists
+    const cachedData = sessionStorage.getItem(COMPANIES_CACHE_KEY);
+    const cachedTime = sessionStorage.getItem(COMPANIES_CACHE_TIME_KEY);
+    const now = Date.now();
+    
+    if (cachedData && cachedTime && (now - parseInt(cachedTime)) < CACHE_DURATION) {
+        console.log('🚀 Auto-loading companies from cache on page load');
+        loadCompaniesData();
+    }
+});
+
+// Initialize Mapbox map
+function initializeMap() {
+    mapboxgl.accessToken = mapboxToken;
+    
+    map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/light-v11', // Light theme
+        center: [4.3517, 50.8503], // Brussels, Belgium
+        zoom: 10
+    });
+
+    // Add navigation controls
+    map.addControl(new mapboxgl.NavigationControl());
+    
+    // Add fullscreen control
+    map.addControl(new mapboxgl.FullscreenControl());
+
+    console.log('✅ Mapbox map initialized');
+}
+
+// Load companies data (without adding to map)
+async function loadCompaniesData() {
+    try {
+        console.log('📡 Loading companies for planning...');
+        showToast('Loading companies...', 'info');
+        
+        // Check cache first
+        const cachedData = sessionStorage.getItem(COMPANIES_CACHE_KEY);
+        const cachedTime = sessionStorage.getItem(COMPANIES_CACHE_TIME_KEY);
+        const now = Date.now();
+        
+        // Use cache if it exists and is less than 5 minutes old
+        if (cachedData && cachedTime && (now - parseInt(cachedTime)) < CACHE_DURATION) {
+            console.log('📦 Using cached companies data for planning');
+            companies = JSON.parse(cachedData);
+            console.log(`📦 Cache contains ${companies.length} companies`);
+            showToast(`Loaded ${companies.length} companies from cache`, 'success');
+        } else {
+            console.log('📡 Making API call to /api/companies');
+            const response = await fetch('/api/companies');
+            console.log('📡 Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            companies = data.result?.data || [];
+            
+            // Debug: Log first company structure to understand available fields
+            if (companies.length > 0) {
+                console.log('🏢 Sample company data for planning:', companies[0]);
+                console.log('📋 Available fields:', Object.keys(companies[0]));
+                console.log('🏠 Invoice address field:', companies[0].invoice_address);
+            }
+            
+            // Cache the data
+            sessionStorage.setItem(COMPANIES_CACHE_KEY, JSON.stringify(companies));
+            sessionStorage.setItem(COMPANIES_CACHE_TIME_KEY, String(now));
+            
+            showToast(`Loaded ${companies.length} companies`, 'success');
+        }
+        
+        console.log(`✅ Loaded ${companies.length} companies for planning`);
+        
+        // Initialize filtered companies and populate UI
+        filteredCompanies = [...companies];
+        populateRegionFilter();
+        displayCompaniesList();
+        
+        // Also load prospects
+        await loadProspectsData();
+        
+        updateSelectionCounts();
+        
+        console.log('✅ Companies and prospects data loaded successfully');
+        
+    } catch (error) {
+        console.error('Error loading companies:', error);
+        showToast('Failed to load companies: ' + error.message, 'error');
+        
+        // Show error in UI
+        const container = document.getElementById('companies-list');
+        container.innerHTML = `
+            <div class="text-center text-danger py-4">
+                <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
+                <p>Failed to load companies: ${error.message}</p>
+                <button class="btn btn-primary btn-sm" onclick="loadCompaniesData()">
+                    <i class="fas fa-retry me-1"></i>Try Again
+                </button>
+            </div>
+        `;
+    }
+}
+
+// Load prospects data
+async function loadProspectsData() {
+    try {
+        console.log('📡 Loading prospects for planning...');
+        
+        // Check cache first
+        const cachedData = sessionStorage.getItem(PROSPECTS_CACHE_KEY);
+        const cachedTime = sessionStorage.getItem(PROSPECTS_CACHE_TIME_KEY);
+        const now = Date.now();
+        
+        // Use cache if it exists and is less than 5 minutes old
+        if (cachedData && cachedTime && (now - parseInt(cachedTime)) < CACHE_DURATION) {
+            console.log('📦 Using cached prospects data for planning');
+            prospects = JSON.parse(cachedData);
+            console.log(`📦 Cache contains ${prospects.length} prospects`);
+        } else {
+            console.log('📡 Making API call to /api/prospects');
+            const response = await fetch('/api/prospects');
+            console.log('📡 Prospects response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            prospects = data.prospects || [];
+            
+            // Debug: Log first prospect structure
+            if (prospects.length > 0) {
+                console.log('🔍 Sample prospect data for planning:', prospects[0]);
+                console.log('📋 Prospect available fields:', Object.keys(prospects[0]));
+            }
+            
+            // Cache the data
+            sessionStorage.setItem(PROSPECTS_CACHE_KEY, JSON.stringify(prospects));
+            sessionStorage.setItem(PROSPECTS_CACHE_TIME_KEY, String(now));
+        }
+        
+        console.log(`✅ Loaded ${prospects.length} prospects for planning`);
+        
+        // Initialize filtered prospects and populate UI
+        filteredProspects = [...prospects];
+        displayProspectsList();
+        
+    } catch (error) {
+        console.error('Error loading prospects:', error);
+        
+        // Show error in prospects list
+        const container = document.getElementById('prospects-list');
+        container.innerHTML = `
+            <div class="text-center text-warning py-4">
+                <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
+                <p>Failed to load prospects: ${error.message}</p>
+                <button class="btn btn-warning btn-sm" onclick="loadProspectsData()">
+                    <i class="fas fa-retry me-1"></i>Try Again
+                </button>
+            </div>
+        `;
+    }
+}
+
+// Add companies to map as markers
+async function addCompaniesToMap(companiesToAdd = companies) {
+    let geocodedCount = 0;
+    let dbCoordinatesCount = 0;
+    
+    for (const company of companiesToAdd) {
+        // First, try to use coordinates from database (if already geocoded)
+        if (company.latitude && company.longitude) {
+            const coordinates = [company.longitude, company.latitude]; // Mapbox uses [lng, lat]
+            const address = company.geocoded_address || getCompanyAddress(company);
+            addMarkerToMap(company, coordinates, address);
+            geocodedCount++;
+            dbCoordinatesCount++;
+            console.log(`📍 Using DB coordinates for ${company.name}: ${company.latitude}, ${company.longitude}`);
+            continue;
+        }
+        
+        // If no DB coordinates, fall back to geocoding
+        const address = getCompanyAddress(company);
+        
+        if (address && address !== 'No address available') {
+            try {
+                // Geocode address using Mapbox Geocoding API
+                const coordinates = await geocodeAddress(address);
+                
+                if (coordinates) {
+                    addMarkerToMap(company, coordinates, address);
+                    geocodedCount++;
+                    console.log(`🌍 Geocoded ${company.name} on-the-fly`);
+                }
+            } catch (error) {
+                console.warn(`Failed to geocode ${company.name}:`, error);
+            }
+        }
+    }
+    
+    console.log(`📍 Added ${geocodedCount} companies to map (${dbCoordinatesCount} from database, ${geocodedCount - dbCoordinatesCount} geocoded live)`);
+    
+    // Fit map to show all markers if we have any
+    if (markers.length > 0) {
+        fitMapToMarkers();
+    }
+}
+
+// Get company address from invoice_address field
+function getCompanyAddress(company) {
+    if (company.invoice_address) {
+        const addr = company.invoice_address;
+        const addressParts = [
+            addr.address_line1 || addr.address1 || addr.street,
+            addr.address_line2 || addr.address2,
+            addr.city || addr.town,
+            addr.post_code || addr.postal_code || addr.zip_code || addr.zip,
+            addr.country?.name || addr.country_name || addr.country
+        ].filter(part => part && part.trim());
+        
+        return addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
+    }
+    return 'No address available';
+}
+
+// Get company region (city or country)
+function getCompanyRegion(company) {
+    if (company.invoice_address) {
+        const addr = company.invoice_address;
+        return addr.city || addr.town || addr.country?.name || addr.country_name || addr.country || 'Unknown Region';
+    }
+    return 'Unknown Region';
+}
+
+// Populate region filter dropdown
+function populateRegionFilter() {
+    const regionFilter = document.getElementById('region-filter');
+    if (!regionFilter) return;
+    
+    // Get unique regions
+    const regions = [...new Set(companies.map(company => getCompanyRegion(company)))].sort();
+    
+    // Clear existing options (except "All Regions")
+    regionFilter.innerHTML = '<option value="">All Regions</option>';
+    
+    // Add region options
+    regions.forEach(region => {
+        if (region && region !== 'Unknown Region') {
+            const option = document.createElement('option');
+            option.value = region;
+            option.textContent = region;
+            regionFilter.appendChild(option);
+        }
+    });
+}
+
+// Filter companies based on search and region
+function filterCompanies() {
+    const searchTerm = document.getElementById('company-filter').value.toLowerCase().trim();
+    const selectedRegion = document.getElementById('region-filter').value;
+    
+    filteredCompanies = companies.filter(company => {
+        // Text search
+        const matchesSearch = !searchTerm || 
+            company.name?.toLowerCase().includes(searchTerm) ||
+            company.vat_number?.toLowerCase().includes(searchTerm) ||
+            getCompanyAddress(company).toLowerCase().includes(searchTerm);
+        
+        // Region filter
+        const matchesRegion = !selectedRegion || getCompanyRegion(company) === selectedRegion;
+        
+        return matchesSearch && matchesRegion;
+    });
+    
+    displayCompaniesList();
+    updateSelectionCounts();
+}
+
+// Toggle company selection
+function toggleCompanySelection(companyId) {
+    if (selectedCompanies.has(companyId)) {
+        selectedCompanies.delete(companyId);
+    } else {
+        selectedCompanies.add(companyId);
+    }
+    updateSelectionCounts();
+}
+
+// Select all visible items (companies and prospects)
+function selectAllItems() {
+    filteredCompanies.forEach(company => {
+        selectedCompanies.add(company.id);
+    });
+    filteredProspects.forEach(prospect => {
+        selectedProspects.add(prospect.id);
+    });
+    displayCompaniesList();
+    displayProspectsList();
+    updateSelectionCounts();
+}
+
+// Deselect all items
+function deselectAllItems() {
+    selectedCompanies.clear();
+    selectedProspects.clear();
+    displayCompaniesList();
+    displayProspectsList();
+    updateSelectionCounts();
+}
+
+// Legacy functions for backward compatibility
+function selectAllCompanies() {
+    filteredCompanies.forEach(company => {
+        selectedCompanies.add(company.id);
+    });
+    displayCompaniesList();
+    updateSelectionCounts();
+}
+
+function deselectAllCompanies() {
+    selectedCompanies.clear();
+    displayCompaniesList();
+    updateSelectionCounts();
+}
+
+// Update selection counts
+function updateSelectionCounts() {
+    // Company counts
+    const selectedCompaniesCount = document.getElementById('selected-companies-count');
+    const totalCompanies = document.getElementById('total-companies');
+    const companiesCount = document.getElementById('companies-count');
+    
+    // Prospect counts
+    const selectedProspectsCount = document.getElementById('selected-prospects-count');
+    const totalProspects = document.getElementById('total-prospects');
+    const prospectsCount = document.getElementById('prospects-count');
+    
+    // Map counts
+    const mapMarkersCount = document.getElementById('map-markers-count');
+    const mapMarkersCountDisplay = document.getElementById('map-markers-count-display');
+    
+    // Summary elements
+    const summaryCompaniesSelected = document.getElementById('summary-companies-selected');
+    const summaryProspectsSelected = document.getElementById('summary-prospects-selected');
+    const selectionSummaryCard = document.getElementById('selection-summary-card');
+    
+    // Update counts
+    if (selectedCompaniesCount) selectedCompaniesCount.textContent = selectedCompanies.size;
+    if (totalCompanies) totalCompanies.textContent = filteredCompanies.length;
+    if (companiesCount) companiesCount.textContent = companies.length;
+    
+    if (selectedProspectsCount) selectedProspectsCount.textContent = selectedProspects.size;
+    if (totalProspects) totalProspects.textContent = filteredProspects.length;
+    if (prospectsCount) prospectsCount.textContent = prospects.length;
+    
+    if (mapMarkersCount) mapMarkersCount.textContent = markers.length;
+    if (mapMarkersCountDisplay) mapMarkersCountDisplay.textContent = markers.length;
+    
+    // Update summary card
+    if (summaryCompaniesSelected) summaryCompaniesSelected.textContent = selectedCompanies.size;
+    if (summaryProspectsSelected) summaryProspectsSelected.textContent = selectedProspects.size;
+    
+    // Show/hide selection summary based on whether anything is selected
+    const hasSelection = selectedCompanies.size > 0 || selectedProspects.size > 0;
+    if (selectionSummaryCard) {
+        selectionSummaryCard.style.display = hasSelection ? 'block' : 'none';
+    }
+}
+
+// Visualize selected companies and prospects on map
+async function visualizeSelectedCompanies() {
+    const totalSelected = selectedCompanies.size + selectedProspects.size;
+    
+    if (totalSelected === 0) {
+        showToast('Please select at least one company or prospect to visualize', 'warning');
+        return;
+    }
+    
+    // Validate data is loaded
+    if (!Array.isArray(companies) || !Array.isArray(prospects)) {
+        showToast('Please load data first before visualizing', 'warning');
+        return;
+    }
+    
+    try {
+        console.log(`🗺️ Visualizing ${selectedCompanies.size} companies and ${selectedProspects.size} prospects...`);
+        showToast(`Adding ${totalSelected} items to map...`, 'info');
+        
+        // Get selected companies and prospects with null checks
+        const companiesToVisualize = companies.filter(company => company && company.id && selectedCompanies.has(company.id));
+        const prospectsToVisualize = prospects.filter(prospect => prospect && prospect.id && selectedProspects.has(prospect.id));
+        
+        console.log(`🏢 Companies to visualize: ${companiesToVisualize.length}`, companiesToVisualize.map(c => c && c.name ? c.name : 'Unknown'));
+        console.log(`🔍 Prospects to visualize: ${prospectsToVisualize.length}`, prospectsToVisualize.map(p => p && (p.name || p.company_name) ? (p.name || p.company_name) : 'Unknown'));
+        
+        // Add to map with different colors
+        if (companiesToVisualize.length > 0) {
+            console.log('🗺️ Adding companies to map...');
+            await addCompaniesToMap(companiesToVisualize);
+        }
+        
+        if (prospectsToVisualize.length > 0) {
+            console.log('🗺️ Adding prospects to map...');
+            await addProspectsToMap(prospectsToVisualize);
+        }
+        
+        // Update display
+        displayCompaniesList();
+        displayProspectsList();
+        updateSelectionCounts();
+        
+        showToast(`${markers.length} items added to map`, 'success');
+        
+    } catch (error) {
+        console.error('Error visualizing items:', error);
+        showToast('Failed to visualize items: ' + error.message, 'error');
+    }
+}
+
+// Clear all markers from map
+function clearMap() {
+    clearMarkers();
+    displayCompaniesList();
+    displayProspectsList();
+    updateSelectionCounts();
+    showToast('Map cleared', 'info');
+}
+
+// Geocode address using Mapbox Geocoding API
+async function geocodeAddress(address) {
+    try {
+        const encodedAddress = encodeURIComponent(address);
+        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedAddress}.json?access_token=${mapboxToken}&country=BE&limit=1`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.features && data.features.length > 0) {
+            return data.features[0].center; // [longitude, latitude]
+        }
+        
+        return null;
+    } catch (error) {
+        console.warn('Geocoding error:', error);
+        return null;
+    }
+}
+
+// Add prospects to map as markers
+async function addProspectsToMap(prospectsToAdd = prospects) {
+    let geocodedCount = 0;
+    let dbCoordinatesCount = 0;
+    
+    console.log(`🔍 Processing ${prospectsToAdd.length} prospects for map...`);
+    
+    for (const prospect of prospectsToAdd) {
+        // First, try to use coordinates from database (if already geocoded)
+        if (prospect.latitude && prospect.longitude) {
+            const coordinates = [prospect.longitude, prospect.latitude]; // Mapbox uses [lng, lat]
+            const address = prospect.geocoded_address || getProspectAddress(prospect);
+            addProspectMarkerToMap(prospect, coordinates, address);
+            geocodedCount++;
+            dbCoordinatesCount++;
+            console.log(`📍 Using DB coordinates for prospect ${prospect.name || prospect.company_name}`);
+            continue;
+        }
+        
+        // If no DB coordinates, fall back to geocoding
+        const address = getProspectAddress(prospect);
+        
+        console.log(`🔍 Prospect: ${prospect.name || prospect.company_name}, Address: ${address}`);
+        
+        if (address && address !== 'No address available') {
+            try {
+                // Geocode address using Mapbox Geocoding API
+                console.log(`🌍 Geocoding address: ${address}`);
+                const coordinates = await geocodeAddress(address);
+                
+                if (coordinates) {
+                    console.log(`📍 Adding prospect marker at coordinates:`, coordinates);
+                    addProspectMarkerToMap(prospect, coordinates, address);
+                    geocodedCount++;
+                } else {
+                    console.warn(`❌ No coordinates found for prospect ${prospect.name || prospect.company_name}`);
+                }
+            } catch (error) {
+                console.warn(`❌ Failed to geocode prospect ${prospect.name || prospect.company_name}:`, error);
+            }
+        } else {
+            console.warn(`❌ No valid address for prospect ${prospect.name || prospect.company_name}`);
+        }
+    }
+    
+    console.log(`📍 Added ${geocodedCount} prospects to map (${dbCoordinatesCount} from database, ${geocodedCount - dbCoordinatesCount} geocoded live)`);
+    
+    // Fit map to show all markers if we have any
+    if (markers.length > 0) {
+        fitMapToMarkers();
+    }
+}
+
+// Add company marker to map
+function addMarkerToMap(company, coordinates, address) {
+    // Create custom marker element for companies (blue)
+    const markerElement = document.createElement('div');
+    markerElement.className = 'custom-marker company-marker';
+    markerElement.innerHTML = `
+        <div class="marker-pin company-pin">
+            <i class="fas fa-building"></i>
+        </div>
+    `;
+    
+    // Create popup content
+    const popupContent = `
+        <div class="marker-popup">
+            <h6 class="mb-2">${company.name || 'Unnamed Company'}</h6>
+            <p class="small mb-1"><i class="fas fa-map-marker-alt me-1"></i>${address}</p>
+            ${company.vat_number ? `<p class="small mb-1"><i class="fas fa-file-invoice me-1"></i>VAT: ${company.vat_number}</p>` : ''}
+            ${company.email_addresses ? `<p class="small mb-1"><i class="fas fa-envelope me-1"></i>${company.email_addresses}</p>` : ''}
+            <button class="btn btn-sm btn-primary mt-2" onclick="selectCompany(${company.id})">
+                <i class="fas fa-eye me-1"></i>View Details
+            </button>
+        </div>
+    `;
+
+    // Create popup
+    const popup = new mapboxgl.Popup({
+        offset: 25,
+        closeButton: true,
+        closeOnClick: false
+    }).setHTML(popupContent);
+
+    // Create and add marker
+    const marker = new mapboxgl.Marker(markerElement)
+        .setLngLat(coordinates)
+        .setPopup(popup)
+        .addTo(map);
+
+    // Store marker with company data
+    markers.push({
+        marker: marker,
+        company: company,
+        coordinates: coordinates,
+        type: 'company'
+    });
+}
+
+// Add prospect marker to map
+function addProspectMarkerToMap(prospect, coordinates, address) {
+    // Create custom marker element for prospects (green)
+    const markerElement = document.createElement('div');
+    markerElement.className = 'custom-marker prospect-marker';
+    markerElement.innerHTML = `
+        <div class="marker-pin prospect-pin">
+            <i class="fas fa-search"></i>
+        </div>
+    `;
+    
+    // Create popup content
+    const popupContent = `
+        <div class="marker-popup">
+            <h6 class="mb-2 text-success">${prospect.name || prospect.company_name || 'Unnamed Prospect'}</h6>
+            <p class="small mb-1"><i class="fas fa-map-marker-alt me-1"></i>${address}</p>
+            ${prospect.vat_number ? `<p class="small mb-1"><i class="fas fa-file-invoice me-1"></i>VAT: ${prospect.vat_number}</p>` : ''}
+            ${prospect.email ? `<p class="small mb-1"><i class="fas fa-envelope me-1"></i>${prospect.email}</p>` : ''}
+            ${prospect.description ? `<p class="small mb-1"><i class="fas fa-info-circle me-1"></i>${prospect.description}</p>` : ''}
+            <button class="btn btn-sm btn-success mt-2" onclick="showProspectDetails(${prospect.id})">
+                <i class="fas fa-eye me-1"></i>View Details
+            </button>
+        </div>
+    `;
+
+    // Create popup
+    const popup = new mapboxgl.Popup({
+        offset: 25,
+        closeButton: true,
+        closeOnClick: false
+    }).setHTML(popupContent);
+
+    // Create and add marker
+    const marker = new mapboxgl.Marker(markerElement)
+        .setLngLat(coordinates)
+        .setPopup(popup)
+        .addTo(map);
+
+    // Store marker with prospect data
+    markers.push({
+        marker: marker,
+        prospect: prospect,
+        coordinates: coordinates,
+        type: 'prospect'
+    });
+}
+
+// Clear all markers from map
+function clearMarkers() {
+    markers.forEach(item => {
+        item.marker.remove();
+    });
+    markers = [];
+}
+
+// Fit map to show all markers
+function fitMapToMarkers() {
+    if (markers.length === 0) return;
+    
+    const bounds = new mapboxgl.LngLatBounds();
+    markers.forEach(item => {
+        bounds.extend(item.coordinates);
+    });
+    
+    map.fitBounds(bounds, {
+        padding: 50,
+        maxZoom: 15
+    });
+}
+
+// Display companies list
+function displayCompaniesList() {
+    const container = document.getElementById('companies-list');
+    
+    console.log(`📋 Displaying ${filteredCompanies.length} companies in list`);
+    
+    if (filteredCompanies.length === 0) {
+        console.log('⚠️ No companies to display');
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-building fa-3x mb-3"></i>
+                <p>No companies match the current filters</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const html = filteredCompanies.map(company => {
+        const address = getCompanyAddress(company);
+        const isSelected = selectedCompanies.has(company.id);
+        const isOnMap = markers.some(item => item.company && item.company.id === company.id);
+        const region = getCompanyRegion(company);
+        
+        return `
+            <div class="company-item border-bottom py-2" data-company-id="${company.id}">
+                <div class="d-flex align-items-start">
+                    <div class="form-check me-2 mt-1">
+                        <input class="form-check-input" type="checkbox" 
+                               id="company-${company.id}" 
+                               ${isSelected ? 'checked' : ''}
+                               onchange="toggleCompanySelection(${company.id})">
+                    </div>
+                    <div class="flex-grow-1" onclick="showCompanyDetails(${company.id})">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">${company.name || 'Unnamed Company'}</h6>
+                                <small class="text-muted d-block">${address}</small>
+                                <small class="text-info">${region}</small>
+                            </div>
+                            <div class="text-end">
+                                ${isOnMap ? '<i class="fas fa-map-marker-alt text-success" title="On Map"></i>' : ''}
+                                ${company.vat_number ? `<small class="d-block text-muted">${company.vat_number}</small>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.innerHTML = html;
+}
+
+// Display prospect details panel
+function displayProspectDetailsPanel(prospect) {
+    const container = document.getElementById('company-details');
+    const address = getProspectAddress(prospect);
+    
+    const html = `
+        <div class="prospect-details-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <h5 class="mb-0 text-success">${prospect.name || prospect.company_name || 'Unnamed Prospect'}</h5>
+                <span class="badge bg-success rounded-pill">
+                    <i class="fas fa-search me-1"></i>Prospect
+                </span>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <strong><i class="fas fa-map-marker-alt me-2"></i>Address:</strong><br>
+                        <span class="text-muted">${address}</span>
+                    </div>
+                    ${prospect.vat_number ? `<div class="mb-3">
+                        <strong><i class="fas fa-file-invoice me-2"></i>VAT Number:</strong><br>
+                        <span class="text-muted">${prospect.vat_number}</span>
+                    </div>` : ''}
+                    ${prospect.email ? `<div class="mb-3">
+                        <strong><i class="fas fa-envelope me-2"></i>Email:</strong><br>
+                        <span class="text-muted">${prospect.email}</span>
+                    </div>` : ''}
+                </div>
+                <div class="col-md-6">
+                    ${prospect.description ? `<div class="mb-3">
+                        <strong><i class="fas fa-info-circle me-2"></i>Description:</strong><br>
+                        <span class="text-muted">${prospect.description}</span>
+                    </div>` : ''}
+                    ${prospect.phone ? `<div class="mb-3">
+                        <strong><i class="fas fa-phone me-2"></i>Phone:</strong><br>
+                        <span class="text-muted">${prospect.phone}</span>
+                    </div>` : ''}
+                    <div class="mb-3">
+                        <strong><i class="fas fa-calendar me-2"></i>Added:</strong><br>
+                        <span class="text-muted">${prospect.created_at ? new Date(prospect.created_at).toLocaleDateString() : 'Unknown'}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+// Display prospects list
+function displayProspectsList() {
+    const container = document.getElementById('prospects-list');
+    
+    console.log(`📋 Displaying ${filteredProspects.length} prospects in list`);
+    
+    if (filteredProspects.length === 0) {
+        console.log('⚠️ No prospects to display');
+        container.innerHTML = `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-search fa-3x mb-3"></i>
+                <p>No prospects match the current filters</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Debug: Log first few prospects
+    if (filteredProspects.length > 0) {
+        console.log('🔍 First prospect data:', filteredProspects[0]);
+        console.log('🔍 Prospect ID type:', typeof filteredProspects[0].id, 'Value:', filteredProspects[0].id);
+        console.log('🔍 Current selected prospects:', Array.from(selectedProspects));
+    }
+    
+    const html = filteredProspects.map(prospect => {
+        const address = getProspectAddress(prospect);
+        const isSelected = selectedProspects.has(prospect.id);
+        const isOnMap = markers.some(item => item.prospect && item.prospect.id === prospect.id);
+        
+        console.log(`🔍 Prospect ${prospect.name || prospect.company_name}: ID=${prospect.id}, Selected=${isSelected}`);
+        
+        return `
+            <div class="prospect-item border-bottom py-2" data-prospect-id="${prospect.id}">
+                <div class="d-flex align-items-start">
+                    <div class="form-check me-2 mt-1">
+                        <input class="form-check-input" type="checkbox" 
+                               id="prospect-${prospect.id}" 
+                               ${isSelected ? 'checked' : ''}
+                               onchange="toggleProspectSelection('${prospect.id}')">
+                    </div>
+                    <div class="flex-grow-1" onclick="showProspectDetails('${prospect.id}')">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1 text-success">${prospect.name || prospect.company_name || 'Unnamed Prospect'}</h6>
+                                <small class="text-muted d-block">${address}</small>
+                                ${prospect.description ? `<small class="text-info">${prospect.description}</small>` : ''}
+                            </div>
+                            <div class="text-end">
+                                ${isOnMap ? '<i class="fas fa-map-marker-alt text-success" title="On Map"></i>' : ''}
+                                ${prospect.vat_number ? `<small class="d-block text-muted">${prospect.vat_number}</small>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    container.innerHTML = html;
+}
+
+// Get prospect address 
+function getProspectAddress(prospect) {
+    console.log('🔍 Getting address for prospect:', prospect);
+    
+    // Prospects might have different address structure
+    if (prospect.address) {
+        console.log('✅ Found direct address field:', prospect.address);
+        return prospect.address;
+    }
+    
+    // Try to build from individual fields
+    const addressParts = [
+        prospect.street || prospect.address_line1,
+        prospect.city,
+        prospect.postal_code || prospect.post_code,
+        prospect.country
+    ].filter(part => part && part.trim());
+    
+    const finalAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
+    console.log('🏠 Built address from parts:', finalAddress, 'Parts:', addressParts);
+    
+    return finalAddress;
+}
+
+// Filter prospects
+function filterProspects() {
+    const searchTerm = document.getElementById('prospect-filter').value.toLowerCase().trim();
+    
+    filteredProspects = prospects.filter(prospect => {
+        return !searchTerm || 
+            prospect.name?.toLowerCase().includes(searchTerm) ||
+            prospect.company_name?.toLowerCase().includes(searchTerm) ||
+            prospect.description?.toLowerCase().includes(searchTerm) ||
+            getProspectAddress(prospect).toLowerCase().includes(searchTerm);
+    });
+    
+    displayProspectsList();
+    updateSelectionCounts();
+}
+
+// Toggle prospect selection
+function toggleProspectSelection(prospectId) {
+    console.log('🔄 Toggling prospect selection for ID:', prospectId, 'Type:', typeof prospectId);
+    console.log('📊 Current selected prospects:', Array.from(selectedProspects));
+    
+    // Ensure we're working with the same type as stored in prospects array
+    const prospect = prospects.find(p => p.id == prospectId);
+    if (!prospect) {
+        console.warn('❌ Cannot toggle selection - prospect not found:', prospectId);
+        return;
+    }
+    
+    const actualId = prospect.id; // Use the actual ID from the prospect object
+    console.log('🔄 Using actual prospect ID:', actualId, 'Type:', typeof actualId);
+    
+    if (selectedProspects.has(actualId)) {
+        console.log('➖ Removing prospect from selection');
+        selectedProspects.delete(actualId);
+    } else {
+        console.log('➕ Adding prospect to selection');
+        selectedProspects.add(actualId);
+    }
+    
+    console.log('📊 New selected prospects:', Array.from(selectedProspects));
+    updateSelectionCounts();
+    displayProspectsList(); // Refresh the list to show updated checkboxes
+}
+
+// Show company details (called when clicking on company name)
+function showCompanyDetails(companyId) {
+    const company = companies.find(c => c && c.id === companyId);
+    if (!company) {
+        console.warn('Company not found:', companyId);
+        return;
+    }
+    
+    console.log('Selected company:', company.name);
+    
+    // Display company details
+    displayCompanyDetails(company);
+    
+    // Find and focus on marker if it exists
+    const markerItem = markers.find(item => item.company && item.company.id === companyId);
+    if (markerItem) {
+        // Fly to marker
+        map.flyTo({
+            center: markerItem.coordinates,
+            zoom: 15,
+            duration: 1500
+        });
+        
+        // Open popup
+        markerItem.marker.getPopup().addTo(map);
+    }
+}
+
+// Show prospect details (called when clicking on prospect name)
+function showProspectDetails(prospectId) {
+    console.log('🔍 Looking for prospect with ID:', prospectId, 'Type:', typeof prospectId);
+    const prospect = prospects.find(p => p.id == prospectId); // Use == to handle string/number comparison
+    if (!prospect) {
+        console.warn('❌ Prospect not found with ID:', prospectId);
+        console.log('📋 Available prospect IDs:', prospects.map(p => p.id));
+        return;
+    }
+    
+    console.log('✅ Selected prospect:', prospect.name || prospect.company_name);
+    
+    // Display prospect details
+    displayProspectDetailsPanel(prospect);
+    
+    // Find and focus on marker if it exists
+    const markerItem = markers.find(item => item.prospect && item.prospect.id == prospectId);
+    if (markerItem) {
+        // Fly to marker
+        map.flyTo({
+            center: markerItem.coordinates,
+            zoom: 15,
+            duration: 1500
+        });
+        
+        // Open popup
+        markerItem.marker.getPopup().addTo(map);
+    }
+}
+
+// Legacy function for compatibility
+function selectCompany(companyId) {
+    showCompanyDetails(companyId);
+}
+
+// Display company details panel
+function displayCompanyDetails(company) {
+    const container = document.getElementById('company-details');
+    const address = getCompanyAddress(company);
+    
+    const html = `
+        <div class="company-details-card">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <h5 class="mb-0">${company.name || 'Unnamed Company'}</h5>
+                <span class="badge ${company.company_status?.name === 'Actief' ? 'bg-success' : 'bg-warning'} rounded-pill">
+                    ${company.company_status?.name || 'Unknown'}
+                </span>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <strong><i class="fas fa-map-marker-alt me-2"></i>Address:</strong><br>
+                        <span class="text-muted">${address}</span>
+                    </div>
+                    ${company.vat_number ? `<div class="mb-3">
+                        <strong><i class="fas fa-file-invoice me-2"></i>VAT Number:</strong><br>
+                        <span class="text-muted">${company.vat_number}</span>
+                    </div>` : ''}
+                    ${company.email_addresses ? `<div class="mb-3">
+                        <strong><i class="fas fa-envelope me-2"></i>Email:</strong><br>
+                        <span class="text-muted">${company.email_addresses}</span>
+                    </div>` : ''}
+                </div>
+                <div class="col-md-6">
+                    ${company.sales_price_class ? `<div class="mb-3">
+                        <strong><i class="fas fa-tag me-2"></i>Price Class:</strong><br>
+                        <span class="text-muted">${company.sales_price_class.name}</span>
+                    </div>` : ''}
+                    ${company.company_categories && company.company_categories.length > 0 ? `<div class="mb-3">
+                        <strong><i class="fas fa-tags me-2"></i>Categories:</strong><br>
+                        ${company.company_categories.map(cat => `<span class="badge bg-light text-dark me-1">${cat.name}</span>`).join('')}
+                    </div>` : ''}
+                    <div class="mb-3">
+                        <strong><i class="fas fa-calendar me-2"></i>Created:</strong><br>
+                        <span class="text-muted">${new Date(company.created_at).toLocaleDateString()}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+}
+
+
+// Refresh companies cache
+async function refreshCompaniesCache() {
+    try {
+        console.log('🔄 Refreshing companies cache...');
+        showToast('Refreshing companies data...', 'info');
+        
+        // Clear cache
+        sessionStorage.removeItem(COMPANIES_CACHE_KEY);
+        sessionStorage.removeItem(COMPANIES_CACHE_TIME_KEY);
+        
+        // Force reload companies
+        await loadCompaniesData();
+        
+        showToast('Companies cache refreshed successfully', 'success');
+        
+    } catch (error) {
+        console.error('Error refreshing cache:', error);
+        showToast('Failed to refresh cache: ' + error.message, 'error');
+    }
+}
+
+// Utility function for debouncing
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Toast notification function
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'primary'} border-0 position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
+    toast.setAttribute('role', 'alert');
+    
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+</script>
+
+<style>
+/* Custom marker styles */
+.custom-marker {
+    cursor: pointer;
+}
+
+.marker-pin {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+/* Company markers (blue) */
+.company-pin {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+/* Prospect markers (green) */
+.prospect-pin {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.marker-pin:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Popup styles */
+.marker-popup {
+    max-width: 250px;
+}
+
+.marker-popup h6 {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* Company list styles */
+.company-item {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+}
+
+.company-item:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+}
+
+.company-item.has-location {
+    border-left: 3px solid #10b981;
+}
+
+/* Search result styles */
+.search-result-item {
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.search-result-item:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+}
+
+/* Map container styles */
+#map {
+    border-radius: 0 0 16px 16px;
+}
+
+/* Company details card */
+.company-details-card {
+    background: rgba(248, 250, 252, 0.5);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+}
+</style>
+{% endblock %}

@@ -8,15 +8,63 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h1 class="h3 mb-0">
-                    <i class="fas fa-boxes me-2"></i>Products Catalog
+                    <i class="fas fa-boxes me-2"></i>Products & Pricing
                 </h1>
                 <div class="btn-group">
                     <button class="btn btn-outline-primary" onclick="refreshProducts()">
-                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                        <i class="fas fa-sync-alt me-1"></i>Refresh View
                     </button>
                     <button class="btn btn-outline-secondary" onclick="toggleView()" id="viewToggle">
                         <i class="fas fa-list me-1"></i>List View
                     </button>
+                </div>
+            </div>
+
+            <!-- Sync Controls -->
+            <div class="card mb-4 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-cloud-download-alt me-2"></i>Sync from Douano</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Sync products, categories, price lists, and company pricing from Douano to your database.</p>
+                    
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-outline-primary w-100" onclick="syncCategories()">
+                                <i class="fas fa-tags me-1"></i>Categories
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-outline-primary w-100" onclick="syncProducts()">
+                                <i class="fas fa-box me-1"></i>Products
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-outline-primary w-100" onclick="syncPriceLists()">
+                                <i class="fas fa-list-ul me-1"></i>Price Lists
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-outline-primary w-100" onclick="syncProductPrices()">
+                                <i class="fas fa-euro-sign me-1"></i>Prices
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-outline-primary w-100" onclick="syncCompanyPricing()">
+                                <i class="fas fa-building me-1"></i>Co. Pricing
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-sm btn-success w-100" onclick="syncAllProducts()">
+                                <i class="fas fa-sync me-1"></i><strong>Sync All</strong>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="sync-status" class="alert alert-info" style="display: none;"></div>
+                    <div id="sync-progress" class="progress" style="display: none; height: 25px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                    </div>
                 </div>
             </div>
 
@@ -730,6 +778,185 @@ document.addEventListener('DOMContentLoaded', function() {
         if (document.querySelector('#catalog-tab').classList.contains('active')) displayCatalog();
     });
 });
+
+// =====================================================
+// SYNC FUNCTIONS
+// =====================================================
+
+function showSyncStatus(message, type = 'info') {
+    const statusDiv = document.getElementById('sync-status');
+    statusDiv.className = `alert alert-${type}`;
+    statusDiv.innerHTML = message;
+    statusDiv.style.display = 'block';
+}
+
+function hideSyncStatus() {
+    document.getElementById('sync-status').style.display = 'none';
+}
+
+function showSyncProgress(percent = 0) {
+    const progressDiv = document.getElementById('sync-progress');
+    const progressBar = progressDiv.querySelector('.progress-bar');
+    progressBar.style.width = `${percent}%`;
+    progressBar.textContent = `${percent}%`;
+    progressDiv.style.display = 'block';
+}
+
+function hideSyncProgress() {
+    document.getElementById('sync-progress').style.display = 'none';
+}
+
+async function syncCategories() {
+    try {
+        showSyncStatus('<i class="fas fa-spinner fa-spin me-2"></i>Syncing product categories from Douano...', 'info');
+        showSyncProgress(50);
+        
+        const response = await fetch('/api/sync-product-categories', { method: 'POST' });
+        const data = await response.json();
+        
+        hideSyncProgress();
+        
+        if (data.success) {
+            showSyncStatus(`<i class="fas fa-check-circle me-2"></i><strong>Success!</strong> Synced ${data.total} categories: ${data.saved} new, ${data.updated} updated.`, 'success');
+        } else {
+            showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${data.error || 'Unknown error'}`, 'danger');
+        }
+    } catch (error) {
+        hideSyncProgress();
+        showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${error.message}`, 'danger');
+    }
+}
+
+async function syncProducts() {
+    try {
+        showSyncStatus('<i class="fas fa-spinner fa-spin me-2"></i>Syncing products from Douano...', 'info');
+        showSyncProgress(50);
+        
+        const response = await fetch('/api/sync-products', { method: 'POST' });
+        const data = await response.json();
+        
+        hideSyncProgress();
+        
+        if (data.success) {
+            showSyncStatus(`<i class="fas fa-check-circle me-2"></i><strong>Success!</strong> Synced ${data.total} products: ${data.saved} new, ${data.updated} updated.`, 'success');
+        } else {
+            showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${data.error || 'Unknown error'}`, 'danger');
+        }
+    } catch (error) {
+        hideSyncProgress();
+        showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${error.message}`, 'danger');
+    }
+}
+
+async function syncPriceLists() {
+    try {
+        showSyncStatus('<i class="fas fa-spinner fa-spin me-2"></i>Syncing price lists from Douano...', 'info');
+        showSyncProgress(50);
+        
+        const response = await fetch('/api/sync-price-lists', { method: 'POST' });
+        const data = await response.json();
+        
+        hideSyncProgress();
+        
+        if (data.success) {
+            showSyncStatus(`<i class="fas fa-check-circle me-2"></i><strong>Success!</strong> Synced ${data.total} price lists: ${data.saved} new, ${data.updated} updated.`, 'success');
+        } else {
+            showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${data.error || 'Unknown error'}`, 'danger');
+        }
+    } catch (error) {
+        hideSyncProgress();
+        showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${error.message}`, 'danger');
+    }
+}
+
+async function syncProductPrices() {
+    try {
+        showSyncStatus('<i class="fas fa-spinner fa-spin me-2"></i>Syncing product prices from Douano...', 'info');
+        showSyncProgress(50);
+        
+        const response = await fetch('/api/sync-product-prices', { method: 'POST' });
+        const data = await response.json();
+        
+        hideSyncProgress();
+        
+        if (data.success) {
+            showSyncStatus(`<i class="fas fa-check-circle me-2"></i><strong>Success!</strong> Synced ${data.total} product prices: ${data.saved} new, ${data.updated} updated.`, 'success');
+        } else {
+            showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${data.error || 'Unknown error'}`, 'danger');
+        }
+    } catch (error) {
+        hideSyncProgress();
+        showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${error.message}`, 'danger');
+    }
+}
+
+async function syncCompanyPricing() {
+    try {
+        showSyncStatus('<i class="fas fa-spinner fa-spin me-2"></i>Syncing company pricing from Douano...', 'info');
+        showSyncProgress(50);
+        
+        const response = await fetch('/api/sync-company-pricing', { method: 'POST' });
+        const data = await response.json();
+        
+        hideSyncProgress();
+        
+        if (data.success) {
+            showSyncStatus(`<i class="fas fa-check-circle me-2"></i><strong>Success!</strong> Synced pricing for ${data.total} companies: ${data.saved} new, ${data.updated} updated.`, 'success');
+        } else {
+            showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${data.error || 'Unknown error'}`, 'danger');
+        }
+    } catch (error) {
+        hideSyncProgress();
+        showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${error.message}`, 'danger');
+    }
+}
+
+async function syncAllProducts() {
+    try {
+        showSyncStatus('<i class="fas fa-spinner fa-spin me-2"></i><strong>Full Sync Started!</strong> This will sync all products, categories, prices, and company pricing. This may take a few minutes...', 'primary');
+        showSyncProgress(10);
+        
+        const response = await fetch('/api/sync-all-products', { method: 'POST' });
+        showSyncProgress(90);
+        
+        const data = await response.json();
+        hideSyncProgress();
+        
+        if (data.success) {
+            const results = data.results || {};
+            let summary = '<strong>🎉 Full Sync Complete!</strong><br><br>';
+            
+            if (results.categories) {
+                summary += `📚 <strong>Categories:</strong> ${results.categories.saved || 0} new, ${results.categories.updated || 0} updated<br>`;
+            }
+            if (results.products) {
+                summary += `📦 <strong>Products:</strong> ${results.products.saved || 0} new, ${results.products.updated || 0} updated<br>`;
+            }
+            if (results.price_lists) {
+                summary += `💰 <strong>Price Lists:</strong> ${results.price_lists.saved || 0} new, ${results.price_lists.updated || 0} updated<br>`;
+            }
+            if (results.product_prices) {
+                summary += `💵 <strong>Product Prices:</strong> ${results.product_prices.saved || 0} new, ${results.product_prices.updated || 0} updated<br>`;
+            }
+            if (results.company_pricing) {
+                summary += `🏢 <strong>Company Pricing:</strong> ${results.company_pricing.saved || 0} new, ${results.company_pricing.updated || 0} updated<br>`;
+            }
+            
+            showSyncStatus(summary, 'success');
+            
+            // Auto-refresh after 3 seconds
+            setTimeout(() => {
+                showSyncStatus('<i class="fas fa-info-circle me-2"></i>Refreshing view...', 'info');
+                refreshProducts();
+            }, 3000);
+        } else {
+            showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${data.error || 'Unknown error'}`, 'danger');
+        }
+    } catch (error) {
+        hideSyncProgress();
+        showSyncStatus(`<i class="fas fa-exclamation-triangle me-2"></i><strong>Error:</strong> ${error.message}`, 'danger');
+    }
+}
 </script>
 
 <style>
