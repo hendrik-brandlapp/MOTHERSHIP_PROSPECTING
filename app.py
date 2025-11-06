@@ -8,6 +8,7 @@ import requests
 import urllib.parse
 import secrets
 import os
+import time
 from datetime import datetime, timedelta
 import json
 from dotenv import load_dotenv
@@ -24,6 +25,23 @@ except Exception:
     create_client = None
     Client = None
 
+try:
+    from duano_client import DuanoClient
+except Exception:
+    DuanoClient = None
+
+try:
+    from google import genai
+    from google.genai import types
+except Exception:
+    genai = None
+    types = None
+
+try:
+    from whatsapp_service import WhatsAppService
+except Exception:
+    WhatsAppService = None
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -38,6 +56,15 @@ if OPENAI_API_KEY and OpenAI is not None:
         openai_client = OpenAI(api_key=OPENAI_API_KEY)
     except Exception:
         openai_client = None
+
+# Gemini API configuration
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+gemini_client = None
+if GEMINI_API_KEY and genai is not None:
+    try:
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception:
+        gemini_client = None
 
 # Supabase configuration
 SUPABASE_URL = "https://gpjoypslbrpvnhqzvacc.supabase.co"
@@ -70,6 +97,35 @@ def is_token_valid():
     
     expires_at = datetime.fromisoformat(session['token_expires_at'])
     return datetime.now() < expires_at - timedelta(minutes=5)
+
+
+def get_douano_client():
+    """Get initialized Douano client with current session token"""
+    if not DuanoClient:
+        return None
+    
+    if not is_token_valid():
+        return None
+    
+    try:
+        client = DuanoClient(
+            client_id=DOUANO_CONFIG['client_id'],
+            client_secret=DOUANO_CONFIG['client_secret'],
+            base_url=DOUANO_CONFIG['base_url'],
+            redirect_uri=DOUANO_CONFIG['redirect_uri']
+        )
+        
+        # Set the access token from session
+        client.set_access_token(
+            access_token=session['access_token'],
+            token_type=session.get('token_type', 'Bearer'),
+            expires_in=3600
+        )
+        
+        return client
+    except Exception as e:
+        print(f"Error initializing Douano client: {e}")
+        return None
 
 
 def make_api_request(endpoint, method='GET', params=None):
@@ -602,7 +658,8 @@ def api_companies():
     # Get query parameters for filtering and ordering
     params = {
         'per_page': request.args.get('per_page', 100),
-        'page': request.args.get('page', 1)
+        'page': request.args.get('page', 1),
+        'include': 'country,company_status,sales_price_class,company_categories'  # Try to include related data
     }
     
     # Filter parameters
@@ -630,6 +687,48 @@ def api_companies():
         minimal = [{'id': c.get('id'), 'name': c.get('public_name') or c.get('name') or ''} for c in results]
         return jsonify({'result': {'data': minimal}})
 
+    # Check for sales_since_year filter
+    sales_since_year = request.args.get('sales_since_year')
+    
+    if sales_since_year:
+        # Get all companies first
+        data, error = make_paginated_api_request('/api/public/v1/core/companies', params=params)
+        
+        if error:
+            return jsonify({'error': error}), 500
+        
+        companies = data.get('result', {}).get('data', [])
+        
+        # Get invoices since the specified year
+        invoice_params = {
+            'per_page': 1000,
+            'page': 1,
+            'filter_by_start_date': f'{sales_since_year}-01-01'
+        }
+        
+        invoices_data, invoice_error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=invoice_params)
+        
+        if invoice_error:
+            return jsonify({'error': f'Error fetching invoices: {invoice_error}'}), 500
+        
+        invoices = invoices_data.get('result', {}).get('data', [])
+        
+        # Create a set of company IDs that have invoices
+        company_ids_with_sales = set()
+        for invoice in invoices:
+            company = invoice.get('company')
+            if company and isinstance(company, dict):
+                company_id = company.get('id')
+                if company_id:
+                    company_ids_with_sales.add(company_id)
+        
+        # Filter companies to only those with sales
+        filtered_companies = [c for c in companies if c.get('id') in company_ids_with_sales]
+        
+        # Return filtered results
+        data['result']['data'] = filtered_companies
+        return jsonify(data)
+    
     data, error = make_paginated_api_request('/api/public/v1/core/companies', params=params)
     
     if error:
@@ -654,7 +753,7 @@ def api_company(company_id):
 
 @app.route('/api/sales-invoices')
 def api_sales_invoices():
-    """Get sales invoices"""
+    """Get sales invoices with enhanced transport method data"""
     if not is_token_valid():
         return jsonify({'error': 'Not authenticated'}), 401
     
@@ -683,13 +782,405 @@ def api_sales_invoices():
     if request.args.get('order_by_amount'):
         params['order_by_amount'] = request.args.get('order_by_amount')
     
+    # Get sales invoices
     data, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
     
     if error:
         return jsonify({'error': error}), 500
     
+    # If transport method enhancement is requested, enhance with purchase order data
+    if request.args.get('transport_method') or request.args.get('enhance_transport') or 'transport' in request.path.lower():
+        try:
+            # Get purchase orders to link transport methods
+            purchase_params = {
+                'per_page': 100,
+                'page': 1
+            }
+            
+            # Apply same date filters to purchase orders
+            if request.args.get('filter_by_start_date'):
+                purchase_params['filter_by_start_date'] = request.args.get('filter_by_start_date')
+            if request.args.get('filter_by_end_date'):
+                purchase_params['filter_by_end_date'] = request.args.get('filter_by_end_date')
+            
+            purchase_data, purchase_error = make_paginated_api_request('/api/public/v1/trade/purchase-orders', params=purchase_params)
+            
+            if not purchase_error and purchase_data:
+                purchase_orders = purchase_data.get('result', {}).get('data', [])
+                
+                # Create a mapping of company to transport method (with date preference)
+                transport_lookup = {}
+                company_transport_methods = {}  # Fallback: just by company
+                
+                # Debug: Log first few purchase orders
+                print(f"DEBUG: Found {len(purchase_orders)} purchase orders")
+                for i, order in enumerate(purchase_orders[:3]):
+                    print(f"DEBUG: Purchase order {i+1}: ID={order.get('id')}, Company={order.get('company', {}).get('name')}, Date={order.get('date')}, Transport={order.get('transport_method', {}).get('name') if order.get('transport_method') else 'None'}")
+                
+                for order in purchase_orders:
+                    if order.get('transport_method') and order.get('company'):
+                        company_id = order['company'].get('id')
+                        order_date = order.get('date', '')[:10]  # Get just the date part
+                        transport_method = order['transport_method']
+                        
+                        # Create lookup key: company_id + date (preferred)
+                        lookup_key = f"{company_id}_{order_date}"
+                        transport_lookup[lookup_key] = transport_method
+                        
+                        # Also store by company only (fallback)
+                        if company_id not in company_transport_methods:
+                            company_transport_methods[company_id] = transport_method
+                
+                print(f"DEBUG: Created {len(transport_lookup)} date-specific lookups and {len(company_transport_methods)} company fallbacks")
+                
+                # Enhance sales invoices with transport method data
+                invoices = data.get('result', {}).get('data', [])
+                enhanced_count = 0
+                
+                # Debug: Log first few invoices
+                print(f"DEBUG: Found {len(invoices)} sales invoices")
+                for i, invoice in enumerate(invoices[:3]):
+                    print(f"DEBUG: Sales invoice {i+1}: ID={invoice.get('id')}, Company={invoice.get('company', {}).get('name')}, Date={invoice.get('date')}")
+                
+                for invoice in invoices:
+                    if invoice.get('company'):
+                        company_id = invoice['company'].get('id')
+                        invoice_date = invoice.get('date', invoice.get('created_at', ''))
+                        if invoice_date:
+                            invoice_date = invoice_date[:10]  # Get just the date part
+                        
+                        # Try exact date match first
+                        lookup_key = f"{company_id}_{invoice_date}"
+                        if lookup_key in transport_lookup:
+                            invoice['transport_method'] = transport_lookup[lookup_key]
+                            enhanced_count += 1
+                            print(f"DEBUG: Enhanced invoice {invoice.get('id')} with exact date match: {transport_lookup[lookup_key].get('name')}")
+                        # Fallback to any transport method for this company
+                        elif company_id in company_transport_methods:
+                            invoice['transport_method'] = company_transport_methods[company_id]
+                            enhanced_count += 1
+                            print(f"DEBUG: Enhanced invoice {invoice.get('id')} with company fallback: {company_transport_methods[company_id].get('name')}")
+                        else:
+                            print(f"DEBUG: No transport method found for invoice {invoice.get('id')}, company {company_id}, date {invoice_date}")
+                
+                print(f"DEBUG: Enhanced {enhanced_count} out of {len(invoices)} invoices")
+                
+                # Add debug info
+                data['debug'] = {
+                    'purchase_orders_loaded': len(purchase_orders),
+                    'transport_methods_found': len(transport_lookup),
+                    'company_fallbacks': len(company_transport_methods),
+                    'invoices_enhanced': enhanced_count,
+                    'total_invoices': len(invoices)
+                }
+        
+        except Exception as e:
+            # Don't fail the whole request if transport method enhancement fails
+            data['debug'] = {'transport_enhancement_error': str(e)}
+    
     return jsonify(data)
 
+@app.route('/api/sales-orders')
+def api_sales_orders():
+    """Get sales orders - these already have transport methods built-in!"""
+    print("DEBUG: /api/sales-orders endpoint called")
+    print(f"DEBUG: Session keys: {list(session.keys())}")
+    print(f"DEBUG: is_token_valid(): {is_token_valid()}")
+    
+    if not is_token_valid():
+        print("DEBUG: Not authenticated, returning 401")
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    print("DEBUG: Authentication passed, setting up parameters")
+    
+    # Add pagination parameters to get all results
+    params = {
+        'per_page': 100,  # Request up to 100 items per page
+        'page': 1
+    }
+    
+    print(f"DEBUG: Initial params: {params}")
+    
+    # Get query parameters for filtering and ordering
+    # Handle date filtering - if API doesn't support proper ranges, we'll filter on frontend
+    start_date = request.args.get('filter_by_start_date')
+    end_date = request.args.get('filter_by_end_date')
+    
+    # Store for frontend filtering as backup
+    frontend_start_date = start_date
+    frontend_end_date = end_date
+    
+    # Try to use the transport method filter at API level if possible
+    transport_method_filter = request.args.get('transport_method')
+    
+    # Remove per_page limit to get ALL orders, then filter properly
+    params['per_page'] = 1000  # Get more orders to match CSV export
+    
+    # Try the most basic approach - get all recent orders and filter frontend
+    if start_date:
+        params['filter_by_created_since'] = start_date
+        print(f"DEBUG: Using filter_by_created_since={start_date}")
+    
+    print(f"DEBUG: Requesting up to {params['per_page']} orders to match CSV export completeness")
+    print(f"DEBUG: Will filter on frontend for transport method: {transport_method_filter}")
+    print(f"DEBUG: Will filter on frontend for date range: {frontend_start_date} to {frontend_end_date}")
+    
+    # Direct parameter passthrough
+    if request.args.get('filter_by_created_since'):
+        params['filter_by_created_since'] = request.args.get('filter_by_created_since')
+    if request.args.get('filter_by_updated_since'):
+        params['filter_by_updated_since'] = request.args.get('filter_by_updated_since')
+    if request.args.get('filter_by_company'):
+        params['filter_by_company'] = request.args.get('filter_by_company')
+    if request.args.get('filter_by_status'):
+        params['filter_by_status'] = request.args.get('filter_by_status')
+    if request.args.get('order_by_date'):
+        params['order_by_date'] = request.args.get('order_by_date')
+    
+    # DO NOT pass transport_method to API - we'll filter on frontend
+    # The Duano sales-orders API doesn't support transport method filtering
+    transport_method_filter = request.args.get('transport_method')
+    if transport_method_filter:
+        print(f"DEBUG: Transport method filter '{transport_method_filter}' will be applied on frontend, not API")
+    
+    print(f"DEBUG: Final params before API call: {params}")
+    print("DEBUG: Calling make_paginated_api_request for sales-orders...")
+    
+    # Get sales orders directly - they already have transport methods!
+    data, error = make_paginated_api_request('/api/public/v1/trade/sales-orders', params=params)
+    
+    print(f"DEBUG: API call completed. Error: {error}")
+    print(f"DEBUG: Data type: {type(data)}")
+    if data and isinstance(data, dict):
+        result = data.get('result', {})
+        orders_count = len(result.get('data', [])) if result.get('data') else 0
+        print(f"DEBUG: Found {orders_count} orders")
+    
+    if error:
+        print(f"DEBUG: Returning error: {error}")
+        return jsonify({'error': error}), 500
+    
+    # Sales orders already have transport_method, company, date, address - enhance with full address details!
+    orders = data.get('result', {}).get('data', [])
+    
+    # Apply frontend date filtering FIRST to reduce the number of orders we need to process
+    original_count = len(orders)
+    if frontend_start_date or frontend_end_date:
+        filtered_orders = []
+        for order in orders:
+            order_date = order.get('date') or order.get('created_at', '')[:10]  # Get date part only
+            
+            # Check if order is within date range
+            include_order = True
+            if frontend_start_date and order_date < frontend_start_date:
+                include_order = False
+            if frontend_end_date and order_date > frontend_end_date:
+                include_order = False
+                
+            if include_order:
+                filtered_orders.append(order)
+        
+        print(f"DEBUG: Frontend date filtering FIRST: {original_count} -> {len(filtered_orders)} orders")
+        orders = filtered_orders
+        data['result']['data'] = orders
+
+    # Now enhance addresses only for the filtered orders
+    enhanced_addresses = 0
+    should_enhance = True  # Enhanced sales invoices with transport method data
+    print(f"DEBUG: Enhancing addresses for {len(orders)} filtered orders (enhance_addresses={request.args.get('enhance_addresses')})")
+    
+    if should_enhance:
+        print("DEBUG: Enhancing orders with real street address details...")
+        
+        # Collect unique address IDs to get actual street addresses
+        address_ids = set()
+        for order in orders:
+            if order.get('address') and order['address'].get('id'):
+                address_ids.add(order['address']['id'])
+        
+        print(f"DEBUG: Found {len(address_ids)} unique addresses to fetch")
+        
+        # Fetch real address details for each unique address ID
+        address_lookup = {}
+        for address_id in address_ids:
+            try:
+                # Try different endpoints for addresses
+                endpoints_to_try = [
+                    f'/api/public/v1/core/addresses/{address_id}',
+                    f'/api/public/v1/crm/addresses/{address_id}',
+                    f'/api/public/v1/logistics/addresses/{address_id}',
+                    f'/api/public/v1/addresses/{address_id}'
+                ]
+                
+                address_found = False
+                for endpoint in endpoints_to_try:
+                    print(f"DEBUG: Trying {endpoint} for address {address_id}")
+                    address_data, address_error = make_api_request(endpoint)
+                    if not address_error and address_data and address_data.get('result'):
+                        address_lookup[address_id] = address_data['result']
+                        street = address_data['result'].get('street', address_data['result'].get('address_line1', 'No street'))
+                        city = address_data['result'].get('city', 'No city')
+                        print(f"DEBUG: SUCCESS! Fetched address {address_id} from {endpoint}: {street}, {city}")
+                        address_found = True
+                        break
+                    else:
+                        print(f"DEBUG: Failed {endpoint}: {address_error}")
+                
+                if not address_found:
+                    print(f"DEBUG: Could not fetch address {address_id} from any endpoint")
+                    
+            except Exception as e:
+                print(f"DEBUG: Error fetching address {address_id}: {str(e)}")
+        
+        print(f"DEBUG: Successfully fetched {len(address_lookup)} real address details")
+        
+        # Enhance orders with real street address details
+        for order in orders:
+            if order.get('address') and order['address'].get('id'):
+                address_id = order['address']['id']
+                if address_id in address_lookup:
+                    # Add the real address details
+                    real_address = address_lookup[address_id]
+                    order['address']['street_details'] = real_address
+                    enhanced_addresses += 1
+                    street = real_address.get('street', real_address.get('address_line1', ''))
+                    city = real_address.get('city', '')
+                    print(f"DEBUG: Enhanced order {order.get('id')} with real address: {street}, {city}")
+                else:
+                    # If we can't get real address details, at least add a note
+                    print(f"DEBUG: No address details found for address {address_id} (order {order.get('id')})")
+                    order['address']['street_details'] = {
+                        'note': f'Address details not available for ID {address_id}',
+                        'original_name': order['address'].get('name', 'Unknown')
+                    }
+    
+    # Add debug info about what we found
+    transport_methods_found = 0
+    addresses_found = 0
+    
+    for order in orders:
+        if order.get('transport_method'):
+            transport_methods_found += 1
+        if order.get('address'):
+            addresses_found += 1
+    
+    data['debug'] = {
+        'total_orders': len(orders),
+        'original_orders_before_date_filter': original_count,
+        'date_range_requested': f"{frontend_start_date} to {frontend_end_date}",
+        'transport_methods_found': transport_methods_found,
+        'addresses_found': addresses_found,
+        'addresses_enhanced': enhanced_addresses,
+        'source': 'Direct from Sales Orders API with efficient filtering + address enhancement',
+        'transport_filter_note': 'Transport method filtering happens on frontend, not API level'
+    }
+    
+    print(f"DEBUG: Returning response with {len(orders)} orders")
+    return jsonify(data)
+
+@app.route('/api/debug/auth-status')
+def debug_auth_status():
+    """Debug endpoint to check authentication status"""
+    return jsonify({
+        'is_authenticated': is_token_valid(),
+        'session_keys': list(session.keys()),
+        'has_access_token': 'access_token' in session,
+        'token_expires_at': session.get('token_expires_at'),
+        'current_time': time.time()
+    })
+
+@app.route('/api/debug/address/<int:address_id>')
+def debug_address(address_id):
+    """Debug endpoint to test address API directly"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    print(f"DEBUG: Testing address API for address ID {address_id}")
+    
+    # Try different possible endpoints for addresses
+    endpoints_to_try = [
+        f'/api/public/v1/core/addresses/{address_id}',
+        f'/api/public/v1/crm/addresses/{address_id}',
+        f'/api/public/v1/logistics/addresses/{address_id}',
+        f'/api/public/v1/addresses/{address_id}'
+    ]
+    
+    results = {}
+    for endpoint in endpoints_to_try:
+        print(f"DEBUG: Trying endpoint: {endpoint}")
+        data, error = make_api_request(endpoint)
+        results[endpoint] = {
+            'success': error is None,
+            'error': error,
+            'data': data.get('result') if data and not error else None
+        }
+        if not error and data:
+            print(f"DEBUG: SUCCESS with {endpoint}")
+            break
+        else:
+            print(f"DEBUG: FAILED with {endpoint}: {error}")
+    
+    return jsonify({
+        'address_id': address_id,
+        'results': results
+    })
+
+@app.route('/api/debug/raw-sales-orders')
+def debug_raw_sales_orders():
+    """Debug endpoint to see raw sales orders data like CSV export"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get raw sales orders with minimal filtering to compare with CSV
+    params = {
+        'per_page': 1000,
+        'filter_by_created_since': '2025-08-01',  # Get recent orders
+        'order_by_date': 'desc'
+    }
+    
+    print(f"DEBUG: Fetching raw sales orders with params: {params}")
+    
+    data, error = make_paginated_api_request('/api/public/v1/trade/sales-orders', params=params)
+    
+    if error:
+        return jsonify({'error': error}), 500
+    
+    orders = data.get('result', {}).get('data', [])
+    
+    # Count transport methods like in CSV
+    transport_stats = {}
+    shippr_orders = []
+    
+    for order in orders:
+        transport_method = 'Unknown'
+        if order.get('transport_method') and order['transport_method'].get('name'):
+            transport_method = order['transport_method']['name']
+        
+        transport_stats[transport_method] = transport_stats.get(transport_method, 0) + 1
+        
+        # Collect SHIPPR orders specifically
+        if 'SHIPPR' in transport_method:
+            shippr_orders.append({
+                'id': order.get('id'),
+                'date': order.get('date'),
+                'company': order.get('company', {}).get('name'),
+                'transport_method': transport_method,
+                'address_id': order.get('address', {}).get('id'),
+                'address_name': order.get('address', {}).get('name')
+            })
+    
+    return jsonify({
+        'total_orders': len(orders),
+        'transport_method_stats': transport_stats,
+        'shippr_orders_count': len(shippr_orders),
+        'shippr_orders_sample': shippr_orders[:10],  # First 10 SHIPPR orders
+        'sample_order_structure': orders[0] if orders else None,
+        'comparison_with_csv': {
+            'csv_shows': '200+ SHIPPR orders',
+            'api_shows': f'{len(shippr_orders)} SHIPPR orders',
+            'possible_issue': 'Date filtering or API pagination limits'
+        }
+    })
 
 @app.route('/api/analytics/sales')
 def api_analytics_sales():
@@ -928,16 +1419,40 @@ def api_products_hierarchy():
     if not is_token_valid():
         return jsonify({'error': 'Not authenticated'}), 401
     
-    # Get all composed product items
-    params = {
-        'per_page': 1000,  # Get all items to build hierarchy
-        'page': 1
-    }
-    
-    data, error = make_paginated_api_request('/api/public/v1/core/composed-product-items', params=params)
-    
-    if error:
-        return jsonify({'error': error}), 500
+    try:
+        # Get all composed product items
+        params = {
+            'per_page': 1000,  # Get all items to build hierarchy
+            'page': 1
+        }
+        
+        data, error = make_paginated_api_request('/api/public/v1/core/composed-product-items', params=params)
+        
+        if error:
+            print(f"❌ Error fetching composed products: {error}")
+            # Return empty structure if API fails
+            return jsonify({
+                'hierarchy': [],
+                'all_products': [],
+                'stats': {
+                    'total_composed_products': 0,
+                    'total_unique_products': 0,
+                    'total_components': 0
+                }
+            })
+    except Exception as e:
+        print(f"❌ Exception in products hierarchy: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'hierarchy': [],
+            'all_products': [],
+            'stats': {
+                'total_composed_products': 0,
+                'total_unique_products': 0,
+                'total_components': 0
+            }
+        })
     
     # Process the data to create a hierarchical structure
     if 'result' in data and 'data' in data['result']:
@@ -1042,6 +1557,25 @@ def prospecting():
     if not is_token_valid():
         return redirect(url_for('index'))
     return render_template('prospecting.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
+
+
+@app.route('/planning')
+def planning():
+    """Planning page with Mapbox map visualization"""
+    if not is_token_valid():
+        return redirect(url_for('index'))
+    
+    # Mapbox API key
+    mapbox_api_key = "pk.eyJ1IjoiaGVuZHJpa3l1Z2VuIiwiYSI6ImNtY24zZnB4YTAwNTYybnMzNGVpemZxdGEifQ.HIpLMTGycSiEsf7ytxaSJg"
+    
+    return render_template('planning.html', mapbox_api_key=mapbox_api_key)
+
+@app.route('/tasks')
+def tasks():
+    """Task Management Dashboard"""
+    if not is_token_valid():
+        return redirect(url_for('index'))
+    return render_template('tasks.html')
 
 
 def _companyweb_search_url(company_name: str) -> str:
@@ -1542,17 +2076,15 @@ def api_create_prospect():
             'custom': []
         }
         
-        # Prepare prospect data
+        # Prepare prospect data with new pipeline fields
+        # Only include core fields that definitely exist in the prospects table
         prospect_data = {
             'name': data['name'],
             'address': data.get('address', ''),
             'website': data.get('website', ''),
-            'status': data.get('status', 'new'),
+            'status': data.get('status', 'new_leads'),
             'enriched_data': data.get('enriched_data', {}),
-            'google_place_id': data.get('google_place_id'),
             'tags': tags,
-            'search_query': data.get('search_query', ''),
-            'enrichment_status': 'pending',
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat()
         }
@@ -1611,18 +2143,50 @@ def api_update_prospect(prospect_id):
             'updated_at': datetime.now().isoformat()
         }
         
-        # Add allowed fields
-        allowed_fields = ['status', 'name', 'address', 'website', 'enriched_data', 'notes']
+        # Add allowed fields - only include fields that definitely exist in prospects table
+        allowed_fields = [
+            'status', 'name', 'address', 'website', 'enriched_data', 'notes'
+        ]
+        
+        # Add optional fields that might exist (these won't cause errors if they don't exist)
+        optional_fields = [
+            'region', 'contact_later_date', 'contact_later_reason',
+            'unqualified_reason', 'unqualified_details', 'next_action'
+        ]
         for field in allowed_fields:
             if field in data:
                 update_data[field] = data[field]
+        
+        # Special handling for contact_later status
+        if data.get('status') == 'contact_later' and 'contact_later_date' in data:
+            # Create a task for follow-up
+            task_data = {
+                'prospect_id': prospect_id,
+                'task_type': 'contact_later',
+                'title': f"Follow up with {data.get('name', 'prospect')}",
+                'description': data.get('contact_later_reason', 'Scheduled follow-up contact'),
+                'scheduled_date': data['contact_later_date'],
+                'created_at': datetime.now().isoformat()
+            }
+            
+            try:
+                supabase_client.table('prospect_tasks').insert(task_data).execute()
+            except Exception as task_error:
+                print(f"Failed to create task for contact_later: {task_error}")
+                # Don't fail the main update if task creation fails
         
         # Update in Supabase
         result = supabase_client.table('prospects').update(update_data).eq('id', prospect_id).execute()
         
         if result.data:
+            updated_prospect = result.data[0]
+            
+            # Create automated tasks based on status change
+            if 'status' in data:
+                create_automated_tasks(prospect_id, data['status'], updated_prospect)
+            
             return jsonify({
-                'prospect': result.data[0],
+                'prospect': updated_prospect,
                 'message': 'Prospect updated successfully'
             })
         else:
@@ -1652,6 +2216,842 @@ def api_delete_prospect(prospect_id):
             
     except Exception as e:
         return jsonify({'error': f'Failed to delete prospect: {str(e)}'}), 500
+
+
+# Pipeline Enhancement API Routes
+
+@app.route('/api/prospects/pipeline-stats', methods=['GET'])
+def api_get_pipeline_stats():
+    """Get prospect pipeline statistics"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+
+    try:
+        # Calculate stats manually - more reliable than database function
+        prospects_result = supabase_client.table('prospects').select('status').execute()
+        prospects = prospects_result.data or []
+
+        stats = {}
+        total = len(prospects)
+
+        for prospect in prospects:
+            status = prospect.get('status', 'new_leads')
+            if status:  # Only count non-null statuses
+                stats[status] = stats.get(status, 0) + 1
+
+        # Convert to percentage and sort by pipeline order
+        pipeline_order = {
+            'new_leads': 1,
+            'visited': 2,
+            'first_contact': 3,
+            'meeting_planned': 4,
+            'follow_up': 5,
+            'customer': 6,
+            'ex_customer': 7,
+            'contact_later': 8,
+            'unqualified': 9
+        }
+
+        formatted_stats = {}
+        for status, count in stats.items():
+            formatted_stats[status] = {
+                'count': count,
+                'percentage': round((count / total * 100), 2) if total > 0 else 0
+            }
+
+        return jsonify({
+            'stats': formatted_stats,
+            'total': total
+        })
+
+    except Exception as e:
+        print(f"Error getting pipeline stats: {e}")
+        return jsonify({'error': f'Failed to get pipeline stats: {str(e)}'}), 500
+
+
+@app.route('/api/prospect-tasks', methods=['GET'])
+def api_get_prospect_tasks():
+    """Get prospect tasks/reminders"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        # Get query parameters
+        prospect_id = request.args.get('prospect_id')
+        completed = request.args.get('completed')
+        overdue_only = request.args.get('overdue_only') == 'true'
+        
+        # Build query
+        query = supabase_client.table('prospect_tasks').select('''
+            *,
+            prospects:prospect_id (
+                id,
+                name,
+                status
+            )
+        ''')
+        
+        if prospect_id:
+            query = query.eq('prospect_id', prospect_id)
+        
+        if completed is not None:
+            query = query.eq('completed', completed.lower() == 'true')
+        
+        if overdue_only:
+            from datetime import date
+            query = query.lt('scheduled_date', date.today().isoformat())
+            query = query.eq('completed', False)
+        
+        result = query.order('scheduled_date').execute()
+        
+        return jsonify({
+            'tasks': result.data,
+            'count': len(result.data)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch tasks: {str(e)}'}), 500
+
+
+@app.route('/api/prospect-tasks', methods=['POST'])
+def api_create_prospect_task():
+    """Create a new prospect task"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        required_fields = ['prospect_id', 'title', 'scheduled_date']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        task_data = {
+            'prospect_id': data['prospect_id'],
+            'task_type': data.get('task_type', 'contact_later'),
+            'title': data['title'],
+            'description': data.get('description', ''),
+            'scheduled_date': data['scheduled_date'],
+            'created_at': datetime.now().isoformat()
+        }
+        
+        result = supabase_client.table('prospect_tasks').insert(task_data).execute()
+        
+        if result.data:
+            return jsonify({
+                'task': result.data[0],
+                'message': 'Task created successfully'
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to create task'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to create task: {str(e)}'}), 500
+
+
+@app.route('/api/prospect-tasks/<task_id>', methods=['PATCH'])
+def api_update_prospect_task(task_id):
+    """Update a prospect task"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        update_data = {
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        allowed_fields = ['title', 'description', 'scheduled_date', 'completed', 'completed_at']
+        for field in allowed_fields:
+            if field in data:
+                update_data[field] = data[field]
+        
+        # Set completed_at when marking as completed
+        if data.get('completed') and 'completed_at' not in data:
+            update_data['completed_at'] = datetime.now().isoformat()
+        
+        result = supabase_client.table('prospect_tasks').update(update_data).eq('id', task_id).execute()
+        
+        if result.data:
+            return jsonify({
+                'task': result.data[0],
+                'message': 'Task updated successfully'
+            })
+        else:
+            return jsonify({'error': 'Task not found'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to update task: {str(e)}'}), 500
+
+
+@app.route('/api/unqualified-reasons', methods=['GET'])
+def api_get_unqualified_reasons():
+    """Get predefined unqualified reasons"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        result = supabase_client.table('unqualified_reasons').select('*').order('sort_order').execute()
+        
+        return jsonify({
+            'reasons': result.data,
+            'count': len(result.data)
+        })
+        
+    except Exception as e:
+        # Return default reasons if table doesn't exist yet
+        default_reasons = [
+            {'reason_code': 'no_fridge_space', 'reason_text': 'No Fridge space & no place for extra fridge'},
+            {'reason_code': 'no_fit', 'reason_text': 'No fit'},
+            {'reason_code': 'not_convinced', 'reason_text': 'Not convinced by product'},
+            {'reason_code': 'too_expensive', 'reason_text': 'Too expensive'},
+            {'reason_code': 'prefers_competition', 'reason_text': 'Likes competition more'},
+            {'reason_code': 'unclear', 'reason_text': 'Unclear'}
+        ]
+        
+        return jsonify({
+            'reasons': default_reasons,
+            'count': len(default_reasons),
+            'note': 'Using default reasons. Run migration to create unqualified_reasons table.'
+        })
+
+
+# COMPREHENSIVE TASK MANAGEMENT API ENDPOINTS
+
+@app.route('/api/tasks', methods=['GET'])
+def api_get_tasks():
+    """Get tasks with filtering and sorting options"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        # Get query parameters
+        status = request.args.get('status')
+        priority = request.args.get('priority')
+        task_type = request.args.get('task_type')
+        category = request.args.get('category')
+        assigned_to = request.args.get('assigned_to')
+        due_date = request.args.get('due_date')
+        prospect_id = request.args.get('prospect_id')
+        overdue_only = request.args.get('overdue_only') == 'true'
+        upcoming_days = request.args.get('upcoming_days')
+        
+        # Build query with prospect information
+        query = supabase_client.table('sales_tasks').select('''
+            *,
+            prospects:prospect_id (
+                id,
+                name,
+                status,
+                address
+            )
+        ''')
+        
+        # Apply filters
+        if status:
+            query = query.eq('status', status)
+        if priority:
+            query = query.eq('priority', int(priority))
+        if task_type:
+            query = query.eq('task_type', task_type)
+        if category:
+            query = query.eq('category', category)
+        if assigned_to:
+            query = query.eq('assigned_to', assigned_to)
+        if prospect_id:
+            query = query.eq('prospect_id', prospect_id)
+        if due_date:
+            query = query.eq('due_date', due_date)
+        if overdue_only:
+            from datetime import date
+            query = query.lt('due_date', date.today().isoformat())
+            query = query.neq('status', 'completed')
+        if upcoming_days:
+            from datetime import date, timedelta
+            end_date = date.today() + timedelta(days=int(upcoming_days))
+            query = query.gte('due_date', date.today().isoformat())
+            query = query.lte('due_date', end_date.isoformat())
+        
+        # IMPORTANT: Exclude long-term customer maintenance tasks from main task list
+        # These should only appear in the calendar view
+        query = query.neq('category', 'customer_maintenance')
+        
+        # Execute query with sorting
+        result = query.order('due_date', desc=False).order('priority', desc=False).execute()
+        
+        return jsonify({
+            'tasks': result.data,
+            'count': len(result.data)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch tasks: {str(e)}'}), 500
+
+
+@app.route('/api/tasks', methods=['POST'])
+def api_create_task():
+    """Create a new task"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        required_fields = ['title']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Prepare task data
+        task_data = {
+            'title': data['title'],
+            'description': data.get('description', ''),
+            'task_type': data.get('task_type', 'general'),
+            'category': data.get('category', 'sales'),
+            'priority': data.get('priority', 3),
+            'status': data.get('status', 'pending'),
+            'due_date': data.get('due_date'),
+            'due_time': data.get('due_time'),
+            'scheduled_date': data.get('scheduled_date'),
+            'scheduled_time': data.get('scheduled_time'),
+            'estimated_duration': data.get('estimated_duration'),
+            'prospect_id': data.get('prospect_id'),
+            'assigned_to': data.get('assigned_to'),
+            'created_by': data.get('created_by'),
+            'progress_percentage': data.get('progress_percentage', 0),
+            'notes': data.get('notes', ''),
+            'tags': data.get('tags', []),
+            'attachments': data.get('attachments', []),
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        # Insert into Supabase
+        result = supabase_client.table('sales_tasks').insert(task_data).execute()
+        
+        if result.data:
+            return jsonify({
+                'task': result.data[0],
+                'message': 'Task created successfully'
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to create task'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to create task: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/<task_id>', methods=['GET'])
+def api_get_task(task_id):
+    """Get a specific task with full details"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        # Get task with prospect and comments
+        task_result = supabase_client.table('sales_tasks').select('''
+            *,
+            prospects:prospect_id (
+                id,
+                name,
+                status,
+                address,
+                enriched_data
+            )
+        ''').eq('id', task_id).execute()
+        
+        if not task_result.data:
+            return jsonify({'error': 'Task not found'}), 404
+        
+        # Get task comments
+        comments_result = supabase_client.table('task_comments').select('*').eq('task_id', task_id).order('created_at').execute()
+        
+        task = task_result.data[0]
+        task['comments'] = comments_result.data
+        
+        return jsonify({
+            'task': task
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch task: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/<task_id>', methods=['PATCH'])
+def api_update_task(task_id):
+    """Update a task"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Prepare update data
+        update_data = {
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        # Add allowed fields
+        allowed_fields = [
+            'title', 'description', 'task_type', 'category', 'priority', 'status',
+            'due_date', 'due_time', 'scheduled_date', 'scheduled_time', 'estimated_duration',
+            'prospect_id', 'assigned_to', 'progress_percentage', 'notes', 'tags', 'attachments',
+            'completed_at'
+        ]
+        
+        for field in allowed_fields:
+            if field in data:
+                update_data[field] = data[field]
+        
+        # Handle completion
+        if data.get('status') == 'completed' and 'completed_at' not in data:
+            update_data['completed_at'] = datetime.now().isoformat()
+            update_data['progress_percentage'] = 100
+        
+        # Update in Supabase
+        result = supabase_client.table('sales_tasks').update(update_data).eq('id', task_id).execute()
+        
+        if result.data:
+            # Add comment for status changes
+            if 'status' in data:
+                comment_data = {
+                    'task_id': task_id,
+                    'comment': f"Status changed to {data['status']}",
+                    'comment_type': 'status_change',
+                    'created_by': data.get('updated_by', 'System'),
+                    'created_at': datetime.now().isoformat()
+                }
+                supabase_client.table('task_comments').insert(comment_data).execute()
+            
+            return jsonify({
+                'task': result.data[0],
+                'message': 'Task updated successfully'
+            })
+        else:
+            return jsonify({'error': 'Task not found'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to update task: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/<task_id>', methods=['DELETE'])
+def api_delete_task(task_id):
+    """Delete a task"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        result = supabase_client.table('sales_tasks').delete().eq('id', task_id).execute()
+        
+        if result.data:
+            return jsonify({'message': 'Task deleted successfully'})
+        else:
+            return jsonify({'error': 'Task not found'}), 404
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to delete task: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/<task_id>/comments', methods=['POST'])
+def api_add_task_comment(task_id):
+    """Add a comment to a task"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        data = request.get_json()
+        if not data or 'comment' not in data:
+            return jsonify({'error': 'Comment text required'}), 400
+        
+        comment_data = {
+            'task_id': task_id,
+            'comment': data['comment'],
+            'comment_type': data.get('comment_type', 'comment'),
+            'created_by': data.get('created_by', 'User'),
+            'created_at': datetime.now().isoformat()
+        }
+        
+        result = supabase_client.table('task_comments').insert(comment_data).execute()
+        
+        if result.data:
+            return jsonify({
+                'comment': result.data[0],
+                'message': 'Comment added successfully'
+            }), 201
+        else:
+            return jsonify({'error': 'Failed to add comment'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Failed to add comment: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/analytics', methods=['GET'])
+def api_get_task_analytics():
+    """Get task analytics and statistics"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        # Get basic task counts by status (excluding long-term customer maintenance tasks)
+        tasks_result = supabase_client.table('sales_tasks').select('status, priority, task_type, category, due_date').neq('category', 'customer_maintenance').execute()
+        tasks = tasks_result.data or []
+        
+        # Calculate analytics
+        from datetime import date, timedelta
+        today = date.today()
+        
+        analytics = {
+            'total_tasks': len(tasks),
+            'by_status': {},
+            'by_priority': {},
+            'by_type': {},
+            'by_category': {},
+            'overdue_count': 0,
+            'due_today': 0,
+            'due_this_week': 0,
+            'completion_rate': 0
+        }
+        
+        for task in tasks:
+            # By status
+            status = task.get('status', 'pending')
+            analytics['by_status'][status] = analytics['by_status'].get(status, 0) + 1
+            
+            # By priority
+            priority = task.get('priority', 3)
+            analytics['by_priority'][f'priority_{priority}'] = analytics['by_priority'].get(f'priority_{priority}', 0) + 1
+            
+            # By type
+            task_type = task.get('task_type', 'general')
+            analytics['by_type'][task_type] = analytics['by_type'].get(task_type, 0) + 1
+            
+            # By category
+            category = task.get('category', 'sales')
+            analytics['by_category'][category] = analytics['by_category'].get(category, 0) + 1
+            
+            # Due date analytics
+            if task.get('due_date'):
+                due_date = datetime.strptime(task['due_date'], '%Y-%m-%d').date()
+                if due_date < today and status != 'completed':
+                    analytics['overdue_count'] += 1
+                elif due_date == today:
+                    analytics['due_today'] += 1
+                elif due_date <= today + timedelta(days=7):
+                    analytics['due_this_week'] += 1
+        
+        # Calculate completion rate
+        completed = analytics['by_status'].get('completed', 0)
+        if analytics['total_tasks'] > 0:
+            analytics['completion_rate'] = round((completed / analytics['total_tasks']) * 100, 2)
+        
+        return jsonify(analytics)
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to get analytics: {str(e)}'}), 500
+
+
+@app.route('/api/task-templates', methods=['GET'])
+def api_get_task_templates():
+    """Get available task templates"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        result = supabase_client.table('task_templates').select('*').eq('is_active', True).order('name').execute()
+        
+        return jsonify({
+            'templates': result.data,
+            'count': len(result.data)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch templates: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/upcoming', methods=['GET'])
+def api_get_upcoming_tasks():
+    """Get upcoming tasks for dashboard"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        days_ahead = int(request.args.get('days', 7))
+        
+        from datetime import date, timedelta
+        end_date = date.today() + timedelta(days=days_ahead)
+        
+        result = supabase_client.table('sales_tasks').select('''
+            *,
+            prospects:prospect_id (
+                id,
+                name,
+                status
+            )
+        ''').gte('due_date', date.today().isoformat()).lte('due_date', end_date.isoformat()).in_('status', ['pending', 'in_progress']).order('due_date').order('priority').execute()
+        
+        return jsonify({
+            'tasks': result.data,
+            'count': len(result.data),
+            'days_ahead': days_ahead
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch upcoming tasks: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/calendar', methods=['GET'])
+def api_get_tasks_calendar():
+    """Get all tasks for calendar view, including far future ones"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        from datetime import date, timedelta
+        
+        # Get date range from query parameters
+        start_date = request.args.get('start_date', date.today().isoformat())
+        end_date = request.args.get('end_date', (date.today() + timedelta(days=365)).isoformat())
+        
+        # Get all tasks within date range, including prospect info
+        result = supabase_client.table('sales_tasks').select('''
+            *, 
+            prospects:prospect_id (
+                id,
+                name,
+                status
+            )
+        ''').gte('due_date', start_date).lte('due_date', end_date).order('due_date').execute()
+        
+        tasks = result.data or []
+        
+        # Group tasks by month for easier calendar display
+        from collections import defaultdict
+        tasks_by_month = defaultdict(list)
+        
+        for task in tasks:
+            if task.get('due_date'):
+                month_key = task['due_date'][:7]  # YYYY-MM format
+                tasks_by_month[month_key].append(task)
+        
+        return jsonify({
+            'tasks': tasks,
+            'tasks_by_month': dict(tasks_by_month),
+            'date_range': {
+                'start': start_date,
+                'end': end_date
+            },
+            'total_tasks': len(tasks)
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch calendar tasks: {str(e)}'}), 500
+
+
+@app.route('/api/tasks/debug/<prospect_id>')
+def api_debug_prospect_tasks(prospect_id):
+    """Debug endpoint to see all tasks for a specific prospect"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    try:
+        # Get all tasks for this prospect
+        result = supabase_client.table('sales_tasks').select('*').eq('prospect_id', prospect_id).order('due_date').execute()
+        
+        # Get prospect info
+        prospect_result = supabase_client.table('prospects').select('*').eq('id', prospect_id).execute()
+        
+        return jsonify({
+            'prospect': prospect_result.data[0] if prospect_result.data else None,
+            'tasks': result.data or [],
+            'task_count': len(result.data or [])
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Debug failed: {str(e)}'}), 500
+
+
+def create_automated_tasks(prospect_id, new_status, prospect_data):
+    """Create automated tasks based on prospect status changes"""
+    try:
+        from datetime import datetime, timedelta
+        
+        prospect_name = prospect_data.get('name', 'Unknown Prospect')
+        tasks_to_create = []
+        
+        # Tasks after visit (when status changes to 'visited', 'first_contact', etc.)
+        if new_status in ['visited', 'first_contact']:
+            # 📧 Send Mail (immediate)
+            tasks_to_create.append({
+                'prospect_id': prospect_id,
+                'title': f'📧 Send follow-up email to {prospect_name}',
+                'description': 'Send personalized follow-up email with product information and next steps',
+                'task_type': 'email',
+                'category': 'follow_up',
+                'priority': 2,  # Orange - within 7 days
+                'due_date': (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
+                'status': 'pending',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            })
+            
+            # 📥 Check for Reply (after 3 days)
+            tasks_to_create.append({
+                'prospect_id': prospect_id,
+                'title': f'📥 Check for reply from {prospect_name}',
+                'description': 'Follow up if no response received to initial email',
+                'task_type': 'follow_up',
+                'category': 'follow_up',
+                'priority': 3,  # Green - not urgent
+                'due_date': (datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d'),
+                'status': 'pending',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            })
+            
+            # 📞 Call task (after 5 days)
+            tasks_to_create.append({
+                'prospect_id': prospect_id,
+                'title': f'📞 Call {prospect_name}',
+                'description': 'Phone call to discuss their needs and schedule next meeting',
+                'task_type': 'call',
+                'category': 'follow_up',
+                'priority': 2,  # Orange - within 7 days
+                'due_date': (datetime.now() + timedelta(days=5)).strftime('%Y-%m-%d'),
+                'status': 'pending',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            })
+        
+        # Customer follow-up flow
+        elif new_status == 'customer':
+            # After 1 month: "Hoe gaat het? Wat kan beter?"
+            tasks_to_create.append({
+                'prospect_id': prospect_id,
+                'title': f'🔄 1-Month Check-in: {prospect_name}',
+                'description': 'Contact customer: "Hoe gaat het? Wat kan beter?" - Gather feedback and identify improvement opportunities',
+                'task_type': 'call',
+                'category': 'customer_maintenance',  # Special category for long-term tasks
+                'priority': 3,  # Green - not urgent
+                'due_date': (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d'),
+                'status': 'pending',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'is_automated': True
+            })
+            
+            # After 3 months: Follow up
+            tasks_to_create.append({
+                'prospect_id': prospect_id,
+                'title': f'🔄 3-Month Follow-up: {prospect_name}',
+                'description': 'Quarterly check-in to ensure satisfaction and identify new opportunities',
+                'task_type': 'call',
+                'category': 'customer_maintenance',  # Special category for long-term tasks
+                'priority': 3,  # Green - not urgent
+                'due_date': (datetime.now() + timedelta(days=90)).strftime('%Y-%m-%d'),
+                'status': 'pending',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'is_automated': True
+            })
+            
+            # After 6 months: Regular check-in (will repeat every 6 months)
+            tasks_to_create.append({
+                'prospect_id': prospect_id,
+                'title': f'🔄 6-Month Regular Check-in: {prospect_name}',
+                'description': 'Semi-annual customer review and relationship maintenance (repeats every 6 months)',
+                'task_type': 'meeting',
+                'category': 'customer_maintenance',  # Special category for long-term tasks
+                'priority': 3,  # Green - not urgent
+                'due_date': (datetime.now() + timedelta(days=180)).strftime('%Y-%m-%d'),
+                'status': 'pending',
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat(),
+                'is_recurring': True,
+                'recurring_interval_days': 180,  # Every 6 months
+                'is_automated': True
+            })
+        
+        # Create all tasks in database
+        if tasks_to_create and supabase_client:
+            for task in tasks_to_create:
+                try:
+                    result = supabase_client.table('sales_tasks').insert(task).execute()
+                    if result.data:
+                        print(f"✅ Created automated task: {task['title']}")
+                    else:
+                        print(f"❌ Failed to create task: {task['title']}")
+                except Exception as task_error:
+                    print(f"❌ Error creating task {task['title']}: {str(task_error)}")
+                    
+        print(f"🤖 Created {len(tasks_to_create)} automated tasks for {prospect_name} (status: {new_status})")
+        
+        # Return task creation summary for debugging
+        return {
+            'tasks_created': len(tasks_to_create),
+            'task_titles': [task['title'] for task in tasks_to_create]
+        }
+        
+    except Exception as e:
+        print(f"❌ Error in create_automated_tasks: {str(e)}")
+        # Don't fail the main operation if task creation fails
 
 
 def _enrich_prospect_background(prospect_id, company_name, address, website):
@@ -1876,15 +3276,6 @@ def _enrich_prospect_background(prospect_id, company_name, address, website):
     thread.start()
 
 
-@app.route('/companies')
-def companies():
-    """All companies page"""
-    if not is_token_valid():
-        return redirect(url_for('index'))
-    
-    return render_template('all_companies.html')
-
-
 @app.route('/company-categories') 
 def company_categories_page():
     """Company categories page"""
@@ -1930,6 +3321,15 @@ def sales():
     return render_template('sales.html')
 
 
+@app.route('/sales-2025')
+def sales_2025():
+    """2025 Sales data extraction and management page"""
+    if not is_token_valid():
+        return redirect(url_for('index'))
+    
+    return render_template('sales_2025.html')
+
+
 @app.route('/products')
 def products():
     """Products data page"""
@@ -1945,6 +3345,380 @@ def visualize():
     if not is_token_valid():
         return redirect(url_for('index'))
     return render_template('visualize.html')
+
+
+@app.route('/maps-ai')
+def maps_ai():
+    """Maps AI with Gemini grounding"""
+    if not is_token_valid():
+        return redirect(url_for('index'))
+    return render_template('maps_ai.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
+
+
+@app.route('/api/maps-ai/chat', methods=['POST'])
+def api_maps_ai_chat():
+    """Chat with Maps AI using Gemini grounding"""
+    if not is_token_valid():
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    if gemini_client is None:
+        return jsonify({
+            'success': False, 
+            'error': 'Gemini API is not configured. Please set GEMINI_API_KEY in your environment variables.'
+        }), 500
+    
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        location = data.get('location')
+        history = data.get('history', [])
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'Message is required'}), 400
+        
+        # Build config with Google Maps grounding
+        config_dict = {
+            'tools': [types.Tool(google_maps=types.GoogleMaps())],
+        }
+        
+        # Add location context if available
+        if location and 'latitude' in location and 'longitude' in location:
+            config_dict['tool_config'] = types.ToolConfig(
+                retrieval_config=types.RetrievalConfig(
+                    lat_lng=types.LatLng(
+                        latitude=location['latitude'],
+                        longitude=location['longitude']
+                    )
+                )
+            )
+        
+        # Make API call to Gemini with Maps grounding
+        response = gemini_client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=message,
+            config=types.GenerateContentConfig(**config_dict)
+        )
+        
+        # Extract response text
+        response_text = response.text
+        
+        # Extract grounding sources if available
+        sources = []
+        if response.candidates and len(response.candidates) > 0:
+            grounding = response.candidates[0].grounding_metadata
+            if grounding and grounding.grounding_chunks:
+                for chunk in grounding.grounding_chunks:
+                    if hasattr(chunk, 'maps') and chunk.maps:
+                        sources.append({
+                            'title': chunk.maps.title,
+                            'uri': chunk.maps.uri,
+                            'place_id': getattr(chunk.maps, 'place_id', None)
+                        })
+        
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'sources': sources
+        })
+        
+    except Exception as e:
+        print(f"Error in Maps AI chat: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Error processing request: {str(e)}'
+        }), 500
+
+
+@app.route('/maps-ai-enhanced')
+def maps_ai_enhanced():
+    """Enhanced Maps AI with interactive map visualization"""
+    if not is_token_valid():
+        return redirect(url_for('index'))
+    return render_template('maps_ai_enhanced.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
+
+
+@app.route('/api/maps-ai/chat-enhanced', methods=['POST'])
+def api_maps_ai_chat_enhanced():
+    """Enhanced chat with agentic map features and place details"""
+    if not is_token_valid():
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    if gemini_client is None:
+        return jsonify({
+            'success': False, 
+            'error': 'Gemini API is not configured. Please set GEMINI_API_KEY in your environment variables.'
+        }), 500
+    
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        location = data.get('location')
+        history = data.get('history', [])
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'Message is required'}), 400
+        
+        # Build config with Google Maps grounding
+        config_dict = {
+            'tools': [types.Tool(google_maps=types.GoogleMaps())],
+        }
+        
+        # Add location context if available
+        if location and 'latitude' in location and 'longitude' in location:
+            config_dict['tool_config'] = types.ToolConfig(
+                retrieval_config=types.RetrievalConfig(
+                    lat_lng=types.LatLng(
+                        latitude=location['latitude'],
+                        longitude=location['longitude']
+                    )
+                )
+            )
+        
+        # Make API call to Gemini with Maps grounding
+        response = gemini_client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=message,
+            config=types.GenerateContentConfig(**config_dict)
+        )
+        
+        # Extract response text
+        response_text = response.text
+        
+        # Extract place details from grounding metadata
+        places = []
+        place_ids = []
+        
+        if response.candidates and len(response.candidates) > 0:
+            grounding = response.candidates[0].grounding_metadata
+            if grounding and grounding.grounding_chunks:
+                for chunk in grounding.grounding_chunks:
+                    if hasattr(chunk, 'maps') and chunk.maps:
+                        place_id = getattr(chunk.maps, 'place_id', None)
+                        if place_id and place_id not in place_ids:
+                            place_ids.append(place_id)
+        
+        # Fetch detailed place information using Google Places API
+        # This would require implementing a Google Places API call
+        # For now, we'll extract basic info from the grounding metadata
+        if place_ids and GOOGLE_MAPS_API_KEY:
+            try:
+                # Fetch place details for visualization
+                for place_id in place_ids[:5]:  # Limit to 5 places
+                    place_details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&key={GOOGLE_MAPS_API_KEY}&fields=name,formatted_address,geometry,rating,user_ratings_total,photos,opening_hours,vicinity"
+                    place_response = requests.get(place_details_url, timeout=5)
+                    
+                    if place_response.status_code == 200:
+                        place_data = place_response.json()
+                        if place_data.get('status') == 'OK':
+                            result = place_data['result']
+                            place_info = {
+                                'place_id': place_id,
+                                'name': result.get('name', ''),
+                                'formatted_address': result.get('formatted_address', ''),
+                                'vicinity': result.get('vicinity', ''),
+                                'rating': result.get('rating'),
+                                'user_ratings_total': result.get('user_ratings_total'),
+                                'geometry': result.get('geometry'),
+                                'opening_hours': result.get('opening_hours'),
+                                'photo_url': None
+                            }
+                            
+                            # Get photo URL if available
+                            if result.get('photos') and len(result['photos']) > 0:
+                                photo_reference = result['photos'][0].get('photo_reference')
+                                if photo_reference:
+                                    place_info['photo_url'] = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference={photo_reference}&key={GOOGLE_MAPS_API_KEY}"
+                            
+                            places.append(place_info)
+            except Exception as e:
+                print(f"Error fetching place details: {str(e)}")
+        
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'places': places
+        })
+        
+    except Exception as e:
+        print(f"Error in enhanced Maps AI chat: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Error processing request: {str(e)}'
+        }), 500
+
+
+@app.route('/maps-ai-3d')
+def maps_ai_3d():
+    """3D Photorealistic Maps AI with agentic functionality"""
+    if not is_token_valid():
+        return redirect(url_for('index'))
+    return render_template('maps_ai_3d.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
+
+
+@app.route('/api/maps-ai/chat-3d', methods=['POST'])
+def api_maps_ai_chat_3d():
+    """Agentic chat with 3D map visualization and tool functions"""
+    if not is_token_valid():
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    
+    if gemini_client is None:
+        return jsonify({
+            'success': False, 
+            'error': 'Gemini API is not configured. Please set GEMINI_API_KEY in your environment variables.'
+        }), 500
+    
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        location = data.get('location')
+        
+        if not message:
+            return jsonify({'success': False, 'error': 'Message is required'}), 400
+        
+        # Enhanced system instruction for agentic behavior
+        system_instruction = """You are an intelligent location-aware AI assistant with access to photorealistic 3D maps.
+
+Your capabilities:
+1. **frameEstablishingShot**: Fly the camera to a specific location with custom range, tilt, and heading
+2. **mapsGrounding**: Search for and display places using Google Maps data
+3. **frameLocations**: Frame multiple locations on the map simultaneously
+
+When users ask about places:
+- Use mapsGrounding to find accurate, real-time information
+- Automatically fly the camera to show the location
+- Provide rich details about places (ratings, hours, address)
+
+When users ask to "show", "take me to", or "explore" a location:
+- Use frameEstablishingShot to fly there with an appropriate view
+- Describe what they're seeing
+
+Be conversational, helpful, and proactive in using visual tools to enhance the experience.
+Always cite your sources from Google Maps."""
+        
+        # Build config with Google Maps grounding and system instruction
+        config_dict = {
+            'tools': [types.Tool(google_maps=types.GoogleMaps())],
+            'system_instruction': system_instruction
+        }
+        
+        # Add location context if available
+        if location and 'lat' in location and 'lng' in location:
+            config_dict['tool_config'] = types.ToolConfig(
+                retrieval_config=types.RetrievalConfig(
+                    lat_lng=types.LatLng(
+                        latitude=location['lat'],
+                        longitude=location['lng']
+                    )
+                )
+            )
+        
+        # Make API call to Gemini with Maps grounding
+        response = gemini_client.models.generate_content(
+            model='gemini-2.0-flash-exp',
+            contents=message,
+            config=types.GenerateContentConfig(**config_dict)
+        )
+        
+        # Extract response text
+        response_text = response.text
+        
+        # Process tool calls and extract locations
+        tool_results = []
+        places = []
+        place_ids = []
+        
+        # Check if we need to execute tool functions based on the query
+        # Parse common patterns for camera control
+        lower_message = message.lower()
+        
+        # frameEstablishingShot patterns
+        if any(word in lower_message for word in ['show me', 'take me to', 'fly to', 'go to', 'visit']):
+            # Try to extract location from message or use grounding
+            if response.candidates and len(response.candidates) > 0:
+                grounding = response.candidates[0].grounding_metadata
+                if grounding and grounding.grounding_chunks:
+                    for chunk in grounding.grounding_chunks:
+                        if hasattr(chunk, 'maps') and chunk.maps:
+                            place_id = getattr(chunk.maps, 'place_id', None)
+                            if place_id and place_id not in place_ids:
+                                place_ids.append(place_id)
+        
+        # Extract place details from grounding metadata
+        if response.candidates and len(response.candidates) > 0:
+            grounding = response.candidates[0].grounding_metadata
+            if grounding and grounding.grounding_chunks:
+                for chunk in grounding.grounding_chunks:
+                    if hasattr(chunk, 'maps') and chunk.maps:
+                        place_id = getattr(chunk.maps, 'place_id', None)
+                        if place_id and place_id not in place_ids:
+                            place_ids.append(place_id)
+        
+        # Fetch detailed place information
+        if place_ids and GOOGLE_MAPS_API_KEY:
+            try:
+                for place_id in place_ids[:5]:  # Limit to 5 places
+                    place_details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&key={GOOGLE_MAPS_API_KEY}&fields=name,formatted_address,geometry,rating,user_ratings_total,opening_hours,vicinity"
+                    place_response = requests.get(place_details_url, timeout=5)
+                    
+                    if place_response.status_code == 200:
+                        place_data = place_response.json()
+                        if place_data.get('status') == 'OK':
+                            result = place_data['result']
+                            places.append(result)
+                            
+                            # Create frameLocations tool result
+                            if len(places) == 1:
+                                # Single location - use frameEstablishingShot
+                                tool_results.append({
+                                    'type': 'frameEstablishingShot',
+                                    'location': {
+                                        'lat': result['geometry']['location']['lat'],
+                                        'lng': result['geometry']['location']['lng']
+                                    },
+                                    'range': 500,
+                                    'tilt': 65,
+                                    'heading': 0
+                                })
+            except Exception as e:
+                print(f"Error fetching place details: {str(e)}")
+        
+        # If we have multiple places, use frameLocations
+        if len(places) > 1:
+            locations = [{
+                'lat': p['geometry']['location']['lat'],
+                'lng': p['geometry']['location']['lng'],
+                'name': p.get('name', ''),
+                'rating': p.get('rating'),
+                'user_ratings_total': p.get('user_ratings_total'),
+                'formatted_address': p.get('formatted_address', ''),
+                'vicinity': p.get('vicinity', ''),
+                'opening_hours': p.get('opening_hours')
+            } for p in places]
+            
+            tool_results = [{
+                'type': 'frameLocations',
+                'locations': locations
+            }]
+        
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'places': places,
+            'tool_results': tool_results
+        })
+        
+    except Exception as e:
+        print(f"Error in 3D Maps AI chat: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Error processing request: {str(e)}'
+        }), 500
 
 # Delivery Orders API endpoints
 @app.route('/api/delivery-orders')
@@ -1999,17 +3773,876 @@ def api_delivery_order(order_id):
     return jsonify(data)
 
 
-@app.route('/api/companies/<int:company_id>/orders')
-def api_company_orders(company_id):
-    """Get delivery orders for a specific company (as customer)"""
+def extract_delivery_method_from_record(record, record_type=""):
+    """Extract delivery method from a record (invoice or order) using multiple strategies"""
+    delivery_method = None
+    
+    # Strategy 1: Direct field mapping - try various possible field names
+    direct_fields = [
+        'delivery_method', 'shipping_method', 'carrier', 'transport_method', 
+        'logistics_method', 'delivery_mode', 'shipping_mode', 'transport_mode',
+        'delivery_service', 'shipping_service', 'courier', 'logistics_provider',
+        'transportmethode', 'transport_methode', 'vervoermethode', 'leveringsmethode'
+    ]
+    
+    for field in direct_fields:
+        if record.get(field):
+            value = record[field]
+            # Handle transport method objects like {'id': 13, 'name': 'Customer pick-up shop'}
+            if isinstance(value, dict) and 'name' in value:
+                return value['name']
+            elif isinstance(value, dict) and 'id' in value:
+                # Try to get name from transport method ID
+                return f"Transport Method ID {value['id']}"
+            else:
+                value_str = str(value).strip()
+                if value_str and value_str.lower() not in ['none', 'null', 'undefined', '', 'n/a']:
+                    return value_str
+    
+    # Strategy 2: Check nested objects (like delivery_address, shipping_address)
+    nested_objects = ['delivery_address', 'shipping_address', 'address', 'delivery_info', 'shipping_info']
+    for obj_field in nested_objects:
+        if isinstance(record.get(obj_field), dict):
+            nested_obj = record[obj_field]
+            for field in direct_fields:
+                if nested_obj.get(field):
+                    value = str(nested_obj[field]).strip()
+                    if value and value.lower() not in ['none', 'null', 'undefined', '', 'n/a']:
+                        return value
+    
+    # Strategy 3: Text analysis of description fields
+    text_fields = [
+        record.get('notes', ''),
+        record.get('description', ''),
+        record.get('reference', ''),
+        record.get('buyer_reference', ''),
+        record.get('internal_reference', ''),
+        record.get('external_reference', ''),
+        record.get('comment', ''),
+        record.get('remarks', '')
+    ]
+    combined_text = ' '.join(str(field) for field in text_fields if field).lower()
+    
+    # Enhanced delivery keywords with variations
+    delivery_keywords = {
+        'yugen': 'Yugen',
+        'shippr': 'Shippr', 
+        'dhl': 'DHL',
+        'ups': 'UPS',
+        'fedex': 'FedEx',
+        'postnl': 'PostNL',
+        'post nl': 'PostNL',
+        'dpd': 'DPD',
+        'bpost': 'BPost',
+        'gls': 'GLS',
+        'tnt': 'TNT',
+        'aramex': 'Aramex',
+        'usps': 'USPS',
+        'royal mail': 'Royal Mail',
+        'la poste': 'La Poste',
+        'colissimo': 'Colissimo',
+        'chronopost': 'Chronopost'
+    }
+    
+    for keyword, formatted_name in delivery_keywords.items():
+        if keyword in combined_text:
+            return formatted_name
+    
+    # Strategy 4: Pattern matching for common shipping patterns
+    import re
+    shipping_patterns = [
+        r'shipped?\s+via\s+(\w+)',
+        r'delivered?\s+by\s+(\w+)',
+        r'courier[:\s]+(\w+)',
+        r'carrier[:\s]+(\w+)',
+        r'transport[:\s]+(\w+)'
+    ]
+    
+    for pattern in shipping_patterns:
+        match = re.search(pattern, combined_text, re.IGNORECASE)
+        if match:
+            return match.group(1).title()
+    
+    return None
+
+
+@app.route('/api/analytics/deliveries')
+def api_analytics_deliveries():
+    """Comprehensive delivery analytics from purchase orders with transport methods.
+    Query params:
+      filter_by_delivery_methods: comma-separated list of delivery methods (e.g. "Yugen transport,External transportation - other")
+      filter_by_start_date, filter_by_end_date: date range
+      group_by: week|month (default: week)
+    """
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    # Get query parameters
+    delivery_methods = request.args.get('filter_by_delivery_methods', '').strip()
+    start_date = request.args.get('filter_by_start_date')
+    end_date = request.args.get('filter_by_end_date')
+    group_by = request.args.get('group_by', 'week')
+    
+    # Collect all delivery data from multiple sources
+    all_delivery_records = []
+    data_sources = []
+    
+    # 1. Get addresses from core addresses endpoint
+    try:
+        params = {'per_page': 1000, 'page': 1}
+        if start_date:
+            params['filter_by_created_since'] = start_date
+        if end_date:
+            params['filter_by_updated_since'] = end_date
+            
+        raw, error = make_paginated_api_request('/api/public/v1/core/addresses', params=params)
+        if not error:
+            addresses = raw.get('result', {}).get('data', [])
+            for addr in addresses:
+                # Use the improved extraction logic
+                delivery_method = extract_delivery_method_from_record(addr, "address")
+                if not delivery_method:
+                    delivery_method = 'Standard Delivery'
+                
+                # Format address
+                address_parts = []
+                for field in ['name', 'address_line1', 'address_line2', 'city', 'post_code', 'state']:
+                    if addr.get(field):
+                        address_parts.append(str(addr[field]))
+                
+                formatted_address = ', '.join(address_parts) if address_parts else 'Address not available'
+                
+                all_delivery_records.append({
+                    'delivery_method': delivery_method,
+                    'address': formatted_address,
+                    'customer': addr.get('company', {}).get('name') if isinstance(addr.get('company'), dict) else 'Unknown',
+                    'date': addr.get('created_at') or addr.get('updated_at'),
+                    'amount': 0,  # Addresses don't have amounts
+                    'id': addr.get('id'),
+                    'source': 'addresses'
+                })
+            data_sources.append(f"Addresses: {len(addresses)} records")
+    except Exception as e:
+        data_sources.append(f"Addresses: Error - {str(e)}")
+    
+    # 2. Get sales invoices
+    try:
+        params = {'per_page': 1000, 'page': 1}
+        if start_date:
+            params['filter_by_start_date'] = start_date
+        if end_date:
+            params['filter_by_end_date'] = end_date
+        
+        raw, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
+        if not error:
+            invoices = raw.get('result', {}).get('data', [])
+            for invoice in invoices:
+                # Use the improved extraction logic
+                delivery_method = extract_delivery_method_from_record(invoice, "invoice")
+                if not delivery_method:
+                    delivery_method = 'Invoice Delivery'
+                
+                # Extract address
+                address = 'Address from invoice'
+                if invoice.get('company'):
+                    company = invoice['company']
+                    if isinstance(company, dict) and company.get('name'):
+                        address = f"Delivered to {company['name']}"
+                
+                all_delivery_records.append({
+                    'delivery_method': delivery_method,
+                    'address': address,
+                    'customer': invoice.get('buyer_name') or 'Unknown',
+                    'date': invoice.get('date') or invoice.get('created_at'),
+                    'amount': invoice.get('payable_amount_without_financial_discount') or invoice.get('balance') or 0,
+                    'id': invoice.get('id'),
+                    'source': 'invoices'
+                })
+            data_sources.append(f"Invoices: {len(invoices)} records")
+    except Exception as e:
+        data_sources.append(f"Invoices: Error - {str(e)}")
+    
+    # 3. Get purchase orders (PRIMARY SOURCE - contains transport_method field!)
+    try:
+        params = {'per_page': 500, 'page': 1}  # Limit to avoid timeout
+        if start_date:
+            params['filter_by_created_since'] = start_date
+        if end_date:
+            params['filter_by_updated_since'] = end_date
+        
+        raw, error = make_paginated_api_request('/api/public/v1/trade/purchase-orders', params=params)
+        if not error:
+            orders = raw.get('result', {}).get('data', [])
+            transport_method_count = 0
+            for order in orders:
+                # Extract transport method directly from the transport_method field
+                delivery_method = None
+                if 'transport_method' in order and order['transport_method']:
+                    transport_method_obj = order['transport_method']
+                    if isinstance(transport_method_obj, dict) and 'name' in transport_method_obj:
+                        delivery_method = transport_method_obj['name']
+                        transport_method_count += 1
+                
+                # Fallback to extraction from other fields
+                if not delivery_method:
+                    delivery_method = extract_delivery_method_from_record(order, "order")
+                
+                if not delivery_method:
+                    delivery_method = 'Purchase Order'
+                
+                # Extract address and company info
+                address = 'Purchase order address'
+                customer = 'Unknown'
+                
+                if order.get('address') and isinstance(order['address'], dict):
+                    address = order['address'].get('name', 'Purchase order address')
+                
+                if order.get('company') and isinstance(order['company'], dict):
+                    customer = order['company'].get('name', 'Unknown')
+                
+                all_delivery_records.append({
+                    'delivery_method': delivery_method,
+                    'address': address,
+                    'customer': customer,
+                    'date': order.get('date') or order.get('created_at'),
+                    'amount': 0,  # Purchase orders typically don't have total amounts
+                    'id': order.get('id'),
+                    'source': 'purchase_orders',
+                    'transaction_number': order.get('transaction_number'),
+                    'status': order.get('status')
+                })
+            data_sources.append(f"Purchase Orders: {len(orders)} records, {transport_method_count} with transport methods")
+    except Exception as e:
+        data_sources.append(f"Purchase Orders: Error - {str(e)}")
+    
+    # Filter by delivery methods if specified
+    if delivery_methods:
+        method_list = [method.strip().lower() for method in delivery_methods.split(',') if method.strip()]
+        filtered_records = []
+        for record in all_delivery_records:
+            if any(method in record['delivery_method'].lower() for method in method_list):
+                filtered_records.append(record)
+        all_delivery_records = filtered_records
+    
+    # Group records by time period and delivery method
+    from datetime import datetime, timedelta
+    
+    def get_week_start(date_str):
+        """Get the Monday of the week containing the given date"""
+        if not date_str:
+            return None
+        try:
+            date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            days_since_monday = date.weekday()
+            monday = date - timedelta(days=days_since_monday)
+            return monday.strftime('%Y-%m-%d')
+        except:
+            return None
+    
+    def get_month_start(date_str):
+        """Get the first day of the month containing the given date"""
+        if not date_str:
+            return None
+        try:
+            date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            return date.strftime('%Y-%m-01')
+        except:
+            return None
+    
+    # Aggregate data by delivery method and time period
+    delivery_data = {}  # {delivery_method: {time_period: [addresses]}}
+    
+    for record in all_delivery_records:
+        delivery_method = record['delivery_method']
+        
+        # Get time period
+        if group_by == 'week':
+            time_period = get_week_start(record['date'])
+        else:  # month
+            time_period = get_month_start(record['date'])
+        
+        if not time_period:
+            continue
+            
+        # Initialize nested structure
+        if delivery_method not in delivery_data:
+            delivery_data[delivery_method] = {}
+        if time_period not in delivery_data[delivery_method]:
+            delivery_data[delivery_method][time_period] = []
+        
+        # Add record to the list
+        delivery_data[delivery_method][time_period].append({
+            'address': record['address'],
+            'invoice_id': record['id'],
+            'customer': record['customer'],
+            'amount': record['amount'],
+            'source': record['source']
+        })
+    
+    # Format response for table display
+    result = {
+        'delivery_methods': list(delivery_data.keys()),
+        'time_periods': [],
+        'data': delivery_data,
+        'summary': {},
+        'data_sources': data_sources,
+        'total_records': len(all_delivery_records)
+    }
+    
+    # Get all unique time periods and sort them
+    all_periods = set()
+    for method_data in delivery_data.values():
+        all_periods.update(method_data.keys())
+    
+    result['time_periods'] = sorted(list(all_periods))
+    
+    # Create summary statistics
+    for method, periods in delivery_data.items():
+        total_addresses = sum(len(addresses) for addresses in periods.values())
+        total_amount = sum(
+            sum(addr.get('amount', 0) for addr in addresses)
+            for addresses in periods.values()
+        )
+        result['summary'][method] = {
+            'total_addresses': total_addresses,
+            'total_amount': total_amount,
+            'time_periods_with_data': len(periods)
+        }
+    
+    return jsonify({'result': result, 'total_records_processed': len(all_delivery_records)})
+
+
+@app.route('/api/delivery-methods')
+def api_delivery_methods():
+    """Get available delivery methods from multiple sources including company transport methods, sales invoices and delivery orders"""
     if not is_token_valid():
         return jsonify({'error': 'Not authenticated'}), 401
     
-    # Add pagination parameters and customer filter
+    delivery_methods = set()
+    api_errors = []
+    data_sources = []
+    
+    try:
+        # 1. Get transport methods from the official Duano API endpoint (PRIMARY SOURCE)
+        official_data, official_error = make_paginated_api_request('/api/public/v1/core/transport-methods', params={'per_page': 100, 'page': 1})
+        if not official_error and official_data:
+            if 'result' in official_data and 'data' in official_data['result']:
+                transport_methods = official_data['result']['data']
+                for method in transport_methods:
+                    # Extract name from transport method object
+                    name = method.get('name') or method.get('label') or method.get('description')
+                    if name and name.strip():
+                        delivery_methods.add(name.strip())
+                data_sources.append(f"Official transport methods: {len(transport_methods)} methods")
+        else:
+            if official_error:
+                api_errors.append(f"Official transport methods error: {official_error}")
+        
+        # 2. Get delivery methods from sales invoices (limit to avoid timeout)
+        params = {'per_page': 100, 'page': 1}
+        raw, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
+        
+        if error:
+            api_errors.append(f"Sales invoices error: {error}")
+        else:
+            invoices = raw.get('result', {}).get('data', [])
+            data_sources.append(f"Sales invoices: {len(invoices)} records processed")
+            
+            for invoice in invoices:
+                method = extract_delivery_method_from_record(invoice, "invoice")
+                if method:
+                    delivery_methods.add(method)
+        
+        # 3. Get delivery methods from purchase orders (CORRECT ENDPOINT - contains transport_method field!)
+        params = {'per_page': 100, 'page': 1}
+        raw, error = make_paginated_api_request('/api/public/v1/trade/purchase-orders', params=params)
+        if error:
+            api_errors.append(f"Purchase orders error: {error}")
+        else:
+            orders = raw.get('result', {}).get('data', [])
+            data_sources.append(f"Purchase orders: {len(orders)} records processed")
+            
+            for order in orders:
+                method = extract_delivery_method_from_record(order, "order")
+                if method:
+                    delivery_methods.add(method)
+        
+        # Try additional endpoints that might contain delivery information
+        additional_endpoints = [
+            '/api/public/v1/core/addresses',
+            '/api/public/v1/crm/crm-contact-persons'
+        ]
+        
+        for endpoint in additional_endpoints:
+            try:
+                raw, error = make_paginated_api_request(endpoint, params={'per_page': 500, 'page': 1})
+                if not error:
+                    records = raw.get('result', {}).get('data', [])
+                    endpoint_name = endpoint.split('/')[-1]
+                    data_sources.append(f"{endpoint_name}: {len(records)} records processed")
+                    
+                    for record in records:
+                        method = extract_delivery_method_from_record(record, endpoint_name)
+                        if method:
+                            delivery_methods.add(method)
+            except Exception as e:
+                api_errors.append(f"Error with {endpoint}: {str(e)}")
+    
+    except Exception as e:
+        api_errors.append(f"General error: {str(e)}")
+    
+    # 4. Try to get transport methods from companies (transport methods stored with companies)
+    try:
+        company_data, company_error = make_api_request('/api/public/v1/core/companies', params={'per_page': 500, 'page': 1})
+        if not company_error and company_data:
+            companies = company_data.get('result', {}).get('data', [])
+            company_transport_methods = 0
+            
+            for company in companies:
+                # Look for transport method fields in company data
+                for key, value in company.items():
+                    if any(keyword in key.lower() for keyword in ['transport', 'delivery', 'shipping', 'carrier', 'method', 'logistics']):
+                        if value and str(value).strip() and str(value).lower() not in ['none', 'null', '']:
+                            delivery_methods.add(str(value).strip())
+                            company_transport_methods += 1
+            
+            if company_transport_methods > 0:
+                data_sources.append(f"Company transport methods: {company_transport_methods} methods from {len(companies)} companies")
+    except Exception as e:
+        api_errors.append(f"Company transport methods error: {str(e)}")
+    
+    # Always add common delivery methods to ensure they're available for visualization
+    common_methods = [
+        'Customer pick-up shop', 'Customer pick-up warehouse', 'External transportation - DPD',
+        'External transportation - other', 'External transportation - SHIPPR', 'External transportation - TDL',
+        'Yugen', 'Shippr', 'DHL', 'UPS', 'FedEx', 'PostNL', 'DPD', 'BPost', 'GLS',
+        'TNT', 'Aramex', 'USPS', 'Royal Mail', 'La Poste', 'Colissimo', 'Chronopost',
+        'Standard Delivery', 'Express Delivery', 'Overnight Delivery', 'Same Day Delivery'
+    ]
+    for method in common_methods:
+        delivery_methods.add(method)
+    
+    # Remove empty/unknown values
+    invalid_values = {'', 'Unknown', 'None', 'null', 'undefined', 'N/A', 'n/a', 'NULL'}
+    delivery_methods = {method for method in delivery_methods if method not in invalid_values}
+    
+    # Convert to list of objects for dropdown
+    result = [{'value': method, 'label': method} for method in sorted(delivery_methods)]
+    
+    response_data = {
+        'result': result,
+        'total_methods': len(delivery_methods),
+        'data_sources': data_sources
+    }
+    if api_errors:
+        response_data['warnings'] = api_errors
+    
+    return jsonify(response_data)
+
+
+@app.route('/api/orders-by-delivery-method')
+def api_orders_by_delivery_method():
+    """Get count of purchase orders grouped by transport method for visualization"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get query parameters
+    start_date = request.args.get('filter_by_start_date')
+    end_date = request.args.get('filter_by_end_date')
+    
+    delivery_method_counts = {}
+    total_orders = 0
+    data_sources = []
+    api_errors = []
+    
+    try:
+        # Get purchase orders (PRIMARY SOURCE - contains transport_method field!)
+        params = {'per_page': 1000, 'page': 1}
+        if start_date:
+            params['filter_by_created_since'] = start_date
+        if end_date:
+            params['filter_by_updated_since'] = end_date
+            
+        raw, error = make_paginated_api_request('/api/public/v1/trade/purchase-orders', params=params)
+        if error:
+            api_errors.append(f"Purchase orders error: {error}")
+        else:
+            orders = raw.get('result', {}).get('data', [])
+            data_sources.append(f"Purchase orders: {len(orders)} records")
+            
+            for order in orders:
+                # Extract transport method directly from the transport_method field
+                delivery_method = None
+                if 'transport_method' in order and order['transport_method']:
+                    transport_method_obj = order['transport_method']
+                    if isinstance(transport_method_obj, dict) and 'name' in transport_method_obj:
+                        delivery_method = transport_method_obj['name']
+                
+                # Fallback to extraction from other fields
+                if not delivery_method:
+                    delivery_method = extract_delivery_method_from_record(order, "order")
+                
+                if not delivery_method:
+                    delivery_method = 'Unknown Transport Method'
+                
+                if delivery_method not in delivery_method_counts:
+                    delivery_method_counts[delivery_method] = {
+                        'count': 0,
+                        'total_amount': 0,
+                        'orders': []
+                    }
+                
+                delivery_method_counts[delivery_method]['count'] += 1
+                total_orders += 1
+                
+                # Calculate total value from ordered items
+                total_value = 0
+                if order.get('ordered_items'):
+                    for item in order['ordered_items']:
+                        quantity = item.get('quantity', 0)
+                        # Note: Purchase orders might not have prices, but we can count quantities
+                        total_value += quantity
+                
+                delivery_method_counts[delivery_method]['total_amount'] += total_value
+                
+                # Store order details
+                customer_name = 'Unknown'
+                if order.get('company') and isinstance(order['company'], dict):
+                    customer_name = order['company'].get('name', 'Unknown')
+                
+                delivery_method_counts[delivery_method]['orders'].append({
+                    'id': order.get('id'),
+                    'date': order.get('date') or order.get('created_at'),
+                    'customer': customer_name,
+                    'amount': total_value,
+                    'reference': order.get('transaction_number', ''),
+                    'status': order.get('status', ''),
+                    'transport_method_id': transport_method_obj.get('id') if 'transport_method' in order and order['transport_method'] else None
+                })
+        
+                
+    except Exception as e:
+        api_errors.append(f"General error: {str(e)}")
+    
+    # Format data for visualization
+    chart_data = []
+    for method, data in delivery_method_counts.items():
+        chart_data.append({
+            'delivery_method': method,
+            'order_count': data['count'],
+            'total_amount': data['total_amount'],
+            'percentage': round((data['count'] / total_orders * 100), 2) if total_orders > 0 else 0,
+            'sample_orders': data['orders'][:5]  # First 5 orders as examples
+        })
+    
+    # Sort by order count descending
+    chart_data.sort(key=lambda x: x['order_count'], reverse=True)
+    
+    response_data = {
+        'result': chart_data,
+        'summary': {
+            'total_orders': total_orders,
+            'total_delivery_methods': len(delivery_method_counts),
+            'data_sources': data_sources
+        }
+    }
+    
+    if api_errors:
+        response_data['warnings'] = api_errors
+    
+    return jsonify(response_data)
+
+
+
+@app.route('/api/addresses')
+def api_addresses():
+    """Get all addresses from core addresses endpoint"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get query parameters for filtering
+    params = {
+        'per_page': request.args.get('per_page', 100),
+        'page': request.args.get('page', 1)
+    }
+    
+    # Add any filter parameters
+    filter_params = [
+        'filter_by_created_since', 'filter_by_updated_since', 
+        'filter_by_is_active', 'filter_by_company', 'filter'
+    ]
+    
+    for param in filter_params:
+        if request.args.get(param):
+            params[param] = request.args.get(param)
+    
+    data, error = make_paginated_api_request('/api/public/v1/core/addresses', params=params)
+    
+    if error:
+        return jsonify({'error': error}), 500
+    
+    return jsonify(data)
+
+
+@app.route('/api/debug/addresses')
+def api_debug_addresses():
+    """Debug endpoint to see actual address structure"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get a small sample of addresses to inspect structure
+    params = {'per_page': 10, 'page': 1}
+    raw, error = make_paginated_api_request('/api/public/v1/core/addresses', params=params)
+    
+    if error:
+        return jsonify({'error': error}), 500
+    
+    addresses = raw.get('result', {}).get('data', [])
+    
+    # Return raw data for inspection
+    return jsonify({
+        'raw_response': raw,
+        'sample_addresses': addresses[:5],  # First 5 addresses
+        'address_keys': list(addresses[0].keys()) if addresses else [],
+        'total_addresses': len(addresses)
+    })
+
+
+@app.route('/api/test/delivery-methods')
+def api_test_delivery_methods():
+    """Simple test endpoint for delivery methods"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated', 'authenticated': False}), 401
+    
+    # Return a simple test response
+    test_methods = [
+        {'value': 'Yugen', 'label': 'Yugen'},
+        {'value': 'Shippr', 'label': 'Shippr'},
+        {'value': 'DHL', 'label': 'DHL'},
+        {'value': 'UPS', 'label': 'UPS'}
+    ]
+    
+    return jsonify({
+        'result': test_methods,
+        'message': 'Test endpoint working',
+        'authenticated': True
+    })
+
+
+@app.route('/api/debug/delivery-orders')
+def api_debug_delivery_orders():
+    """Debug endpoint to see actual delivery order structure"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get a small sample of delivery orders to inspect structure
+    params = {'per_page': 5, 'page': 1}
+    raw, error = make_paginated_api_request('/api/public/v1/crm/delivery-orders', params=params)
+    
+    if error:
+        return jsonify({'error': error}), 500
+    
+    orders = raw.get('result', {}).get('data', [])
+    
+    # Return raw data for inspection
+    return jsonify({
+        'raw_response': raw,
+        'sample_orders': orders[:3],  # First 3 orders
+        'order_keys': list(orders[0].keys()) if orders else [],
+        'total_orders': len(orders)
+    })
+
+
+@app.route('/api/debug/sales-invoices')
+def api_debug_sales_invoices():
+    """Debug endpoint to see actual sales invoice structure for delivery info"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get a small sample of sales invoices to inspect structure
+    params = {'per_page': 5, 'page': 1}
+    raw, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
+    
+    if error:
+        return jsonify({'error': error}), 500
+    
+    invoices = raw.get('result', {}).get('data', [])
+    
+    # Return raw data for inspection
+    return jsonify({
+        'raw_response': raw,
+        'sample_invoices': invoices[:3],  # First 3 invoices
+        'invoice_keys': list(invoices[0].keys()) if invoices else [],
+        'total_invoices': len(invoices)
+    })
+
+
+@app.route('/api/debug/companies')
+def api_debug_companies():
+    """Debug endpoint to see actual company structure and available transport method fields"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get a small sample of companies to inspect structure
+    params = {'per_page': 10, 'page': 1, 'include': 'country,company_status,sales_price_class,company_categories'}
+    raw, error = make_paginated_api_request('/api/public/v1/core/companies', params=params)
+    
+    if error:
+        return jsonify({'error': error}), 500
+    
+    companies = raw.get('result', {}).get('data', [])
+    
+    # Look for transport/delivery related fields
+    transport_fields = []
+    if companies:
+        sample_company = companies[0]
+        for key in sample_company.keys():
+            if any(keyword in key.lower() for keyword in ['transport', 'delivery', 'shipping', 'carrier', 'method', 'logistics']):
+                transport_fields.append({
+                    'field': key,
+                    'value': sample_company[key],
+                    'type': type(sample_company[key]).__name__
+                })
+    
+    # Return raw data for inspection
+    return jsonify({
+        'raw_response': raw,
+        'sample_companies': companies[:3],  # First 3 companies
+        'company_keys': list(companies[0].keys()) if companies else [],
+        'total_companies': len(companies),
+        'transport_related_fields': transport_fields,
+        'all_field_names': sorted(companies[0].keys()) if companies else []
+    })
+
+
+@app.route('/api/transport-methods')
+def api_transport_methods():
+    """Get transport methods from the official Duano API endpoint"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get query parameters for filtering and ordering (matching Duano API documentation)
+    params = {}
+    
+    # Filter parameters
+    if request.args.get('filter_by_created_since'):
+        params['filter_by_created_since'] = request.args.get('filter_by_created_since')
+    if request.args.get('filter_by_updated_since'):
+        params['filter_by_updated_since'] = request.args.get('filter_by_updated_since')
+    if request.args.get('filter_by_is_active'):
+        params['filter_by_is_active'] = request.args.get('filter_by_is_active')
+    if request.args.get('filter'):
+        params['filter'] = request.args.get('filter')
+    
+    # Order parameters
+    if request.args.get('order_by_name'):
+        params['order_by_name'] = request.args.get('order_by_name')
+    if request.args.get('order_by_is_default'):
+        params['order_by_is_default'] = request.args.get('order_by_is_default')
+    if request.args.get('order_by_description'):
+        params['order_by_description'] = request.args.get('order_by_description')
+    
+    # Add pagination
+    params['per_page'] = request.args.get('per_page', 100)
+    params['page'] = request.args.get('page', 1)
+    
+    # Use the official Duano API endpoint for transport methods
+    data, error = make_paginated_api_request('/api/public/v1/core/transport-methods', params=params)
+    
+    if error:
+        return jsonify({'error': error}), 500
+    
+    return jsonify(data)
+
+
+@app.route('/api/transport-methods/<int:transport_method_id>')
+def api_transport_method(transport_method_id):
+    """Get specific transport method by ID from Duano API"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data, error = make_api_request(f'/api/public/v1/core/transport-methods/{transport_method_id}')
+    
+    if error:
+        return jsonify({'error': error}), 500
+    
+    return jsonify(data)
+
+
+@app.route('/api/debug/transport-methods')
+def api_debug_transport_methods():
+    """Debug endpoint to explore transport methods from multiple sources"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    results = {}
+    
+    # 1. Try the official transport methods endpoint
+    try:
+        official_data, official_error = make_api_request('/api/public/v1/core/transport-methods', params={'per_page': 50, 'page': 1})
+        if official_error:
+            results['official_endpoint'] = {'error': official_error}
+        else:
+            results['official_endpoint'] = {
+                'success': True, 
+                'data': official_data,
+                'total_methods': len(official_data.get('result', {}).get('data', [])) if official_data else 0
+            }
+    except Exception as e:
+        results['official_endpoint'] = {'error': f'Exception: {str(e)}'}
+    
+    # 2. Also try to get transport methods from companies
+    try:
+        company_data, company_error = make_api_request('/api/public/v1/core/companies', params={'per_page': 100, 'page': 1})
+        if not company_error and company_data:
+            companies = company_data.get('result', {}).get('data', [])
+            transport_methods_from_companies = set()
+            
+            for company in companies:
+                # Look for transport method fields in company data
+                for key, value in company.items():
+                    if any(keyword in key.lower() for keyword in ['transport', 'delivery', 'shipping', 'carrier', 'method', 'logistics']):
+                        if value and str(value).strip() and str(value).lower() not in ['none', 'null', '']:
+                            transport_methods_from_companies.add(str(value))
+            
+            results['companies_transport_fields'] = {
+                'transport_methods_found': list(transport_methods_from_companies),
+                'companies_checked': len(companies)
+            }
+    except Exception as e:
+        results['companies_transport_fields'] = {'error': str(e)}
+    
+    return jsonify({
+        'debug_results': results,
+        'message': 'Debug information for transport methods from various sources'
+    })
+
+
+@app.route('/api/companies/<int:company_id>/orders')
+def api_company_orders(company_id):
+    """Get purchase orders for a specific company with transport method information"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # First get the company information to extract transport method
+    company_data, company_error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+    company_transport_method = None
+    company_info = None
+    
+    if not company_error and company_data:
+        company_info = company_data.get('result', {})
+        # Look for transport method in company data
+        for key, value in company_info.items():
+            if any(keyword in key.lower() for keyword in ['transport', 'delivery', 'shipping', 'carrier', 'method', 'logistics']):
+                if value and str(value).strip() and str(value).lower() not in ['none', 'null', '']:
+                    company_transport_method = str(value).strip()
+                    break
+    
+    # Get purchase orders for this company (purchase orders contain transport_method field!)
     params = {
         'per_page': 100,
         'page': 1,
-        'filter_by_customer': company_id
+        'filter_by_company': company_id  # Filter by company
     }
     
     # Add additional filters from query parameters
@@ -2022,19 +4655,65 @@ def api_company_orders(company_id):
     if request.args.get('filter_by_status'):
         params['filter_by_status'] = request.args.get('filter_by_status')
     
-    data, error = make_paginated_api_request('/api/public/v1/crm/delivery-orders', params=params)
+    data, error = make_paginated_api_request('/api/public/v1/trade/purchase-orders', params=params)
     
     if error:
         return jsonify({'error': error}), 500
+    
+    # Enhance orders with transport method information
+    if data and 'result' in data and 'data' in data['result']:
+        orders = data['result']['data']
+        for order in orders:
+            # Extract transport method from the order (purchase orders have transport_method field!)
+            order_transport_method = None
+            if 'transport_method' in order and order['transport_method']:
+                transport_method_obj = order['transport_method']
+                if isinstance(transport_method_obj, dict) and 'name' in transport_method_obj:
+                    order_transport_method = transport_method_obj['name']
+                    order['extracted_transport_method'] = order_transport_method
+                    order['transport_method_source'] = 'order_direct'
+            
+            # Fallback to extraction from other fields
+            if not order_transport_method:
+                order_transport_method = extract_delivery_method_from_record(order, "order")
+                if order_transport_method:
+                    order['extracted_transport_method'] = order_transport_method
+                    order['transport_method_source'] = 'order_extracted'
+            
+            # Fallback to company transport method
+            if not order_transport_method and company_transport_method:
+                order['extracted_transport_method'] = company_transport_method
+                order['transport_method_source'] = 'company'
+            
+            # Also add company info for reference
+            if company_info:
+                order['company_info'] = {
+                    'id': company_info.get('id'),
+                    'name': company_info.get('name') or company_info.get('public_name'),
+                    'transport_method': company_transport_method
+                }
     
     return jsonify(data)
 
 
 @app.route('/api/companies/<int:company_id>/supplier-orders')
 def api_company_supplier_orders(company_id):
-    """Get delivery orders where company is the supplier"""
+    """Get delivery orders where company is the supplier with transport method information"""
     if not is_token_valid():
         return jsonify({'error': 'Not authenticated'}), 401
+    
+    # First get the company information to extract transport method
+    company_data, company_error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+    company_transport_method = None
+    
+    if not company_error and company_data:
+        company_info = company_data.get('result', {})
+        # Look for transport method in company data
+        for key, value in company_info.items():
+            if any(keyword in key.lower() for keyword in ['transport', 'delivery', 'shipping', 'carrier', 'method', 'logistics']):
+                if value and str(value).strip() and str(value).lower() not in ['none', 'null', '']:
+                    company_transport_method = str(value).strip()
+                    break
     
     # Add pagination parameters and supplier filter
     params = {
@@ -2058,6 +4737,26 @@ def api_company_supplier_orders(company_id):
     if error:
         return jsonify({'error': error}), 500
     
+    # Enhance orders with company transport method information
+    if data and 'result' in data and 'data' in data['result']:
+        orders = data['result']['data']
+        for order in orders:
+            # Add transport method from company if not already present in order
+            order_transport_method = extract_delivery_method_from_record(order, "order")
+            if not order_transport_method and company_transport_method:
+                order['company_transport_method'] = company_transport_method
+                order['transport_method_source'] = 'company'
+            elif order_transport_method:
+                order['transport_method_source'] = 'order'
+            
+            # Also add company info for reference
+            if company_info:
+                order['supplier_info'] = {
+                    'id': company_info.get('id'),
+                    'name': company_info.get('name') or company_info.get('public_name'),
+                    'transport_method': company_transport_method
+                }
+    
     return jsonify(data)
 
 
@@ -2068,6 +4767,457 @@ def orders():
         return redirect(url_for('index'))
     
     return render_template('orders.html')
+
+
+@app.route('/transport-methods-test')
+def transport_methods_test():
+    """Transport methods test page"""
+    if not is_token_valid():
+        return redirect(url_for('index'))
+    
+    return render_template('transport_methods.html')
+
+
+@app.route('/api/purchase-orders-by-transport')
+def api_purchase_orders_by_transport():
+    """Get sales orders filtered by transport method - simple table data"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get query parameters
+    transport_method = request.args.get('transport_method')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    try:
+        # Get ALL purchase orders - use make_paginated_api_request to get everything
+        params = {'per_page': 100, 'page': 1}  # make_paginated_api_request will get all pages
+        
+        # Apply date filtering after getting all data (client-side filtering)
+        # API date filtering seems unreliable, so we'll filter after fetching
+        
+        # Try both sales orders and purchase orders to find transport method data
+        all_orders = []
+        sources_tried = []
+        
+        # 1. Try sales orders first (based on user's Duano screenshot showing "Verkoopbestellingen")
+        sales_raw, sales_error = make_paginated_api_request('/api/public/v1/trade/sales-orders', params=params)
+        if not sales_error and sales_raw:
+            sales_orders = sales_raw.get('result', {}).get('data', [])
+            all_orders.extend(sales_orders)
+            sources_tried.append(f"Sales orders: {len(sales_orders)}")
+        else:
+            sources_tried.append(f"Sales orders: Error - {sales_error}")
+        
+        # 2. Try purchase orders
+        purchase_raw, purchase_error = make_paginated_api_request('/api/public/v1/trade/purchase-orders', params=params)
+        if not purchase_error and purchase_raw:
+            purchase_orders = purchase_raw.get('result', {}).get('data', [])
+            all_orders.extend(purchase_orders)
+            sources_tried.append(f"Purchase orders: {len(purchase_orders)}")
+        else:
+            sources_tried.append(f"Purchase orders: Error - {purchase_error}")
+        
+        # Use combined orders
+        orders = all_orders
+        
+        if len(orders) == 0:
+            return jsonify({
+                'result': [],
+                'summary': {
+                    'total_orders': 0,
+                    'total_in_system': 0,
+                    'filtered_by_transport_method': transport_method,
+                    'date_range': {'start_date': start_date, 'end_date': end_date}
+                },
+                'debug': {
+                    'sources_tried': sources_tried,
+                    'message': 'No orders found in either sales orders or purchase orders endpoints'
+                }
+            })
+        
+        # If no orders found with date filtering, try without dates to debug
+        if len(orders) == 0 and (start_date or end_date):
+            raw_no_dates, error_no_dates = make_paginated_api_request('/api/public/v1/trade/purchase-orders', {'per_page': 100, 'page': 1})
+            if not error_no_dates:
+                orders_no_dates = raw_no_dates.get('result', {}).get('data', [])
+                sample_dates = [o.get('date') or o.get('created_at') for o in orders_no_dates[:5]]
+                
+                return jsonify({
+                    'result': [],
+                    'summary': {
+                        'total_orders': 0,
+                        'total_in_system': len(orders_no_dates),
+                        'filtered_by_transport_method': transport_method,
+                        'date_range': {'start_date': start_date, 'end_date': end_date}
+                    },
+                    'debug': {
+                        'total_orders_with_dates': len(orders),
+                        'total_orders_without_dates': len(orders_no_dates),
+                        'sample_order_dates': sample_dates,
+                        'message': f'No orders found with date filter {start_date} to {end_date}. Found {len(orders_no_dates)} orders without date filter.'
+                    }
+                })
+        
+        # Filter and process orders
+        filtered_orders = []
+        debug_info = {
+            'total_orders': len(orders), 
+            'transport_methods_found': set(), 
+            'filter_applied': transport_method,
+            'sources_tried': sources_tried
+        }
+        
+        for order in orders:
+            # Apply client-side date filtering first
+            order_date = order.get('date') or order.get('created_at')
+            if start_date and order_date and order_date < start_date:
+                continue
+            if end_date and order_date and order_date > end_date:
+                continue
+            
+            # Extract transport method
+            order_transport_method = None
+            transport_method_id = None
+            
+            if 'transport_method' in order and order['transport_method']:
+                transport_method_obj = order['transport_method']
+                if isinstance(transport_method_obj, dict):
+                    order_transport_method = transport_method_obj.get('name')
+                    transport_method_id = transport_method_obj.get('id')
+                    debug_info['transport_methods_found'].add(order_transport_method)
+            
+            # Apply transport method filter (case-insensitive) - only if specified
+            if transport_method and transport_method.strip():
+                if not order_transport_method or transport_method.lower() not in order_transport_method.lower():
+                    continue
+            
+            # Calculate total quantity
+            total_quantity = 0
+            if order.get('ordered_items'):
+                for item in order['ordered_items']:
+                    total_quantity += item.get('quantity', 0)
+            
+            # Extract company info
+            company_name = 'Unknown'
+            if order.get('company') and isinstance(order['company'], dict):
+                company_name = order['company'].get('name', 'Unknown')
+            
+            # Extract address information
+            address_info = 'N/A'
+            address_name = 'N/A'
+            
+            if order.get('address') and isinstance(order['address'], dict):
+                address_obj = order['address']
+                address_name = address_obj.get('name', 'N/A')
+                address_id = address_obj.get('id', 'N/A')
+                
+                # For now, show address name and ID - we'll enhance this later
+                address_info = f"{address_name} (ID: {address_id})"
+            
+            # Format order for table
+            filtered_orders.append({
+                'id': order.get('id'),
+                'date': order.get('date') or order.get('created_at'),
+                'company': company_name,
+                'transport_method': order_transport_method or 'Unknown',
+                'transport_method_id': transport_method_id,
+                'status': order.get('status'),
+                'transaction_number': order.get('transaction_number'),
+                'total_quantity': total_quantity,
+                'address': address_info,
+                'address_name': address_name,
+                'trade_reference': order.get('trade_reference', ''),
+                'requested_delivery_date': order.get('requested_delivery_date'),
+                'ordered_items': order.get('ordered_items', [])
+            })
+        
+        # Sort by date (newest first)
+        filtered_orders.sort(key=lambda x: x['date'] or '', reverse=True)
+        
+        # Convert set to list for JSON serialization
+        debug_info['transport_methods_found'] = list(debug_info['transport_methods_found'])
+        
+        return jsonify({
+            'result': filtered_orders,
+            'summary': {
+                'total_orders': len(filtered_orders),
+                'total_in_system': len(orders),
+                'filtered_by_transport_method': transport_method,
+                'date_range': {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            },
+            'debug': debug_info
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/orders-with-full-addresses')
+def api_orders_with_full_addresses():
+    """Get all orders with full address details - simplified version"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Get query parameters
+    transport_method = request.args.get('transport_method')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    try:
+        # Get all purchase orders using make_paginated_api_request for complete data
+        params = {'per_page': 100, 'page': 1}
+        
+        # Try both sales orders and purchase orders
+        all_orders = []
+        sources_tried = []
+        
+        # 1. Try sales orders first (based on user's Duano screenshot)
+        sales_raw, sales_error = make_paginated_api_request('/api/public/v1/trade/sales-orders', params)
+        if not sales_error and sales_raw:
+            sales_orders = sales_raw.get('result', {}).get('data', [])
+            all_orders.extend(sales_orders)
+            sources_tried.append(f"Sales orders: {len(sales_orders)}")
+        else:
+            sources_tried.append(f"Sales orders: Error - {sales_error}")
+        
+        # 2. Try purchase orders
+        purchase_raw, purchase_error = make_paginated_api_request('/api/public/v1/trade/purchase-orders', params)
+        if not purchase_error and purchase_raw:
+            purchase_orders = purchase_raw.get('result', {}).get('data', [])
+            all_orders.extend(purchase_orders)
+            sources_tried.append(f"Purchase orders: {len(purchase_orders)}")
+        else:
+            sources_tried.append(f"Purchase orders: Error - {purchase_error}")
+        
+        # Process and filter orders
+        filtered_orders = []
+        transport_methods_found = set()
+        address_ids_to_lookup = set()
+        
+        for order in all_orders:
+            # Apply client-side date filtering
+            order_date = order.get('date') or order.get('created_at')
+            if start_date and order_date and order_date < start_date:
+                continue
+            if end_date and order_date and order_date > end_date:
+                continue
+            
+            # Extract transport method
+            order_transport_method = None
+            transport_method_id = None
+            
+            if 'transport_method' in order and order['transport_method']:
+                transport_method_obj = order['transport_method']
+                if isinstance(transport_method_obj, dict):
+                    order_transport_method = transport_method_obj.get('name')
+                    transport_method_id = transport_method_obj.get('id')
+                    transport_methods_found.add(order_transport_method)
+            
+            # Apply transport method filter
+            if transport_method and transport_method.strip():
+                if not order_transport_method or transport_method.lower() not in order_transport_method.lower():
+                    continue
+            
+            # Extract address info - for now just use what's available in the order
+            address_info = 'N/A'
+            address_name = 'N/A'
+            
+            if order.get('address') and isinstance(order['address'], dict):
+                address_obj = order['address']
+                address_name = address_obj.get('name', 'N/A')
+                address_id = address_obj.get('id', 'N/A')
+                
+                # Show address name and ID for now - we can enhance this later
+                address_info = f"{address_name} (ID: {address_id})"
+                
+                # Collect address IDs for potential future lookup
+                if address_id and address_id != 'N/A':
+                    address_ids_to_lookup.add(address_id)
+            
+            # Calculate total quantity
+            total_quantity = 0
+            if order.get('ordered_items'):
+                for item in order['ordered_items']:
+                    total_quantity += item.get('quantity', 0)
+            
+            # Extract company info
+            company_name = 'Unknown'
+            if order.get('company') and isinstance(order['company'], dict):
+                company_name = order['company'].get('name', 'Unknown')
+            
+            # Add to results
+            filtered_orders.append({
+                'id': order.get('id'),
+                'date': order_date,
+                'company': company_name,
+                'transport_method': order_transport_method or 'Unknown',
+                'transport_method_id': transport_method_id,
+                'status': order.get('status'),
+                'transaction_number': order.get('transaction_number'),
+                'total_quantity': total_quantity,
+                'address': address_info,
+                'address_name': address_name,
+                'trade_reference': order.get('trade_reference', ''),
+                'requested_delivery_date': order.get('requested_delivery_date'),
+                'ordered_items': order.get('ordered_items', [])
+            })
+        
+        # Sort by date (newest first)
+        filtered_orders.sort(key=lambda x: x['date'] or '', reverse=True)
+        
+        return jsonify({
+            'result': filtered_orders,
+            'summary': {
+                'total_orders': len(filtered_orders),
+                'total_in_system': len(all_orders),
+                'filtered_by_transport_method': transport_method,
+                'date_range': {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            },
+            'debug': {
+                'sources_tried': sources_tried,
+                'transport_methods_found': list(transport_methods_found),
+                'unique_address_ids': len(address_ids_to_lookup),
+                'message': f'Found {len(all_orders)} total orders, {len(filtered_orders)} after filtering'
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/debug/orders-summary')
+def api_debug_orders_summary():
+    """Debug endpoint to explore different order endpoints and find transport methods"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Try multiple order-related endpoints to find where transport methods are stored
+    endpoints_to_try = [
+        '/api/public/v1/crm/delivery-orders',
+        '/api/public/v1/trade/sales-invoices', 
+        '/api/public/v1/trade/purchase-orders',
+        '/api/public/v1/core/transactions',
+        '/api/public/v1/logistics/orders'
+    ]
+    
+    results = {}
+    
+    for endpoint in endpoints_to_try:
+        try:
+            params = {'per_page': 10, 'page': 1}  # Small sample to check structure
+            raw, error = make_api_request(endpoint, params=params)
+            
+            if error:
+                results[endpoint] = {'error': error}
+            else:
+                data = raw.get('result', {}).get('data', []) if raw else []
+                sample_record = data[0] if data else None
+                
+                # Look for transport method fields
+                transport_method_found = False
+                transport_method_value = None
+                
+                if sample_record:
+                    for key, value in sample_record.items():
+                        if 'transport' in key.lower():
+                            transport_method_found = True
+                            transport_method_value = value
+                            break
+                
+                results[endpoint] = {
+                    'success': True,
+                    'total_records': len(data),
+                    'sample_record_keys': list(sample_record.keys()) if sample_record else [],
+                    'transport_method_found': transport_method_found,
+                    'transport_method_value': transport_method_value,
+                    'sample_record': sample_record
+                }
+                
+        except Exception as e:
+            results[endpoint] = {'error': f'Exception: {str(e)}'}
+    
+    return jsonify({
+        'endpoint_exploration': results,
+        'message': 'Exploring different endpoints to find transport method data'
+    })
+
+
+@app.route('/api/debug/find-transport-methods')
+def api_debug_find_transport_methods():
+    """Specifically look for the endpoint that contains transport method data like in the user's example"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    # Based on the user's example showing transaction data with transport_method field
+    # Let's try to find the correct endpoint
+    possible_endpoints = [
+        '/api/public/v1/core/transactions',
+        '/api/public/v1/trade/transactions', 
+        '/api/public/v1/logistics/transactions',
+        '/api/public/v1/crm/transactions',
+        '/api/public/v1/core/orders',
+        '/api/public/v1/trade/orders',
+        '/api/public/v1/logistics/orders',
+        '/api/public/v1/crm/orders'
+    ]
+    
+    results = {}
+    found_transport_methods = []
+    
+    for endpoint in possible_endpoints:
+        try:
+            params = {'per_page': 20, 'page': 1}
+            raw, error = make_api_request(endpoint, params=params)
+            
+            if error:
+                results[endpoint] = {'error': error}
+                continue
+                
+            data = raw.get('result', {}).get('data', []) if raw else []
+            
+            # Look for records with transport_method field
+            records_with_transport = []
+            for record in data:
+                if 'transport_method' in record and record['transport_method']:
+                    records_with_transport.append({
+                        'id': record.get('id'),
+                        'transport_method': record['transport_method'],
+                        'company': record.get('company'),
+                        'date': record.get('date'),
+                        'transaction_number': record.get('transaction_number')
+                    })
+                    
+                    # Extract transport method for summary
+                    if isinstance(record['transport_method'], dict) and 'name' in record['transport_method']:
+                        found_transport_methods.append(record['transport_method']['name'])
+            
+            results[endpoint] = {
+                'success': True,
+                'total_records': len(data),
+                'records_with_transport_method': len(records_with_transport),
+                'sample_transport_records': records_with_transport[:3],  # First 3 examples
+                'sample_record_structure': data[0] if data else None
+            }
+            
+        except Exception as e:
+            results[endpoint] = {'error': f'Exception: {str(e)}'}
+    
+    # Remove duplicates from transport methods
+    unique_transport_methods = list(set(found_transport_methods))
+    
+    return jsonify({
+        'results': results,
+        'found_transport_methods': unique_transport_methods,
+        'total_unique_transport_methods': len(unique_transport_methods),
+        'message': 'Searching for the specific endpoint that contains transport_method field like in your example'
+    })
 
 
 # Pricing API endpoints
@@ -2222,7 +5372,15 @@ def _get_crm_companies_data():
                 company for company in companies
                 if (search_lower in company.get('name', '').lower() or
                     search_lower in company.get('address_line1', '').lower() or
+                    search_lower in company.get('address_line2', '').lower() or
                     search_lower in company.get('city', '').lower() or
+                    search_lower in company.get('post_code', '').lower() or
+                    search_lower in company.get('vat_number', '').lower() or
+                    search_lower in company.get('phone_number', '').lower() or
+                    search_lower in company.get('email', '').lower() or
+                    search_lower in company.get('website', '').lower() or
+                    (company.get('country') and search_lower in company['country'].get('name', '').lower()) or
+                    (company.get('account_manager') and search_lower in company['account_manager'].get('name', '').lower()) or
                     any(search_lower in str(v).lower() for v in company.values() if v))
             ]
         
@@ -2281,6 +5439,3608 @@ def api_search_director_in_crm(director_name):
     except Exception as e:
         print(f"Error searching director in CRM: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+def recalculate_company_metrics_from_invoices(company_ids=None):
+    """
+    Recalculate company aggregates (revenue, invoice counts) from invoice tables.
+    If company_ids is provided, only update those companies. Otherwise update all.
+    """
+    if not supabase_client:
+        return False
+    
+    try:
+        # Get unique company IDs from both invoice tables if not provided
+        if company_ids is None:
+            company_ids = set()
+            
+            for year in ['2024', '2025']:
+                batch_size = 1000
+                offset = 0
+                
+                while True:
+                    try:
+                        batch = supabase_client.table(f'sales_{year}').select('company_id').range(offset, offset + batch_size - 1).execute()
+                        if not batch.data:
+                            break
+                        
+                        for record in batch.data:
+                            if record.get('company_id'):
+                                company_ids.add(record['company_id'])
+                        
+                        if len(batch.data) < batch_size:
+                            break
+                        offset += batch_size
+                    except Exception as e:
+                        print(f"Error fetching company IDs from {year}: {e}")
+                        break
+        
+        print(f"📊 Recalculating metrics for {len(company_ids)} companies...")
+        updated_count = 0
+        
+        for company_id in company_ids:
+            try:
+                # Get invoices from both years
+                metrics_2024 = {'revenue': 0, 'count': 0, 'first_date': None, 'last_date': None}
+                metrics_2025 = {'revenue': 0, 'count': 0, 'first_date': None, 'last_date': None}
+                
+                for year, metrics in [('2024', metrics_2024), ('2025', metrics_2025)]:
+                    invoices = supabase_client.table(f'sales_{year}').select('total_amount, invoice_date').eq('company_id', company_id).execute()
+                    
+                    if invoices.data:
+                        metrics['count'] = len(invoices.data)
+                        metrics['revenue'] = sum(float(inv.get('total_amount') or 0) for inv in invoices.data)
+                        
+                        dates = [inv.get('invoice_date') for inv in invoices.data if inv.get('invoice_date')]
+                        if dates:
+                            metrics['first_date'] = min(dates)
+                            metrics['last_date'] = max(dates)
+                
+                # Calculate combined metrics
+                total_revenue = metrics_2024['revenue'] + metrics_2025['revenue']
+                total_count = metrics_2024['count'] + metrics_2025['count']
+                
+                all_dates = [d for d in [metrics_2024['first_date'], metrics_2024['last_date'], 
+                                          metrics_2025['first_date'], metrics_2025['last_date']] if d]
+                
+                # Update company record
+                update_data = {
+                    'total_revenue_2024': metrics_2024['revenue'],
+                    'invoice_count_2024': metrics_2024['count'],
+                    'total_revenue_2025': metrics_2025['revenue'],
+                    'invoice_count_2025': metrics_2025['count'],
+                    'total_revenue_all_time': total_revenue,
+                    'invoice_count_all_time': total_count,
+                    'average_invoice_value': total_revenue / total_count if total_count > 0 else 0,
+                    'first_invoice_date': min(all_dates) if all_dates else None,
+                    'last_invoice_date': max(all_dates) if all_dates else None,
+                    'updated_at': datetime.now().isoformat()
+                }
+                
+                # Check if company exists in companies table
+                existing = supabase_client.table('companies').select('id').eq('company_id', company_id).execute()
+                
+                if existing.data:
+                    supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
+                    updated_count += 1
+                    
+                    if updated_count % 50 == 0:
+                        print(f"  ✅ Updated metrics for {updated_count} companies...")
+            
+            except Exception as e:
+                print(f"  ⚠️  Error updating company {company_id}: {e}")
+                continue
+        
+        print(f"✅ Successfully updated metrics for {updated_count} companies")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error recalculating company metrics: {e}")
+        return False
+
+
+@app.route('/api/sync-2025-invoices', methods=['POST'])
+def api_sync_2025_invoices():
+    """
+    Sync all 2025 sales invoices to Supabase.
+    Fetches all invoices from 2025 and stores them in the sales_2025 table.
+    """
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        from datetime import datetime
+        
+        print("🚀 Starting 2025 invoice sync...")
+        
+        # Fetch all 2025 invoices with pagination
+        all_invoices = []
+        page = 1
+        per_page = 100
+        
+        while True:
+            params = {
+                'per_page': per_page,
+                'page': page,
+                'filter_by_start_date': '2025-01-01',
+                'filter_by_end_date': '2025-12-31',
+                'order_by_date': 'desc'
+            }
+            
+            data, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
+            
+            if error:
+                return jsonify({'error': f'Failed to fetch invoices: {error}'}), 500
+            
+            invoices = data.get('result', {}).get('data', [])
+            
+            if not invoices:
+                break
+            
+            all_invoices.extend(invoices)
+            print(f"📄 Fetched page {page}: {len(invoices)} invoices (Total: {len(all_invoices)})")
+            
+            # Check pagination
+            current_page = data.get('result', {}).get('current_page', page)
+            last_page = data.get('result', {}).get('last_page', page)
+            
+            if current_page >= last_page:
+                break
+            
+            page += 1
+        
+        if not all_invoices:
+            return jsonify({'message': 'No invoices found for 2025', 'count': 0})
+        
+        print(f"✅ Total invoices fetched: {len(all_invoices)}")
+        
+        # Save to Supabase
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        saved_count = 0
+        updated_count = 0
+        error_count = 0
+        
+        for idx, invoice in enumerate(all_invoices):
+            # Add small delay every 50 invoices to prevent resource exhaustion
+            if idx > 0 and idx % 50 == 0:
+                time.sleep(0.1)
+            
+            max_retries = 3
+            retry_count = 0
+            
+            while retry_count < max_retries:
+                try:
+                    # Extract key fields
+                    company = invoice.get('company', {})
+                    if isinstance(company, dict):
+                        company_id = company.get('id')
+                        company_name = company.get('name') or company.get('public_name')
+                    else:
+                        company_id = None
+                        company_name = None
+                    
+                    record = {
+                        'invoice_id': invoice.get('id'),
+                        'invoice_data': invoice,
+                        'company_id': company_id,
+                        'company_name': company_name,
+                        'invoice_number': invoice.get('invoice_number') or invoice.get('number'),
+                        'invoice_date': invoice.get('date'),
+                        'due_date': invoice.get('due_date'),
+                        'total_amount': invoice.get('payable_amount_without_financial_discount') or invoice.get('total_amount'),
+                        'balance': invoice.get('balance'),
+                        'is_paid': invoice.get('balance', 0) == 0
+                    }
+                    
+                    # Check if record exists
+                    existing = supabase_client.table('sales_2025').select('id').eq('invoice_id', record['invoice_id']).execute()
+                    
+                    if existing.data:
+                        # Update
+                        record['updated_at'] = datetime.now().isoformat()
+                        supabase_client.table('sales_2025').update(record).eq('invoice_id', record['invoice_id']).execute()
+                        updated_count += 1
+                    else:
+                        # Insert
+                        supabase_client.table('sales_2025').insert(record).execute()
+                        saved_count += 1
+                    
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        error_count += 1
+                        # Only print non-resource errors after all retries
+                        if "Resource temporarily unavailable" not in str(e):
+                            print(f"❌ Error saving invoice {invoice.get('id')} after {max_retries} retries: {e}")
+                        break
+                    # Exponential backoff
+                    time.sleep(0.05 * (2 ** retry_count))
+        
+        result = {
+            'success': True,
+            'total_fetched': len(all_invoices),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': error_count,
+            'message': f'Successfully synced {saved_count + updated_count} invoices'
+        }
+        
+        print(f"✅ Sync complete: {result}")
+        
+        # Recalculate company metrics to update frontend display
+        if saved_count > 0 or updated_count > 0:
+            print("📊 Updating company metrics...")
+            recalculate_company_metrics_from_invoices()
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"❌ Error in sync: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# PRODUCT & PRICING SYNC ENDPOINTS
+# =====================================================
+
+@app.route('/api/sync-product-categories', methods=['POST'])
+def api_sync_product_categories():
+    """Sync all product categories from Douano to Supabase."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    douano_client = get_douano_client()
+    if not douano_client:
+        return jsonify({'error': 'Douano client not configured'}), 500
+    
+    try:
+        print("🔄 Starting product categories sync...")
+        
+        # Fetch all categories from Douano
+        response = douano_client.products.get_product_categories(per_page=100)
+        categories = response.get('result', {}).get('data', [])
+        
+        saved_count = 0
+        updated_count = 0
+        errors = []
+        
+        for category in categories:
+            try:
+                category_data = {
+                    'id': category['id'],
+                    'name': category['name'],
+                    'is_active': True,
+                    'douano_created_at': category.get('created_at'),
+                    'douano_updated_at': category.get('updated_at'),
+                    'last_sync_at': datetime.now().isoformat()
+                }
+                
+                # Check if category already exists
+                existing = supabase_client.table('product_categories').select('id').eq('id', category['id']).execute()
+                
+                if existing.data:
+                    # Update existing
+                    supabase_client.table('product_categories').update(category_data).eq('id', category['id']).execute()
+                    updated_count += 1
+                else:
+                    # Insert new
+                    supabase_client.table('product_categories').insert(category_data).execute()
+                    saved_count += 1
+                    
+            except Exception as e:
+                error_msg = f"Error saving category {category.get('id', 'unknown')}: {e}"
+                print(f"  ⚠️  {error_msg}")
+                errors.append(error_msg)
+        
+        print(f"✅ Synced {len(categories)} categories: {saved_count} new, {updated_count} updated")
+        
+        return jsonify({
+            'success': True,
+            'total': len(categories),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': errors
+        })
+        
+    except Exception as e:
+        print(f"❌ Error syncing categories: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-products', methods=['POST'])
+def api_sync_products():
+    """Sync all products from Douano to Supabase."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    douano_client = get_douano_client()
+    if not douano_client:
+        return jsonify({'error': 'Douano client not configured'}), 500
+    
+    try:
+        print("🔄 Starting products sync...")
+        
+        # Fetch all products from Douano (paginated)
+        all_products = []
+        page = 1
+        per_page = 50
+        
+        while True:
+            response = douano_client.products.get_products(per_page=per_page, page=page)
+            result = response.get('result', {})
+            products = result.get('data', [])
+            
+            if not products:
+                break
+            
+            all_products.extend(products)
+            
+            # Check if there are more pages
+            if result.get('current_page') >= result.get('last_page', 1):
+                break
+            
+            page += 1
+            time.sleep(0.1)  # Rate limiting
+        
+        saved_count = 0
+        updated_count = 0
+        errors = []
+        
+        for product in all_products:
+            try:
+                product_data = {
+                    'id': product['id'],
+                    'name': product['name'],
+                    'sku': product.get('sku'),
+                    'category_id': product.get('product_category_id'),
+                    'unit': product.get('unit'),
+                    'description': product.get('description'),
+                    'is_active': product.get('is_active', True),
+                    'is_sellable': product.get('is_sellable', True),
+                    'is_composed': product.get('is_composed', False),
+                    'douano_created_at': product.get('created_at'),
+                    'douano_updated_at': product.get('updated_at'),
+                    'last_sync_at': datetime.now().isoformat()
+                }
+                
+                # Check if product already exists
+                existing = supabase_client.table('products').select('id').eq('id', product['id']).execute()
+                
+                if existing.data:
+                    # Update existing
+                    supabase_client.table('products').update(product_data).eq('id', product['id']).execute()
+                    updated_count += 1
+                else:
+                    # Insert new
+                    supabase_client.table('products').insert(product_data).execute()
+                    saved_count += 1
+                    
+            except Exception as e:
+                error_msg = f"Error saving product {product.get('id', 'unknown')}: {e}"
+                print(f"  ⚠️  {error_msg}")
+                errors.append(error_msg)
+        
+        print(f"✅ Synced {len(all_products)} products: {saved_count} new, {updated_count} updated")
+        
+        return jsonify({
+            'success': True,
+            'total': len(all_products),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': errors
+        })
+        
+    except Exception as e:
+        print(f"❌ Error syncing products: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-price-lists', methods=['POST'])
+def api_sync_price_lists():
+    """Sync all sales price lists from Douano to Supabase."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    douano_client = get_douano_client()
+    if not douano_client:
+        return jsonify({'error': 'Douano client not configured'}), 500
+    
+    try:
+        print("🔄 Starting price lists sync...")
+        
+        # Fetch all price lists from Douano
+        try:
+            response = douano_client.pricing.get_sales_price_lists(per_page=100)
+            print(f"📥 Raw response: {response}")
+            price_lists = response.get('result', {}).get('data', []) if isinstance(response, dict) else response.get('data', []) if isinstance(response, dict) else []
+        except Exception as api_error:
+            print(f"❌ API Error: {api_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'API Error: {str(api_error)}'}), 500
+        
+        saved_count = 0
+        updated_count = 0
+        errors = []
+        
+        for price_list in price_lists:
+            try:
+                price_list_data = {
+                    'id': price_list['id'],
+                    'name': price_list['name'],
+                    'description': price_list.get('description'),
+                    'is_active': price_list.get('is_active', True),
+                    'is_default': price_list.get('is_default', False),
+                    'douano_created_at': price_list.get('created_at'),
+                    'douano_updated_at': price_list.get('updated_at'),
+                    'last_sync_at': datetime.now().isoformat()
+                }
+                
+                # Check if price list already exists
+                existing = supabase_client.table('sales_price_lists').select('id').eq('id', price_list['id']).execute()
+                
+                if existing.data:
+                    # Update existing
+                    supabase_client.table('sales_price_lists').update(price_list_data).eq('id', price_list['id']).execute()
+                    updated_count += 1
+                else:
+                    # Insert new
+                    supabase_client.table('sales_price_lists').insert(price_list_data).execute()
+                    saved_count += 1
+                    
+            except Exception as e:
+                error_msg = f"Error saving price list {price_list.get('id', 'unknown')}: {e}"
+                print(f"  ⚠️  {error_msg}")
+                errors.append(error_msg)
+        
+        print(f"✅ Synced {len(price_lists)} price lists: {saved_count} new, {updated_count} updated")
+        
+        return jsonify({
+            'success': True,
+            'total': len(price_lists),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': errors
+        })
+        
+    except Exception as e:
+        print(f"❌ Error syncing price lists: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-product-prices', methods=['POST'])
+def api_sync_product_prices():
+    """Sync all product prices (products in price lists) from Douano to Supabase."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    douano_client = get_douano_client()
+    if not douano_client:
+        return jsonify({'error': 'Douano client not configured'}), 500
+    
+    try:
+        print("🔄 Starting product prices sync...")
+        
+        # Fetch all price list items from Douano (paginated)
+        all_items = []
+        page = 1
+        per_page = 100
+        
+        while True:
+            response = douano_client.pricing.get_sales_price_list_items(per_page=per_page, page=page)
+            result = response.get('result', {})
+            items = result.get('data', [])
+            
+            if not items:
+                break
+            
+            all_items.extend(items)
+            
+            # Check if there are more pages
+            if result.get('current_page') >= result.get('last_page', 1):
+                break
+            
+            page += 1
+            time.sleep(0.1)  # Rate limiting
+        
+        saved_count = 0
+        updated_count = 0
+        errors = []
+        
+        for item in all_items:
+            try:
+                # Extract relevant data
+                product = item.get('product', {})
+                price_list = item.get('sales_price_list', {})
+                
+                product_id = product.get('id')
+                price_list_id = price_list.get('id')
+                price = item.get('price')
+                
+                if not product_id or not price_list_id or price is None:
+                    continue
+                
+                price_data = {
+                    'product_id': product_id,
+                    'price_list_id': price_list_id,
+                    'price': float(price),
+                    'cost_price': float(item['cost_price']) if item.get('cost_price') else None,
+                    'currency': item.get('currency', 'EUR'),
+                    'is_active': item.get('is_active', True),
+                    'last_sync_at': datetime.now().isoformat()
+                }
+                
+                # Check if price already exists
+                existing = supabase_client.table('product_prices').select('id').eq('product_id', product_id).eq('price_list_id', price_list_id).execute()
+                
+                if existing.data:
+                    # Update existing
+                    supabase_client.table('product_prices').update(price_data).eq('id', existing.data[0]['id']).execute()
+                    updated_count += 1
+                else:
+                    # Insert new
+                    supabase_client.table('product_prices').insert(price_data).execute()
+                    saved_count += 1
+                    
+            except Exception as e:
+                error_msg = f"Error saving price for product {item.get('product', {}).get('id', 'unknown')}: {e}"
+                print(f"  ⚠️  {error_msg}")
+                errors.append(error_msg)
+        
+        print(f"✅ Synced {len(all_items)} product prices: {saved_count} new, {updated_count} updated")
+        
+        return jsonify({
+            'success': True,
+            'total': len(all_items),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': errors
+        })
+        
+    except Exception as e:
+        print(f"❌ Error syncing product prices: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-company-pricing', methods=['POST'])
+def api_sync_company_pricing():
+    """Sync company-specific pricing (price lists and discounts) from Douano to Supabase."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    douano_client = get_douano_client()
+    if not douano_client:
+        return jsonify({'error': 'Douano client not configured'}), 500
+    
+    try:
+        print("🔄 Starting company pricing sync...")
+        
+        # Get all companies from Douano (paginated)
+        all_companies = []
+        page = 1
+        per_page = 50
+        
+        while True:
+            response = douano_client.crm.get_companies(filter_by_is_customer=True, per_page=per_page, page=page)
+            result = response.get('result', {})
+            companies = result.get('data', [])
+            
+            if not companies:
+                break
+            
+            all_companies.extend(companies)
+            
+            # Check if there are more pages
+            if result.get('current_page') >= result.get('last_page', 1):
+                break
+            
+            page += 1
+            time.sleep(0.1)  # Rate limiting
+        
+        saved_count = 0
+        updated_count = 0
+        errors = []
+        
+        for company in all_companies:
+            try:
+                # Get detailed company info (includes commercial settings)
+                company_detail = douano_client.crm.get_company(company['id'])
+                company_data = company_detail.get('result', {})
+                
+                # Extract commercial information
+                commercial = company_data.get('commercial', {})
+                
+                company_id = company_data.get('id')
+                if not company_id:
+                    continue
+                
+                # Check if company exists in our companies table
+                existing_company = supabase_client.table('companies').select('id').eq('company_id', company_id).execute()
+                
+                if not existing_company.data:
+                    # Skip if company doesn't exist in our system yet
+                    continue
+                
+                our_company_id = existing_company.data[0]['id']
+                
+                pricing_data = {
+                    'company_id': our_company_id,
+                    'price_list_id': commercial.get('sales_price_list_id'),
+                    'standard_discount_percentage': float(commercial.get('standard_discount_percentage', 0)),
+                    'extra_discount_percentage': float(commercial.get('extra_discount_percentage', 0)),
+                    'financial_discount_percentage': float(commercial.get('financial_discount_percentage', 0)),
+                    'payment_term_days': commercial.get('payment_term', 30),
+                    'is_active': company_data.get('is_active', True),
+                    'last_sync_at': datetime.now().isoformat()
+                }
+                
+                # Check if pricing already exists
+                existing = supabase_client.table('company_pricing').select('id').eq('company_id', our_company_id).execute()
+                
+                if existing.data:
+                    # Update existing
+                    supabase_client.table('company_pricing').update(pricing_data).eq('id', existing.data[0]['id']).execute()
+                    updated_count += 1
+                else:
+                    # Insert new
+                    supabase_client.table('company_pricing').insert(pricing_data).execute()
+                    saved_count += 1
+                    
+            except Exception as e:
+                error_msg = f"Error saving pricing for company {company.get('id', 'unknown')}: {e}"
+                print(f"  ⚠️  {error_msg}")
+                errors.append(error_msg)
+        
+        print(f"✅ Synced company pricing for {len(all_companies)} companies: {saved_count} new, {updated_count} updated")
+        
+        return jsonify({
+            'success': True,
+            'total': len(all_companies),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': errors
+        })
+        
+    except Exception as e:
+        print(f"❌ Error syncing company pricing: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-all-products', methods=['POST'])
+def api_sync_all_products():
+    """Convenience endpoint to sync all product-related data in sequence."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+    
+    douano_client = get_douano_client()
+    if not douano_client:
+        return jsonify({'error': 'Douano client not configured'}), 500
+    
+    try:
+        print("🚀 Starting full product & pricing sync...")
+        
+        results = {
+            'categories': {'synced': 0, 'new': 0, 'updated': 0, 'errors': 0},
+            'products': {'synced': 0, 'new': 0, 'updated': 0, 'errors': 0},
+            'price_lists': {'synced': 0, 'new': 0, 'updated': 0, 'errors': 0},
+            'product_prices': {'synced': 0, 'new': 0, 'updated': 0, 'errors': 0},
+            'company_pricing': {'synced': 0, 'new': 0, 'updated': 0, 'errors': 0}
+        }
+        
+        # 1. Sync categories
+        print("\n📚 Step 1/5: Syncing product categories...")
+        try:
+            response = douano_client.products.get_product_categories(per_page=100)
+            print(f"📥 Categories response type: {type(response)}")
+            print(f"📥 Categories response keys: {response.keys() if isinstance(response, dict) else 'Not a dict'}")
+            
+            # Handle different response formats
+            if isinstance(response, dict):
+                if 'result' in response:
+                    categories = response['result'].get('data', [])
+                elif 'data' in response:
+                    categories = response['data']
+                else:
+                    categories = []
+                    print(f"⚠️ Unexpected response structure: {list(response.keys())}")
+            else:
+                categories = []
+                print(f"⚠️ Response is not a dict: {type(response)}")
+            
+            print(f"📦 Found {len(categories)} categories")
+            
+            for category in categories:
+                try:
+                    supabase_client.table('product_categories').upsert({
+                        'douano_id': category['id'],
+                        'name': category.get('name'),
+                        'code': category.get('code'),
+                        'parent_category_id': category.get('parent_category_id'),
+                        'douano_created_at': category.get('created_at'),
+                        'douano_updated_at': category.get('updated_at'),
+                        'last_synced_at': datetime.now().isoformat()
+                    }, on_conflict='douano_id').execute()
+                    results['categories']['synced'] += 1
+                except Exception as e:
+                    results['categories']['errors'] += 1
+                    if results['categories']['errors'] <= 3:  # Only print first 3 errors
+                        print(f"  ⚠️  Error saving category {category.get('id')}: {e}")
+            print(f"✅ Synced {results['categories']['synced']} categories")
+        except Exception as e:
+            print(f"❌ Error syncing categories: {e}")
+            results['categories']['error'] = str(e)
+        
+        # 2. Sync products
+        print("\n📦 Step 2/5: Syncing products...")
+        try:
+            page = 1
+            while True:
+                response = douano_client.products.get_products(per_page=100, page=page)
+                
+                # Handle different response formats
+                if isinstance(response, dict):
+                    if 'result' in response:
+                        products = response['result'].get('data', [])
+                    elif 'data' in response:
+                        products = response['data']
+                    else:
+                        products = []
+                else:
+                    products = []
+                
+                if not products:
+                    break
+                    
+                print(f"📦 Processing page {page}: {len(products)} products")
+                
+                for product in products:
+                    try:
+                        supabase_client.table('products').upsert({
+                            'douano_id': product['id'],
+                            'name': product.get('name'),
+                            'code': product.get('code'),
+                            'category_id': product.get('category_id'),
+                            'unit': product.get('unit'),
+                            'description': product.get('description'),
+                            'is_active': product.get('is_active', True),
+                            'douano_created_at': product.get('created_at'),
+                            'douano_updated_at': product.get('updated_at'),
+                            'last_synced_at': datetime.now().isoformat()
+                        }, on_conflict='douano_id').execute()
+                        results['products']['synced'] += 1
+                    except Exception as e:
+                        results['products']['errors'] += 1
+                        if results['products']['errors'] <= 3:  # Only print first 3 errors
+                            print(f"  ⚠️  Error saving product {product.get('id')}: {e}")
+                page += 1
+            print(f"✅ Synced {results['products']['synced']} products")
+        except Exception as e:
+            print(f"❌ Error syncing products: {e}")
+            results['products']['error'] = str(e)
+        
+        # 3. Sync price lists
+        print("\n💰 Step 3/5: Syncing price lists...")
+        try:
+            response = douano_client.pricing.get_sales_price_lists(per_page=100)
+            print(f"📥 Price lists response type: {type(response)}")
+            
+            # Handle different response formats
+            if isinstance(response, dict):
+                if 'result' in response:
+                    price_lists = response['result'].get('data', [])
+                elif 'data' in response:
+                    price_lists = response['data']
+                else:
+                    price_lists = []
+                    print(f"⚠️ Unexpected price list response structure: {list(response.keys())}")
+            else:
+                price_lists = []
+                print(f"⚠️ Price list response is not a dict: {type(response)}")
+            
+            print(f"💰 Found {len(price_lists)} price lists")
+            
+            for price_list in price_lists:
+                try:
+                    supabase_client.table('sales_price_lists').upsert({
+                        'douano_id': price_list['id'],
+                        'name': price_list.get('name'),
+                        'description': price_list.get('description'),
+                        'is_active': price_list.get('is_active', True),
+                        'douano_created_at': price_list.get('created_at'),
+                        'douano_updated_at': price_list.get('updated_at'),
+                        'last_synced_at': datetime.now().isoformat()
+                    }, on_conflict='douano_id').execute()
+                    results['price_lists']['synced'] += 1
+                except Exception as e:
+                    results['price_lists']['errors'] += 1
+            print(f"✅ Synced {results['price_lists']['synced']} price lists")
+        except Exception as e:
+            print(f"❌ Error syncing price lists: {e}")
+            results['price_lists']['error'] = str(e)
+        
+        # 4. Sync product prices
+        print("\n💵 Step 4/5: Syncing product prices...")
+        try:
+            page = 1
+            while page <= 10:  # Limit to 10 pages for safety
+                response = douano_client.pricing.get_sales_price_list_items(per_page=100, page=page)
+                
+                # Handle different response formats
+                if isinstance(response, dict):
+                    if 'result' in response:
+                        items = response['result'].get('data', [])
+                    elif 'data' in response:
+                        items = response['data']
+                    else:
+                        items = []
+                else:
+                    items = []
+                
+                if not items:
+                    break
+                    
+                print(f"💵 Processing page {page}: {len(items)} price list items")
+                
+                for item in items:
+                    try:
+                        supabase_client.table('product_prices').upsert({
+                            'douano_id': item['id'],
+                            'price_list_id': item.get('sales_price_list_id'),
+                            'product_id': item.get('product_id'),
+                            'price': item.get('price'),
+                            'last_synced_at': datetime.now().isoformat()
+                        }, on_conflict='douano_id').execute()
+                        results['product_prices']['synced'] += 1
+                    except Exception as e:
+                        results['product_prices']['errors'] += 1
+                page += 1
+            print(f"✅ Synced {results['product_prices']['synced']} product prices")
+        except Exception as e:
+            print(f"❌ Error syncing product prices: {e}")
+            results['product_prices']['error'] = str(e)
+        
+        # 5. Sync company pricing
+        print("\n🏢 Step 5/5: Syncing company pricing...")
+        try:
+            page = 1
+            while page <= 10:  # Limit to 10 pages for safety
+                response = douano_client.crm.get_companies(filter_by_is_customer=True, per_page=100, page=page)
+                
+                # Handle different response formats
+                if isinstance(response, dict):
+                    if 'result' in response:
+                        companies = response['result'].get('data', [])
+                    elif 'data' in response:
+                        companies = response['data']
+                    else:
+                        companies = []
+                else:
+                    companies = []
+                
+                if not companies:
+                    break
+                    
+                print(f"🏢 Processing page {page}: {len(companies)} companies")
+                
+                for company in companies:
+                    try:
+                        # Small delay to avoid rate limiting
+                        time.sleep(0.2)
+                        
+                        # Get detailed company info
+                        company_detail = douano_client.crm.get_company(company['id'])
+                        
+                        # Handle different response formats
+                        if isinstance(company_detail, dict):
+                            if 'result' in company_detail:
+                                detail_data = company_detail['result']
+                            else:
+                                detail_data = company_detail
+                        else:
+                            detail_data = {}
+                        
+                        # Check if this company exists in our DB
+                        existing = supabase_client.table('companies').select('id').eq('douano_company_id', company['id']).execute()
+                        if existing.data:
+                            company_id = existing.data[0]['id']
+                            supabase_client.table('company_pricing').upsert({
+                                'company_id': company_id,
+                                'price_list_id': detail_data.get('sales_price_list_id'),
+                                'standard_discount': detail_data.get('standard_discount', 0),
+                                'extra_discount': detail_data.get('extra_discount', 0),
+                                'financial_discount': detail_data.get('financial_discount', 0),
+                                'payment_term_days': detail_data.get('payment_term_days', 30),
+                                'last_synced_at': datetime.now().isoformat()
+                            }, on_conflict='company_id').execute()
+                            results['company_pricing']['synced'] += 1
+                    except Exception as e:
+                        results['company_pricing']['errors'] += 1
+                page += 1
+            print(f"✅ Synced {results['company_pricing']['synced']} company pricing records")
+        except Exception as e:
+            print(f"❌ Error syncing company pricing: {e}")
+            results['company_pricing']['error'] = str(e)
+        
+        print("\n✅ Full product & pricing sync complete!")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Full product & pricing sync complete',
+            'results': results
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in full sync: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/refresh-company-metrics', methods=['POST'])
+def api_refresh_company_metrics():
+    """Manually trigger recalculation of company metrics from invoice data."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        print("🔄 Manual company metrics refresh triggered...")
+        success = recalculate_company_metrics_from_invoices()
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Company metrics recalculated successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to recalculate company metrics'
+            }), 500
+    
+    except Exception as e:
+        print(f"Error refreshing company metrics: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/2025-sales-stats', methods=['GET'])
+def api_2025_sales_stats():
+    """Get statistics about 2025 sales data in Supabase."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get total count
+        count_result = supabase_client.table('sales_2025').select('id', count='exact').execute()
+        total_count = count_result.count if hasattr(count_result, 'count') else len(count_result.data)
+        
+        # Get sum of total amounts (use range to get more records)
+        amounts_result = supabase_client.table('sales_2025').select('total_amount, balance, is_paid').range(0, 9999).execute()
+        
+        total_revenue = sum(float(r.get('total_amount') or 0) for r in amounts_result.data)
+        total_balance = sum(float(r.get('balance') or 0) for r in amounts_result.data)
+        paid_count = sum(1 for r in amounts_result.data if r.get('is_paid'))
+        
+        # Get unique companies (use range to get more records)
+        companies_result = supabase_client.table('sales_2025').select('company_id').range(0, 9999).execute()
+        unique_companies = len(set(r.get('company_id') for r in companies_result.data if r.get('company_id')))
+        
+        stats = {
+            'total_invoices': total_count,
+            'total_revenue': round(total_revenue, 2),
+            'total_outstanding': round(total_balance, 2),
+            'paid_invoices': paid_count,
+            'unpaid_invoices': total_count - paid_count,
+            'unique_companies': unique_companies
+        }
+        
+        return jsonify(stats)
+        
+    except Exception as e:
+        print(f"Error getting 2025 sales stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/sales-2024')
+def sales_2024():
+    """2024 Sales Data page"""
+    if not is_token_valid():
+        return redirect(url_for('login'))
+    
+    return render_template('sales_2024.html')
+
+
+@app.route('/api/sync-2024-invoices', methods=['POST'])
+def api_sync_2024_invoices():
+    """
+    Sync all 2024 invoices from Douano API to Supabase
+    """
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        # Fetch all 2024 invoices from Douano API
+        all_invoices = []
+        page = 1
+        per_page = 100
+        
+        while True:
+            params = {
+                'per_page': per_page,
+                'page': page,
+                'filter_by_start_date': '2024-01-01',
+                'filter_by_end_date': '2024-12-31'
+            }
+            
+            print(f"Fetching 2024 invoices page {page}...")
+            raw_response, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
+            
+            if error:
+                print(f"API Error: {error}")
+                return jsonify({'error': f'API request failed: {error}'}), 500
+            
+            result = raw_response.get('result', {})
+            invoices = result.get('data', [])
+            
+            if not invoices:
+                break
+                
+            all_invoices.extend(invoices)
+            print(f"Fetched {len(invoices)} invoices from page {page}")
+            
+            # Check if there are more pages
+            pagination = result.get('pagination', {})
+            if page >= pagination.get('total_pages', 1):
+                break
+                
+            page += 1
+        
+        print(f"Total 2024 invoices fetched: {len(all_invoices)}")
+        
+        if not all_invoices:
+            return jsonify({'success': True, 'message': 'No 2024 invoices found', 'total_fetched': 0, 'saved': 0, 'updated': 0, 'errors': 0})
+        
+        # Save to Supabase
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        saved_count = 0
+        updated_count = 0
+        error_count = 0
+        
+        for idx, invoice in enumerate(all_invoices):
+            # Add small delay every 50 invoices to prevent resource exhaustion
+            if idx > 0 and idx % 50 == 0:
+                time.sleep(0.1)
+            
+            max_retries = 3
+            retry_count = 0
+            
+            while retry_count < max_retries:
+                try:
+                    # Extract key fields
+                    company = invoice.get('company', {})
+                    if isinstance(company, dict):
+                        company_id = company.get('id')
+                        company_name = company.get('name') or company.get('public_name')
+                    else:
+                        company_id = None
+                        company_name = None
+                    
+                    record = {
+                        'invoice_id': invoice.get('id'),
+                        'invoice_data': invoice,
+                        'company_id': company_id,
+                        'company_name': company_name,
+                        'invoice_number': invoice.get('invoice_number') or invoice.get('number'),
+                        'invoice_date': invoice.get('date'),
+                        'due_date': invoice.get('due_date'),
+                        'total_amount': invoice.get('payable_amount_without_financial_discount') or invoice.get('total_amount'),
+                        'balance': invoice.get('balance'),
+                        'is_paid': invoice.get('balance', 0) == 0
+                    }
+                    
+                    # Check if record exists
+                    existing = supabase_client.table('sales_2024').select('id').eq('invoice_id', record['invoice_id']).execute()
+                    
+                    if existing.data:
+                        # Update
+                        record['updated_at'] = datetime.now().isoformat()
+                        supabase_client.table('sales_2024').update(record).eq('invoice_id', record['invoice_id']).execute()
+                        updated_count += 1
+                    else:
+                        # Insert
+                        supabase_client.table('sales_2024').insert(record).execute()
+                        saved_count += 1
+                    
+                    break  # Success, exit retry loop
+                    
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        error_count += 1
+                        # Only print non-resource errors after all retries
+                        if "Resource temporarily unavailable" not in str(e):
+                            print(f"❌ Error saving invoice {invoice.get('id')} after {max_retries} retries: {e}")
+                        break
+                    # Exponential backoff
+                    time.sleep(0.05 * (2 ** retry_count))
+        
+        # Recalculate company metrics to update frontend display
+        if saved_count > 0 or updated_count > 0:
+            print("📊 Updating company metrics...")
+            recalculate_company_metrics_from_invoices()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully synced {len(all_invoices)} 2024 invoices',
+            'total_fetched': len(all_invoices),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': error_count
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in 2024 sync: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/2024-sales-stats', methods=['GET'])
+def api_2024_sales_stats():
+    """Get statistics about 2024 sales data in Supabase."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get total count
+        count_result = supabase_client.table('sales_2024').select('id', count='exact').execute()
+        total_count = count_result.count if hasattr(count_result, 'count') else len(count_result.data)
+        
+        # Get sum of total amounts (use range to get more records)
+        amounts_result = supabase_client.table('sales_2024').select('total_amount, balance, is_paid').range(0, 9999).execute()
+        
+        total_revenue = sum(float(r.get('total_amount') or 0) for r in amounts_result.data)
+        total_balance = sum(float(r.get('balance') or 0) for r in amounts_result.data)
+        paid_count = sum(1 for r in amounts_result.data if r.get('is_paid'))
+        
+        # Get unique companies (use range to get more records)
+        companies_result = supabase_client.table('sales_2024').select('company_id').range(0, 9999).execute()
+        unique_companies = len(set(r.get('company_id') for r in companies_result.data if r.get('company_id')))
+        
+        stats = {
+            'total_invoices': total_count,
+            'total_revenue': round(total_revenue, 2),
+            'total_outstanding': round(total_balance, 2),
+            'paid_invoices': paid_count,
+            'unpaid_invoices': total_count - paid_count,
+            'unique_companies': unique_companies
+        }
+        
+        return jsonify(stats)
+        
+    except Exception as e:
+        print(f"Error getting 2024 sales stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/data')
+def data():
+    """Unified Data Analysis page"""
+    if not is_token_valid():
+        return redirect(url_for('login'))
+    
+    return render_template('data.html')
+
+
+@app.route('/alerts')
+def alerts():
+    """Pattern disruption alerts for sales team."""
+    if not is_token_valid():
+        return redirect(url_for('login'))
+    return render_template('alerts.html')
+
+
+@app.route('/api/2024-companies-analysis', methods=['GET'])
+def api_2024_companies_analysis():
+    """Get detailed company analysis from 2024 sales data."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get all invoice data with raw JSON (fetch in batches to bypass limits)
+        all_invoices = []
+        batch_size = 1000
+        offset = 0
+        
+        while True:
+            batch_result = supabase_client.table('sales_2024').select('*').range(offset, offset + batch_size - 1).execute()
+            
+            if not batch_result.data:
+                break
+                
+            all_invoices.extend(batch_result.data)
+            print(f"DEBUG: Fetched batch {offset//batch_size + 1}: {len(batch_result.data)} records (Total: {len(all_invoices)})")
+            
+            # If we got less than batch_size records, we've reached the end
+            if len(batch_result.data) < batch_size:
+                break
+                
+            offset += batch_size
+            
+            # Safety break to avoid infinite loop
+            if offset > 50000:
+                print("DEBUG: Safety break - reached 50k records")
+                break
+        
+        # Create a mock result object
+        class MockResult:
+            def __init__(self, data):
+                self.data = data
+        
+        invoices_result = MockResult(all_invoices)
+        
+        if not invoices_result.data:
+            return jsonify({'companies': [], 'total_companies': 0})
+        
+        print(f"DEBUG: Total invoices in sales_2024 table: {len(invoices_result.data)}")
+        
+        # Also check the count using the count query
+        count_check = supabase_client.table('sales_2024').select('id', count='exact').execute()
+        actual_count = count_check.count if hasattr(count_check, 'count') else len(count_check.data)
+        print(f"DEBUG: Actual count from count query: {actual_count}")
+        
+        # Process company data from raw invoice JSON
+        companies_data = {}
+        processed_invoices = 0
+        skipped_invoices = 0
+        
+        for invoice in invoices_result.data:
+            invoice_data = invoice.get('invoice_data', {})
+            company_info = invoice_data.get('company', {})
+            
+            # Use company_id from the extracted field if company info is missing
+            company_id = None
+            if company_info and company_info.get('id'):
+                company_id = company_info.get('id')
+            elif invoice.get('company_id'):
+                company_id = invoice.get('company_id')
+                # If we don't have company_info but have company_id, create basic info
+                if not company_info:
+                    company_info = {
+                        'id': company_id,
+                        'name': invoice.get('company_name') or 'Unknown Company'
+                    }
+            else:
+                # Skip invoices without any company identification
+                continue
+            
+            # Initialize company if not exists
+            if company_id not in companies_data:
+                companies_data[company_id] = {
+                    'id': company_id,
+                    'name': company_info.get('name') or company_info.get('public_name') or 'Unknown Company',
+                    'vat_number': company_info.get('vat_number', ''),
+                    'email': company_info.get('email', ''),
+                    'phone': company_info.get('phone_number', ''),
+                    'website': company_info.get('website', ''),
+                    'address': {
+                        'street': company_info.get('address_line1', ''),
+                        'street2': company_info.get('address_line2', ''),
+                        'city': company_info.get('city', ''),
+                        'postal_code': company_info.get('post_code', ''),
+                        'country': company_info.get('country', {}).get('name', '') if company_info.get('country') else ''
+                    },
+                    'contact_person': company_info.get('contact_person', {}).get('name', '') if company_info.get('contact_person') else '',
+                    'industry': company_info.get('industry', ''),
+                    'company_size': company_info.get('company_size', ''),
+                    'invoices': [],
+                    'total_revenue': 0,
+                    'invoice_count': 0,
+                    'average_invoice_value': 0,
+                    'first_invoice_date': None,
+                    'last_invoice_date': None,
+                    'payment_terms': set(),
+                    'currencies': set()
+                }
+            
+            # Add invoice data
+            company = companies_data[company_id]
+            invoice_amount = float(invoice.get('total_amount') or 0)
+            invoice_date = invoice.get('invoice_date')
+            
+            company['invoices'].append({
+                'id': invoice.get('invoice_id'),
+                'number': invoice.get('invoice_number'),
+                'date': invoice_date,
+                'amount': invoice_amount,
+                'balance': float(invoice.get('balance') or 0),
+                'is_paid': invoice.get('is_paid', False)
+            })
+            
+            company['total_revenue'] += invoice_amount
+            company['invoice_count'] += 1
+            
+            # Track dates
+            if invoice_date:
+                if not company['first_invoice_date'] or invoice_date < company['first_invoice_date']:
+                    company['first_invoice_date'] = invoice_date
+                if not company['last_invoice_date'] or invoice_date > company['last_invoice_date']:
+                    company['last_invoice_date'] = invoice_date
+            
+            # Extract additional details from raw data
+            if invoice_data.get('payment_terms'):
+                company['payment_terms'].add(str(invoice_data.get('payment_terms')))
+            if invoice_data.get('currency'):
+                company['currencies'].add(invoice_data.get('currency'))
+        
+        # Finalize company data
+        companies_list = []
+        for company in companies_data.values():
+            company['average_invoice_value'] = round(company['total_revenue'] / company['invoice_count'], 2) if company['invoice_count'] > 0 else 0
+            company['payment_terms'] = list(company['payment_terms'])
+            company['currencies'] = list(company['currencies'])
+            company['total_revenue'] = round(company['total_revenue'], 2)
+            
+            # Sort invoices by date (newest first)
+            company['invoices'].sort(key=lambda x: x['date'] or '1900-01-01', reverse=True)
+            
+            companies_list.append(company)
+        
+        # Sort companies by total revenue (highest first)
+        companies_list.sort(key=lambda x: x['total_revenue'], reverse=True)
+        
+        return jsonify({
+            'companies': companies_list,
+            'total_companies': len(companies_list),
+            'total_revenue': sum(c['total_revenue'] for c in companies_list),
+            'total_invoices': sum(c['invoice_count'] for c in companies_list)
+        })
+        
+    except Exception as e:
+        print(f"Error getting 2024 companies analysis: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/2025-companies-analysis', methods=['GET'])
+def api_2025_companies_analysis():
+    """Get detailed company analysis from 2025 sales data."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get all invoice data with raw JSON (fetch in batches to bypass limits)
+        all_invoices = []
+        batch_size = 1000
+        offset = 0
+        
+        while True:
+            batch_result = supabase_client.table('sales_2025').select('*').range(offset, offset + batch_size - 1).execute()
+            
+            if not batch_result.data:
+                break
+                
+            all_invoices.extend(batch_result.data)
+            print(f"DEBUG: Fetched batch {offset//batch_size + 1}: {len(batch_result.data)} records (Total: {len(all_invoices)})")
+            
+            # If we got less than batch_size records, we've reached the end
+            if len(batch_result.data) < batch_size:
+                break
+                
+            offset += batch_size
+            
+            # Safety break to avoid infinite loop
+            if offset > 50000:
+                print("DEBUG: Safety break - reached 50k records")
+                break
+        
+        # Create a mock result object
+        class MockResult:
+            def __init__(self, data):
+                self.data = data
+        
+        invoices_result = MockResult(all_invoices)
+        
+        if not invoices_result.data:
+            return jsonify({'companies': [], 'total_companies': 0})
+        
+        print(f"DEBUG: Total invoices in sales_2025 table: {len(invoices_result.data)}")
+        
+        # Process company data from raw invoice JSON
+        companies_data = {}
+        
+        for invoice in invoices_result.data:
+            invoice_data = invoice.get('invoice_data', {})
+            company_info = invoice_data.get('company', {})
+            
+            # Use company_id from the extracted field if company info is missing
+            company_id = None
+            if company_info and company_info.get('id'):
+                company_id = company_info.get('id')
+            elif invoice.get('company_id'):
+                company_id = invoice.get('company_id')
+                # If we don't have company_info but have company_id, create basic info
+                if not company_info:
+                    company_info = {
+                        'id': company_id,
+                        'name': invoice.get('company_name') or 'Unknown Company'
+                    }
+            else:
+                # Skip invoices without any company identification
+                continue
+            
+            # Initialize company if not exists
+            if company_id not in companies_data:
+                companies_data[company_id] = {
+                    'id': company_id,
+                    'name': company_info.get('name') or company_info.get('public_name') or 'Unknown Company',
+                    'vat_number': company_info.get('vat_number', ''),
+                    'email': company_info.get('email', ''),
+                    'phone': company_info.get('phone_number', ''),
+                    'website': company_info.get('website', ''),
+                    'address': {
+                        'street': company_info.get('address_line1', ''),
+                        'street2': company_info.get('address_line2', ''),
+                        'city': company_info.get('city', ''),
+                        'postal_code': company_info.get('post_code', ''),
+                        'country': company_info.get('country', {}).get('name', '') if company_info.get('country') else ''
+                    },
+                    'contact_person': company_info.get('contact_person', {}).get('name', '') if company_info.get('contact_person') else '',
+                    'industry': company_info.get('industry', ''),
+                    'company_size': company_info.get('company_size', ''),
+                    'invoices': [],
+                    'total_revenue': 0,
+                    'invoice_count': 0,
+                    'average_invoice_value': 0,
+                    'first_invoice_date': None,
+                    'last_invoice_date': None,
+                    'payment_terms': set(),
+                    'currencies': set()
+                }
+            
+            # Add invoice data
+            company = companies_data[company_id]
+            invoice_amount = float(invoice.get('total_amount') or 0)
+            invoice_date = invoice.get('invoice_date')
+            
+            company['invoices'].append({
+                'id': invoice.get('invoice_id'),
+                'number': invoice.get('invoice_number'),
+                'date': invoice_date,
+                'amount': invoice_amount,
+                'balance': float(invoice.get('balance') or 0),
+                'is_paid': invoice.get('is_paid', False)
+            })
+            
+            company['total_revenue'] += invoice_amount
+            company['invoice_count'] += 1
+            
+            # Track dates
+            if invoice_date:
+                if not company['first_invoice_date'] or invoice_date < company['first_invoice_date']:
+                    company['first_invoice_date'] = invoice_date
+                if not company['last_invoice_date'] or invoice_date > company['last_invoice_date']:
+                    company['last_invoice_date'] = invoice_date
+            
+            # Extract additional details from raw data
+            if invoice_data.get('payment_terms'):
+                company['payment_terms'].add(str(invoice_data.get('payment_terms')))
+            if invoice_data.get('currency'):
+                company['currencies'].add(invoice_data.get('currency'))
+        
+        # Finalize company data
+        companies_list = []
+        for company in companies_data.values():
+            company['average_invoice_value'] = round(company['total_revenue'] / company['invoice_count'], 2) if company['invoice_count'] > 0 else 0
+            company['payment_terms'] = list(company['payment_terms'])
+            company['currencies'] = list(company['currencies'])
+            company['total_revenue'] = round(company['total_revenue'], 2)
+            
+            # Sort invoices by date (newest first)
+            company['invoices'].sort(key=lambda x: x['date'] or '1900-01-01', reverse=True)
+            
+            companies_list.append(company)
+        
+        # Sort companies by total revenue (highest first)
+        companies_list.sort(key=lambda x: x['total_revenue'], reverse=True)
+        
+        total_invoices_calculated = sum(c['invoice_count'] for c in companies_list)
+        print(f"DEBUG 2025: Raw records fetched: {len(invoices_result.data)}")
+        print(f"DEBUG 2025: Companies processed: {len(companies_list)}")
+        print(f"DEBUG 2025: Total invoices calculated: {total_invoices_calculated}")
+        
+        return jsonify({
+            'companies': companies_list,
+            'total_companies': len(companies_list),
+            'total_revenue': sum(c['total_revenue'] for c in companies_list),
+            'total_invoices': total_invoices_calculated
+        })
+        
+    except Exception as e:
+        print(f"Error getting 2025 companies analysis: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/companies-from-db', methods=['GET'])
+def api_companies_from_db():
+    """Get companies data directly from the enhanced companies table."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        year_filter = request.args.get('year', '2025')
+        
+        # Fetch all companies from the enhanced companies table
+        companies_result = supabase_client.table('companies').select('*').execute()
+        
+        if not companies_result.data:
+            return jsonify({
+                'companies': [],
+                'total_companies': 0,
+                'total_revenue': 0,
+                'total_invoices': 0
+            })
+        
+        companies_list = []
+        total_revenue = 0
+        total_invoices = 0
+        
+        for company in companies_result.data:
+            # Calculate metrics based on year filter with safe float conversion
+            try:
+                if year_filter == '2024':
+                    revenue_val = company.get('total_revenue_2024', 0)
+                    revenue = float(revenue_val) if revenue_val is not None else 0.0
+                    invoice_count = company.get('invoice_count_2024', 0) or 0
+                elif year_filter == '2025':
+                    revenue_val = company.get('total_revenue_2025', 0)
+                    revenue = float(revenue_val) if revenue_val is not None else 0.0
+                    invoice_count = company.get('invoice_count_2025', 0) or 0
+                else:  # combined
+                    revenue_val = company.get('total_revenue_all_time', 0)
+                    revenue = float(revenue_val) if revenue_val is not None else 0.0
+                    invoice_count = company.get('invoice_count_all_time', 0) or 0
+            except (ValueError, TypeError) as e:
+                print(f"DEBUG: Error processing company {company.get('company_id')}: {e}")
+                revenue = 0.0
+                invoice_count = 0
+            
+            # Skip companies with no activity in the selected year
+            if invoice_count == 0 and year_filter != 'combined':
+                continue
+            
+            # Build company data with all enhanced fields
+            company_data = {
+                'id': company['id'],
+                'company_id': company['company_id'],
+                'name': company['name'],
+                'public_name': company.get('public_name'),
+                'company_tag': company.get('company_tag'),
+                'vat_number': company.get('vat_number'),
+                'email': company.get('email'),
+                'email_addresses': company.get('email_addresses'),
+                'phone': company.get('phone_number'),
+                'website': company.get('website'),
+                'contact_person': company.get('contact_person_name'),
+                'is_customer': company.get('is_customer'),
+                'is_supplier': company.get('is_supplier'),
+                'company_status_name': company.get('company_status_name'),
+                'sales_price_class_name': company.get('sales_price_class_name'),
+                'document_delivery_type': company.get('document_delivery_type'),
+                'company_categories': company.get('company_categories'),
+                'addresses': company.get('addresses'),
+                'extension_values': company.get('extension_values'),
+                'bank_accounts': company.get('bank_accounts'),
+                'default_document_notes': company.get('default_document_notes'),
+                'raw_company_data': company.get('raw_company_data'),
+                'total_revenue': revenue,
+                'invoice_count': invoice_count,
+                'average_invoice_value': float(company.get('average_invoice_value', 0)) if company.get('average_invoice_value') is not None else 0.0,
+                'first_invoice_date': company.get('first_invoice_date'),
+                'last_invoice_date': company.get('last_invoice_date'),
+                'payment_terms': company.get('payment_terms', []),
+                'currencies': company.get('currencies_used', []),
+                'address': {
+                    'city': company.get('city', ''),
+                    'country': company.get('country_name', ''),
+                    'street': company.get('address_line1', ''),
+                    'street2': company.get('address_line2', ''),
+                    'postal_code': company.get('post_code', '')
+                }
+            }
+            
+            # Add year breakdown for combined view
+            if year_filter == 'combined':
+                company_data['years_data'] = {
+                    '2024': {
+                        'total_revenue': float(company.get('total_revenue_2024', 0)),
+                        'invoice_count': company.get('invoice_count_2024', 0)
+                    },
+                    '2025': {
+                        'total_revenue': float(company.get('total_revenue_2025', 0)),
+                        'invoice_count': company.get('invoice_count_2025', 0)
+                    }
+                }
+            
+            companies_list.append(company_data)
+            total_revenue += revenue
+            total_invoices += invoice_count
+        
+        # Sort by revenue descending
+        companies_list.sort(key=lambda x: x['total_revenue'], reverse=True)
+        
+        return jsonify({
+            'companies': companies_list,
+            'total_companies': len(companies_list),
+            'total_revenue': round(total_revenue, 2),
+            'total_invoices': total_invoices,
+            'year_filter': year_filter
+        })
+        
+    except Exception as e:
+        print(f"Error in companies from DB: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/company-invoices/<int:company_id>', methods=['GET'])
+def api_company_invoices(company_id):
+    """Get all invoices for a specific company."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        year_filter = request.args.get('year', '2025')
+        invoices = []
+        
+        # Fetch invoices based on year filter
+        if year_filter == 'combined':
+            # Get from both years
+            for year in ['2024', '2025']:
+                result = supabase_client.table(f'sales_{year}').select('*').eq('company_id', company_id).execute()
+                for invoice in result.data:
+                    invoice['year'] = int(year)
+                    invoices.append(invoice)
+        else:
+            # Get from specific year
+            if year_filter in ['2024', '2025']:
+                result = supabase_client.table(f'sales_{year_filter}').select('*').eq('company_id', company_id).execute()
+                for invoice in result.data:
+                    invoice['year'] = int(year_filter)
+                    invoices.append(invoice)
+            else:
+                # Default to 2025 if invalid year
+                result = supabase_client.table('sales_2025').select('*').eq('company_id', company_id).execute()
+                for invoice in result.data:
+                    invoice['year'] = 2025
+                    invoices.append(invoice)
+        
+        # Process invoices for frontend
+        processed_invoices = []
+        for invoice in invoices:
+            # Handle None values safely
+            total_amount = invoice.get('total_amount')
+            balance = invoice.get('balance')
+            
+            processed_invoices.append({
+                'id': invoice['id'],
+                'number': invoice.get('invoice_number', invoice['id']),
+                'date': invoice.get('invoice_date'),
+                'amount': float(total_amount) if total_amount is not None else 0.0,
+                'balance': float(balance) if balance is not None else 0.0,
+                'is_paid': invoice.get('is_paid', True),
+                'year': invoice.get('year', 2025)
+            })
+        
+        # Sort by date descending
+        processed_invoices.sort(key=lambda x: x['date'] or '', reverse=True)
+        
+        return jsonify({
+            'invoices': processed_invoices,
+            'total_invoices': len(processed_invoices),
+            'company_id': company_id
+        })
+        
+    except Exception as e:
+        print(f"Error getting company invoices: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts', methods=['GET'])
+def api_get_alerts():
+    """
+    Fetch stored alerts from database with optional filtering.
+    Much faster than recalculating - use this for regular page loads.
+    """
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get query parameters for filtering
+        status = request.args.get('status', 'active')
+        priority = request.args.get('priority')
+        alert_type = request.args.get('type')
+        
+        # Build query
+        query = supabase_client.table('customer_alerts').select('*')
+        
+        # Apply filters
+        if status:
+            query = query.eq('status', status)
+        if priority:
+            query = query.eq('priority', priority)
+        if alert_type:
+            query = query.eq('alert_type', alert_type)
+        
+        # Order by priority and date
+        query = query.order('priority', desc=True).order('created_at', desc=True)
+        
+        # Execute query
+        result = query.execute()
+        
+        # Calculate summary
+        alerts = result.data
+        summary = {
+            'total_alerts': len(alerts),
+            'high_priority': len([a for a in alerts if a['priority'] == 'HIGH']),
+            'medium_priority': len([a for a in alerts if a['priority'] == 'MEDIUM']),
+            'low_priority': len([a for a in alerts if a['priority'] == 'LOW']),
+            'by_type': {}
+        }
+        
+        for alert in alerts:
+            alert_type = alert['alert_type']
+            if alert_type not in summary['by_type']:
+                summary['by_type'][alert_type] = 0
+            summary['by_type'][alert_type] += 1
+        
+        # Get most recent analysis date
+        analysis_date = alerts[0]['analysis_date'] if alerts else datetime.now().isoformat()
+        
+        return jsonify({
+            'alerts': alerts,
+            'summary': summary,
+            'analysis_date': analysis_date,
+            'from_cache': True
+        })
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Error fetching alerts: {error_msg}")
+        
+        # Check if table doesn't exist
+        if 'does not exist' in error_msg or '42P01' in error_msg:
+            return jsonify({
+                'error': 'Database table not created yet',
+                'message': 'Please run the SQL migration first. See create_alerts_table_simple.sql',
+                'setup_required': True,
+                'alerts': [],
+                'summary': {
+                    'total_alerts': 0,
+                    'high_priority': 0,
+                    'medium_priority': 0,
+                    'low_priority': 0,
+                    'by_type': {}
+                },
+                'analysis_date': datetime.now().isoformat()
+            }), 200  # Return 200 so frontend can show setup message
+        
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts/refresh', methods=['POST'])
+def api_refresh_alerts():
+    """
+    Recalculate all alerts and update database.
+    Use this for scheduled updates or manual refresh.
+    """
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # First check if the table exists by trying to query it
+        try:
+            supabase_client.table('customer_alerts').select('id').limit(1).execute()
+        except Exception as e:
+            error_msg = str(e)
+            if 'does not exist' in error_msg or '42P01' in error_msg:
+                return jsonify({
+                    'success': False,
+                    'error': 'Database table not created yet',
+                    'message': 'Please run the SQL migration first. Open Supabase SQL Editor and run the SQL from create_alerts_table_simple.sql',
+                    'setup_required': True
+                }), 400
+            raise
+        
+        from datetime import datetime, timedelta
+        import statistics
+        
+        print("🔍 Starting comprehensive alert analysis...")
+        
+        # Get all companies
+        companies_result = supabase_client.table('companies').select('*').execute()
+        
+        all_alerts = []
+        current_date = datetime.now()
+        companies_processed = 0
+        
+        for company in companies_result.data:
+            company_id = company['company_id']
+            
+            # Rate limiting
+            if companies_processed > 0 and companies_processed % 10 == 0:
+                time.sleep(0.1)
+            
+            # Get all invoices for this company
+            all_invoices = []
+            
+            for year in ['2024', '2025']:
+                max_retries = 3
+                retry_count = 0
+                
+                while retry_count < max_retries:
+                    try:
+                        invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number, balance').eq('company_id', company_id).execute()
+                        for invoice in invoices_result.data:
+                            if invoice.get('invoice_date'):
+                                all_invoices.append({
+                                    'date': datetime.strptime(invoice['invoice_date'], '%Y-%m-%d'),
+                                    'amount': float(invoice.get('total_amount', 0)) if invoice.get('total_amount') else 0,
+                                    'balance': float(invoice.get('balance', 0)) if invoice.get('balance') else 0,
+                                    'id': invoice['id'],
+                                    'number': invoice.get('invoice_number', invoice['id'])
+                                })
+                        break
+                    except Exception as e:
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            if "Resource temporarily unavailable" not in str(e):
+                                print(f"Error fetching invoices for company {company_id}: {e}")
+                            break
+                        time.sleep(0.05 * (2 ** retry_count))
+            
+            companies_processed += 1
+            
+            # Need at least 2 invoices for most analyses
+            if len(all_invoices) < 2:
+                # Check for one-time customers (only 1 invoice)
+                if len(all_invoices) == 1:
+                    days_since = (current_date - all_invoices[0]['date']).days
+                    if days_since > 90:  # No return in 90+ days
+                        all_alerts.append({
+                            'type': 'ONE_TIME_CUSTOMER',
+                            'priority': 'MEDIUM',
+                            'company_id': company_id,
+                            'company_name': company['name'],
+                            'public_name': company.get('public_name'),
+                            'email': company.get('email_addresses') or company.get('email'),
+                            'description': f'Customer made only one purchase {days_since} days ago and never returned',
+                            'recommendation': 'Reach out with a follow-up offer or check satisfaction',
+                            'metrics': {
+                                'total_orders': 1,
+                                'first_order_date': all_invoices[0]['date'].strftime('%Y-%m-%d'),
+                                'first_order_amount': all_invoices[0]['amount'],
+                                'days_since_order': days_since
+                            }
+                        })
+                continue
+            
+            # Sort by date
+            all_invoices.sort(key=lambda x: x['date'])
+            
+            # Calculate intervals and amounts
+            intervals = []
+            amounts = []
+            for i in range(len(all_invoices)):
+                amounts.append(all_invoices[i]['amount'])
+                if i > 0:
+                    interval = (all_invoices[i]['date'] - all_invoices[i-1]['date']).days
+                    intervals.append(interval)
+            
+            # Skip if not enough data
+            if len(intervals) < 2:
+                continue
+            
+            # Calculate metrics
+            avg_interval = statistics.mean(intervals)
+            std_interval = statistics.stdev(intervals) if len(intervals) > 1 else 0
+            avg_amount = statistics.mean(amounts)
+            days_since_last = (current_date - all_invoices[-1]['date']).days
+            
+            # 1. PATTERN DISRUPTION ALERT
+            expected_next_order = all_invoices[-1]['date'] + timedelta(days=avg_interval)
+            days_overdue = (current_date - expected_next_order).days
+            
+            if days_overdue > (std_interval * 2) and days_overdue > 14:  # More than 2 std devs + at least 2 weeks
+                severity = 'HIGH' if days_overdue > avg_interval else 'MEDIUM'
+                
+                all_alerts.append({
+                    'type': 'PATTERN_DISRUPTION',
+                    'priority': severity,
+                    'company_id': company_id,
+                    'company_name': company['name'],
+                    'public_name': company.get('public_name'),
+                    'email': company.get('email_addresses') or company.get('email'),
+                    'description': f'Customer typically orders every {int(avg_interval)} days but is now {days_overdue} days overdue',
+                    'recommendation': 'Immediate outreach recommended - customer may have switched suppliers',
+                    'metrics': {
+                        'total_orders': len(all_invoices),
+                        'avg_interval_days': int(avg_interval),
+                        'days_since_last_order': days_since_last,
+                        'days_overdue': days_overdue,
+                        'last_order_amount': all_invoices[-1]['amount'],
+                        'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d'),
+                        'total_lifetime_value': sum(amounts)
+                    }
+                })
+            
+            # 2. DECLINING ORDER VALUE ALERT
+            if len(amounts) >= 4:
+                recent_avg = statistics.mean(amounts[-3:])  # Last 3 orders
+                earlier_avg = statistics.mean(amounts[:len(amounts)-3])  # Earlier orders
+                decline_pct = ((recent_avg - earlier_avg) / earlier_avg * 100) if earlier_avg > 0 else 0
+                
+                if decline_pct < -20:  # 20%+ decline
+                    all_alerts.append({
+                        'type': 'DECLINING_VALUE',
+                        'priority': 'MEDIUM',
+                        'company_id': company_id,
+                        'company_name': company['name'],
+                        'public_name': company.get('public_name'),
+                        'email': company.get('email_addresses') or company.get('email'),
+                        'description': f'Order value has declined by {abs(int(decline_pct))}% in recent orders',
+                        'recommendation': 'Investigate if customer needs have changed or if there\'s price sensitivity',
+                        'metrics': {
+                            'total_orders': len(all_invoices),
+                            'earlier_avg_value': earlier_avg,
+                            'recent_avg_value': recent_avg,
+                            'decline_percentage': decline_pct,
+                            'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
+                        }
+                    })
+            
+            # 3. INCREASING GAP ALERT (Orders becoming less frequent)
+            if len(intervals) >= 4:
+                recent_intervals = intervals[-3:]
+                earlier_intervals = intervals[:len(intervals)-3]
+                recent_avg_interval = statistics.mean(recent_intervals)
+                earlier_avg_interval = statistics.mean(earlier_intervals)
+                gap_increase = recent_avg_interval - earlier_avg_interval
+                
+                if gap_increase > 30:  # Orders now 30+ days less frequent
+                    all_alerts.append({
+                        'type': 'INCREASING_GAP',
+                        'priority': 'MEDIUM',
+                        'company_id': company_id,
+                        'company_name': company['name'],
+                        'public_name': company.get('public_name'),
+                        'email': company.get('email_addresses') or company.get('email'),
+                        'description': f'Time between orders has increased by {int(gap_increase)} days',
+                        'recommendation': 'Customer engagement declining - reach out to understand their needs',
+                        'metrics': {
+                            'total_orders': len(all_invoices),
+                            'earlier_avg_gap': int(earlier_avg_interval),
+                            'recent_avg_gap': int(recent_avg_interval),
+                            'gap_increase_days': int(gap_increase),
+                            'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
+                        }
+                    })
+            
+            # 4. HIGH VALUE AT RISK ALERT
+            total_value = sum(amounts)
+            if total_value > 5000 and days_since_last > 60:  # High value customer quiet for 60+ days
+                all_alerts.append({
+                    'type': 'HIGH_VALUE_AT_RISK',
+                    'priority': 'HIGH',
+                    'company_id': company_id,
+                    'company_name': company['name'],
+                    'public_name': company.get('public_name'),
+                    'email': company.get('email_addresses') or company.get('email'),
+                    'description': f'High-value customer (€{int(total_value)} lifetime) has been inactive for {days_since_last} days',
+                    'recommendation': 'Priority outreach - offer VIP treatment or exclusive deals',
+                    'metrics': {
+                        'total_orders': len(all_invoices),
+                        'lifetime_value': total_value,
+                        'avg_order_value': avg_amount,
+                        'days_since_last_order': days_since_last,
+                        'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
+                    }
+                })
+            
+            # 5. PAYMENT ISSUES ALERT
+            unpaid_balance = sum(inv['balance'] for inv in all_invoices if inv['balance'] > 0)
+            if unpaid_balance > 500:
+                all_alerts.append({
+                    'type': 'PAYMENT_ISSUES',
+                    'priority': 'HIGH',
+                    'company_id': company_id,
+                    'company_name': company['name'],
+                    'public_name': company.get('public_name'),
+                    'email': company.get('email_addresses') or company.get('email'),
+                    'description': f'Outstanding balance of €{int(unpaid_balance)} across multiple invoices',
+                    'recommendation': 'Follow up on payment - may indicate cash flow issues',
+                    'metrics': {
+                        'total_orders': len(all_invoices),
+                        'outstanding_balance': unpaid_balance,
+                        'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
+                    }
+                })
+            
+            # 6. DORMANT CUSTOMER ALERT (used to order regularly, now completely stopped)
+            if len(all_invoices) >= 5 and days_since_last > 120:
+                all_alerts.append({
+                    'type': 'DORMANT_CUSTOMER',
+                    'priority': 'HIGH',
+                    'company_id': company_id,
+                    'company_name': company['name'],
+                    'public_name': company.get('public_name'),
+                    'email': company.get('email_addresses') or company.get('email'),
+                    'description': f'Regular customer ({len(all_invoices)} orders) has been dormant for {days_since_last} days',
+                    'recommendation': 'Win-back campaign - investigate why they stopped ordering',
+                    'metrics': {
+                        'total_orders': len(all_invoices),
+                        'lifetime_value': total_value,
+                        'days_since_last_order': days_since_last,
+                        'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
+                    }
+                })
+        
+        # Sort alerts by priority and date
+        priority_order = {'HIGH': 3, 'MEDIUM': 2, 'LOW': 1}
+        all_alerts.sort(key=lambda x: (priority_order.get(x['priority'], 0), x['metrics'].get('days_since_last_order', 0)), reverse=True)
+        
+        print(f"✅ Analysis complete: {len(all_alerts)} alerts detected")
+        
+        # Save alerts to database
+        print("💾 Saving alerts to database...")
+        saved_count = 0
+        updated_count = 0
+        
+        for alert in all_alerts:
+            try:
+                # Check if this alert already exists for this company+type
+                existing = supabase_client.table('customer_alerts').select('id, first_detected_at').eq('company_id', alert['company_id']).eq('alert_type', alert['type']).eq('status', 'active').execute()
+                
+                alert_data = {
+                    'company_id': alert['company_id'],
+                    'company_name': alert['company_name'],
+                    'public_name': alert.get('public_name'),
+                    'email': alert.get('email'),
+                    'alert_type': alert['type'],
+                    'priority': alert['priority'],
+                    'description': alert['description'],
+                    'recommendation': alert['recommendation'],
+                    'metrics': alert['metrics'],
+                    'status': 'active',
+                    'analysis_date': current_date.isoformat(),
+                    'last_detected_at': current_date.isoformat()
+                }
+                
+                if existing.data:
+                    # Update existing alert
+                    alert_data['first_detected_at'] = existing.data[0]['first_detected_at']
+                    supabase_client.table('customer_alerts').update(alert_data).eq('id', existing.data[0]['id']).execute()
+                    updated_count += 1
+                else:
+                    # Insert new alert
+                    alert_data['first_detected_at'] = current_date.isoformat()
+                    supabase_client.table('customer_alerts').insert(alert_data).execute()
+                    saved_count += 1
+                
+            except Exception as e:
+                print(f"  ⚠️  Error saving alert for company {alert['company_id']}: {e}")
+        
+        # Mark alerts as resolved if they no longer appear
+        try:
+            # Get all active alert IDs from current analysis
+            current_alert_keys = {(a['company_id'], a['type']) for a in all_alerts}
+            
+            # Get all active alerts from database
+            active_alerts = supabase_client.table('customer_alerts').select('id, company_id, alert_type').eq('status', 'active').execute()
+            
+            resolved_count = 0
+            for db_alert in active_alerts.data:
+                key = (db_alert['company_id'], db_alert['alert_type'])
+                if key not in current_alert_keys:
+                    # This alert no longer exists - mark as resolved
+                    supabase_client.table('customer_alerts').update({
+                        'status': 'resolved',
+                        'updated_at': current_date.isoformat()
+                    }).eq('id', db_alert['id']).execute()
+                    resolved_count += 1
+            
+            if resolved_count > 0:
+                print(f"✅ Marked {resolved_count} alerts as resolved")
+        
+        except Exception as e:
+            print(f"  ⚠️  Error resolving old alerts: {e}")
+        
+        # Calculate summary statistics
+        alert_summary = {
+            'total_alerts': len(all_alerts),
+            'high_priority': len([a for a in all_alerts if a['priority'] == 'HIGH']),
+            'medium_priority': len([a for a in all_alerts if a['priority'] == 'MEDIUM']),
+            'low_priority': len([a for a in all_alerts if a['priority'] == 'LOW']),
+            'by_type': {},
+            'saved': saved_count,
+            'updated': updated_count
+        }
+        
+        for alert in all_alerts:
+            alert_type = alert['type']
+            if alert_type not in alert_summary['by_type']:
+                alert_summary['by_type'][alert_type] = 0
+            alert_summary['by_type'][alert_type] += 1
+        
+        print(f"💾 Saved {saved_count} new alerts, updated {updated_count} existing alerts")
+        
+        return jsonify({
+            'success': True,
+            'alerts': all_alerts,
+            'summary': alert_summary,
+            'analysis_date': current_date.strftime('%Y-%m-%d %H:%M:%S'),
+            'companies_analyzed': companies_processed
+        })
+        
+    except Exception as e:
+        print(f"Error in alert refresh: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts/<int:alert_id>/dismiss', methods=['POST'])
+def api_dismiss_alert(alert_id):
+    """Mark an alert as dismissed."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        from datetime import datetime
+        
+        # Get user info if available (you can enhance this with actual user tracking)
+        dismissed_by = request.json.get('dismissed_by', 'user') if request.json else 'user'
+        notes = request.json.get('notes', '') if request.json else ''
+        
+        # Update alert status
+        result = supabase_client.table('customer_alerts').update({
+            'status': 'dismissed',
+            'dismissed_at': datetime.now().isoformat(),
+            'dismissed_by': dismissed_by,
+            'notes': notes
+        }).eq('id', alert_id).execute()
+        
+        if result.data:
+            return jsonify({'success': True, 'message': 'Alert dismissed'})
+        else:
+            return jsonify({'error': 'Alert not found'}), 404
+        
+    except Exception as e:
+        print(f"Error dismissing alert: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts/<int:alert_id>/action', methods=['POST'])
+def api_action_alert(alert_id):
+    """Mark an alert as actioned."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        from datetime import datetime
+        
+        # Get action details
+        actioned_by = request.json.get('actioned_by', 'user') if request.json else 'user'
+        notes = request.json.get('notes', '') if request.json else ''
+        
+        # Update alert status
+        result = supabase_client.table('customer_alerts').update({
+            'status': 'actioned',
+            'actioned_at': datetime.now().isoformat(),
+            'actioned_by': actioned_by,
+            'notes': notes
+        }).eq('id', alert_id).execute()
+        
+        if result.data:
+            return jsonify({'success': True, 'message': 'Alert marked as actioned'})
+        else:
+            return jsonify({'error': 'Alert not found'}), 404
+        
+    except Exception as e:
+        print(f"Error actioning alert: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts/bulk-dismiss', methods=['POST'])
+def api_bulk_dismiss_alerts():
+    """Dismiss multiple alerts at once."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        from datetime import datetime
+        
+        alert_ids = request.json.get('alert_ids', [])
+        dismissed_by = request.json.get('dismissed_by', 'user')
+        
+        if not alert_ids:
+            return jsonify({'error': 'No alert IDs provided'}), 400
+        
+        # Update all alerts
+        for alert_id in alert_ids:
+            supabase_client.table('customer_alerts').update({
+                'status': 'dismissed',
+                'dismissed_at': datetime.now().isoformat(),
+                'dismissed_by': dismissed_by
+            }).eq('id', alert_id).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': f'{len(alert_ids)} alerts dismissed'
+        })
+        
+    except Exception as e:
+        print(f"Error bulk dismissing alerts: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/alerts/stats', methods=['GET'])
+def api_alert_stats():
+    """Get alert statistics and history."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get all alerts grouped by status
+        all_alerts = supabase_client.table('customer_alerts').select('*').execute()
+        
+        stats = {
+            'by_status': {},
+            'by_type': {},
+            'by_priority': {},
+            'total': len(all_alerts.data)
+        }
+        
+        for alert in all_alerts.data:
+            # Count by status
+            status = alert['status']
+            stats['by_status'][status] = stats['by_status'].get(status, 0) + 1
+            
+            # Count by type (only active)
+            if status == 'active':
+                alert_type = alert['alert_type']
+                stats['by_type'][alert_type] = stats['by_type'].get(alert_type, 0) + 1
+            
+            # Count by priority (only active)
+            if status == 'active':
+                priority = alert['priority']
+                stats['by_priority'][priority] = stats['by_priority'].get(priority, 0) + 1
+        
+        return jsonify(stats)
+        
+    except Exception as e:
+        print(f"Error getting alert stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/pattern-disruptions', methods=['GET'])
+def api_pattern_disruptions():
+    """Detect companies with disrupted ordering patterns."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        from datetime import datetime, timedelta
+        import statistics
+        
+        # Get all companies with their invoices
+        companies_result = supabase_client.table('companies').select('*').execute()
+        
+        disrupted_patterns = []
+        current_date = datetime.now()
+        
+        # Process companies with rate limiting to prevent resource exhaustion
+        companies_processed = 0
+        companies_to_process = companies_result.data
+        
+        for company in companies_to_process:
+            company_id = company['company_id']
+            
+            # Add small delay every 10 companies to prevent resource exhaustion
+            if companies_processed > 0 and companies_processed % 10 == 0:
+                time.sleep(0.1)  # 100ms pause every 10 companies
+            
+            # Get all invoices for this company from both years
+            all_invoices = []
+            
+            for year in ['2024', '2025']:
+                max_retries = 3
+                retry_count = 0
+                
+                while retry_count < max_retries:
+                    try:
+                        invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number').eq('company_id', company_id).execute()
+                        for invoice in invoices_result.data:
+                            if invoice.get('invoice_date'):
+                                all_invoices.append({
+                                    'date': datetime.strptime(invoice['invoice_date'], '%Y-%m-%d'),
+                                    'amount': float(invoice.get('total_amount', 0)) if invoice.get('total_amount') else 0,
+                                    'id': invoice['id'],
+                                    'number': invoice.get('invoice_number', invoice['id'])
+                                })
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        retry_count += 1
+                        if retry_count >= max_retries:
+                            # Only print after all retries exhausted
+                            if "Resource temporarily unavailable" not in str(e):
+                                print(f"Error fetching invoices for company {company_id} after {max_retries} retries: {e}")
+                            break
+                        # Exponential backoff: 0.05s, 0.1s, 0.2s
+                        time.sleep(0.05 * (2 ** retry_count))
+            
+            companies_processed += 1
+            
+            # Need at least 3 invoices to detect a pattern
+            if len(all_invoices) < 3:
+                continue
+            
+            # Sort by date
+            all_invoices.sort(key=lambda x: x['date'])
+            
+            # Calculate intervals between invoices (in days)
+            intervals = []
+            for i in range(1, len(all_invoices)):
+                interval = (all_invoices[i]['date'] - all_invoices[i-1]['date']).days
+                intervals.append(interval)
+            
+            if len(intervals) < 2:
+                continue
+            
+            # Analyze pattern
+            pattern_analysis = analyze_ordering_pattern(all_invoices, intervals, current_date)
+            
+            if pattern_analysis['is_disrupted']:
+                disrupted_patterns.append({
+                    'company_id': company_id,
+                    'company_name': company['name'],
+                    'public_name': company.get('public_name'),
+                    'email': company.get('email_addresses'),
+                    'total_invoices': len(all_invoices),
+                    'last_invoice_date': all_invoices[-1]['date'].strftime('%Y-%m-%d'),
+                    'last_invoice_amount': all_invoices[-1]['amount'],
+                    'days_since_last_order': (current_date - all_invoices[-1]['date']).days,
+                    'expected_interval_days': pattern_analysis['expected_interval'],
+                    'average_interval_days': pattern_analysis['average_interval'],
+                    'pattern_strength': pattern_analysis['pattern_strength'],
+                    'disruption_severity': pattern_analysis['disruption_severity'],
+                    'risk_level': pattern_analysis['risk_level'],
+                    'pattern_description': pattern_analysis['description'],
+                    'recommendation': pattern_analysis['recommendation'],
+                    'total_revenue': float(company.get('total_revenue_all_time', 0)) if company.get('total_revenue_all_time') else 0,
+                    'average_order_value': sum(inv['amount'] for inv in all_invoices) / len(all_invoices) if all_invoices else 0
+                })
+        
+        # Sort by risk level and days since last order
+        risk_order = {'HIGH': 3, 'MEDIUM': 2, 'LOW': 1}
+        disrupted_patterns.sort(key=lambda x: (risk_order.get(x['risk_level'], 0), x['days_since_last_order']), reverse=True)
+        
+        return jsonify({
+            'disrupted_patterns': disrupted_patterns,
+            'total_disruptions': len(disrupted_patterns),
+            'high_risk_count': len([p for p in disrupted_patterns if p['risk_level'] == 'HIGH']),
+            'medium_risk_count': len([p for p in disrupted_patterns if p['risk_level'] == 'MEDIUM']),
+            'analysis_date': current_date.strftime('%Y-%m-%d %H:%M:%S')
+        })
+        
+    except Exception as e:
+        print(f"Error in pattern disruption analysis: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+def analyze_ordering_pattern(invoices, intervals, current_date):
+    """Analyze ordering pattern and detect disruptions."""
+    import statistics
+    
+    if len(intervals) < 2:
+        return {'is_disrupted': False}
+    
+    # Calculate statistics
+    avg_interval = statistics.mean(intervals)
+    median_interval = statistics.median(intervals)
+    
+    # Calculate standard deviation if we have enough data
+    if len(intervals) >= 3:
+        std_dev = statistics.stdev(intervals)
+        pattern_consistency = 1 - (std_dev / avg_interval) if avg_interval > 0 else 0
+    else:
+        std_dev = 0
+        pattern_consistency = 0.5
+    
+    # Days since last invoice
+    days_since_last = (current_date - invoices[-1]['date']).days
+    
+    # Determine if there's a consistent pattern (low standard deviation relative to mean)
+    has_consistent_pattern = pattern_consistency > 0.3 and len(intervals) >= 4
+    
+    # Expected next order date based on pattern
+    expected_interval = median_interval if has_consistent_pattern else avg_interval
+    expected_next_date = invoices[-1]['date'] + timedelta(days=expected_interval)
+    days_overdue = (current_date - expected_next_date).days
+    
+    # Determine disruption
+    is_disrupted = False
+    disruption_severity = 'NONE'
+    risk_level = 'LOW'
+    
+    if has_consistent_pattern and days_overdue > 0:
+        # Calculate disruption severity based on how overdue they are
+        overdue_ratio = days_overdue / expected_interval
+        
+        if overdue_ratio > 2.0:  # More than 2x their normal interval
+            disruption_severity = 'SEVERE'
+            risk_level = 'HIGH'
+            is_disrupted = True
+        elif overdue_ratio > 1.5:  # 1.5x their normal interval
+            disruption_severity = 'MODERATE'
+            risk_level = 'MEDIUM'
+            is_disrupted = True
+        elif overdue_ratio > 1.0:  # Past their expected date
+            disruption_severity = 'MILD'
+            risk_level = 'MEDIUM'
+            is_disrupted = True
+    elif not has_consistent_pattern and days_since_last > 90:  # No clear pattern but long absence
+        disruption_severity = 'IRREGULAR'
+        risk_level = 'MEDIUM'
+        is_disrupted = True
+    
+    # Generate description and recommendation
+    if has_consistent_pattern:
+        if avg_interval <= 14:
+            frequency_desc = "weekly"
+        elif avg_interval <= 35:
+            frequency_desc = "monthly"
+        elif avg_interval <= 70:
+            frequency_desc = "bi-monthly"
+        else:
+            frequency_desc = f"every {int(avg_interval)} days"
+        
+        description = f"Regular {frequency_desc} ordering pattern (avg: {int(avg_interval)} days)"
+    else:
+        description = f"Irregular ordering pattern (avg: {int(avg_interval)} days, high variation)"
+    
+    # Generate recommendations
+    if disruption_severity == 'SEVERE':
+        recommendation = "URGENT: Customer significantly overdue. Immediate contact recommended."
+    elif disruption_severity == 'MODERATE':
+        recommendation = "Customer overdue for reorder. Contact within 1-2 days."
+    elif disruption_severity == 'MILD':
+        recommendation = "Customer approaching reorder time. Consider proactive outreach."
+    elif disruption_severity == 'IRREGULAR':
+        recommendation = "Irregular customer with long absence. Check-in recommended."
+    else:
+        recommendation = "Pattern normal. Monitor for future changes."
+    
+    return {
+        'is_disrupted': is_disrupted,
+        'expected_interval': int(expected_interval),
+        'average_interval': int(avg_interval),
+        'pattern_strength': round(pattern_consistency, 2),
+        'disruption_severity': disruption_severity,
+        'risk_level': risk_level,
+        'description': description,
+        'recommendation': recommendation,
+        'days_overdue': max(0, days_overdue),
+        'has_consistent_pattern': has_consistent_pattern
+    }
+
+
+@app.route('/api/combined-companies-analysis', methods=['GET'])
+def api_combined_companies_analysis():
+    """Get combined company analysis from both 2024 and 2025 sales data."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get data from both years
+        def fetch_year_data(year):
+            all_invoices = []
+            batch_size = 1000
+            offset = 0
+            
+            while True:
+                batch_result = supabase_client.table(f'sales_{year}').select('*').range(offset, offset + batch_size - 1).execute()
+                
+                if not batch_result.data:
+                    break
+                    
+                all_invoices.extend(batch_result.data)
+                
+                if len(batch_result.data) < batch_size:
+                    break
+                    
+                offset += batch_size
+                
+                if offset > 50000:
+                    break
+            
+            return all_invoices
+        
+        # Fetch both years
+        invoices_2024 = fetch_year_data('2024')
+        invoices_2025 = fetch_year_data('2025')
+        
+        print(f"DEBUG Combined: 2024 records: {len(invoices_2024)}, 2025 records: {len(invoices_2025)}")
+        
+        # Process combined company data
+        companies_data = {}
+        
+        def process_invoices(invoices, year):
+            for invoice in invoices:
+                invoice_data = invoice.get('invoice_data', {})
+                company_info = invoice_data.get('company', {})
+                
+                # Use company_id from the extracted field if company info is missing
+                company_id = None
+                if company_info and company_info.get('id'):
+                    company_id = company_info.get('id')
+                elif invoice.get('company_id'):
+                    company_id = invoice.get('company_id')
+                    if not company_info:
+                        company_info = {
+                            'id': company_id,
+                            'name': invoice.get('company_name') or 'Unknown Company'
+                        }
+                else:
+                    continue
+                
+                # Initialize company if not exists
+                if company_id not in companies_data:
+                    companies_data[company_id] = {
+                        'id': company_id,
+                        'name': company_info.get('name') or company_info.get('public_name') or 'Unknown Company',
+                        'vat_number': company_info.get('vat_number', ''),
+                        'email': company_info.get('email', ''),
+                        'phone': company_info.get('phone_number', ''),
+                        'website': company_info.get('website', ''),
+                        'address': {
+                            'street': company_info.get('address_line1', ''),
+                            'street2': company_info.get('address_line2', ''),
+                            'city': company_info.get('city', ''),
+                            'postal_code': company_info.get('post_code', ''),
+                            'country': company_info.get('country', {}).get('name', '') if company_info.get('country') else ''
+                        },
+                        'contact_person': company_info.get('contact_person', {}).get('name', '') if company_info.get('contact_person') else '',
+                        'industry': company_info.get('industry', ''),
+                        'company_size': company_info.get('company_size', ''),
+                        'years_data': {
+                            '2024': {'invoices': [], 'total_revenue': 0, 'invoice_count': 0, 'first_date': None, 'last_date': None},
+                            '2025': {'invoices': [], 'total_revenue': 0, 'invoice_count': 0, 'first_date': None, 'last_date': None}
+                        },
+                        'total_revenue': 0,
+                        'invoice_count': 0,
+                        'average_invoice_value': 0,
+                        'first_invoice_date': None,
+                        'last_invoice_date': None,
+                        'payment_terms': set(),
+                        'currencies': set()
+                    }
+                
+                # Add invoice data to specific year
+                company = companies_data[company_id]
+                invoice_amount = float(invoice.get('total_amount') or 0)
+                invoice_date = invoice.get('invoice_date')
+                
+                # Extract more details from raw invoice data
+                raw_invoice = invoice_data
+                
+                invoice_record = {
+                    'id': invoice.get('invoice_id'),
+                    'number': invoice.get('invoice_number'),
+                    'date': invoice_date,
+                    'due_date': invoice.get('due_date'),
+                    'amount': invoice_amount,
+                    'balance': float(invoice.get('balance') or 0),
+                    'is_paid': invoice.get('is_paid', False),
+                    'year': year,
+                    'currency': raw_invoice.get('currency', 'EUR'),
+                    'payment_terms': raw_invoice.get('payment_terms', ''),
+                    'buyer_name': raw_invoice.get('buyer_name', ''),
+                    'buyer_reference': raw_invoice.get('buyer_reference', ''),
+                    'description': raw_invoice.get('description', ''),
+                    'notes': raw_invoice.get('notes', ''),
+                    'created_at': raw_invoice.get('created_at', ''),
+                    'updated_at': raw_invoice.get('updated_at', ''),
+                    'line_items_count': len(raw_invoice.get('invoice_line_items', [])),
+                    'has_attachments': bool(raw_invoice.get('attachments', [])),
+                    'invoice_type': raw_invoice.get('type', ''),
+                    'status': raw_invoice.get('status', '')
+                }
+                
+                # Add to year-specific data
+                company['years_data'][str(year)]['invoices'].append(invoice_record)
+                company['years_data'][str(year)]['total_revenue'] += invoice_amount
+                company['years_data'][str(year)]['invoice_count'] += 1
+                
+                # Update year-specific dates
+                if invoice_date:
+                    year_data = company['years_data'][str(year)]
+                    if not year_data['first_date'] or invoice_date < year_data['first_date']:
+                        year_data['first_date'] = invoice_date
+                    if not year_data['last_date'] or invoice_date > year_data['last_date']:
+                        year_data['last_date'] = invoice_date
+                
+                # Update overall totals
+                company['total_revenue'] += invoice_amount
+                company['invoice_count'] += 1
+                
+                # Track overall dates
+                if invoice_date:
+                    if not company['first_invoice_date'] or invoice_date < company['first_invoice_date']:
+                        company['first_invoice_date'] = invoice_date
+                    if not company['last_invoice_date'] or invoice_date > company['last_invoice_date']:
+                        company['last_invoice_date'] = invoice_date
+                
+                # Extract additional details from raw data
+                if invoice_data.get('payment_terms'):
+                    company['payment_terms'].add(str(invoice_data.get('payment_terms')))
+                if invoice_data.get('currency'):
+                    company['currencies'].add(invoice_data.get('currency'))
+        
+        # Process both years
+        process_invoices(invoices_2024, 2024)
+        process_invoices(invoices_2025, 2025)
+        
+        # Finalize company data
+        companies_list = []
+        for company in companies_data.values():
+            company['average_invoice_value'] = round(company['total_revenue'] / company['invoice_count'], 2) if company['invoice_count'] > 0 else 0
+            company['payment_terms'] = list(company['payment_terms'])
+            company['currencies'] = list(company['currencies'])
+            company['total_revenue'] = round(company['total_revenue'], 2)
+            
+            # Calculate year-specific averages
+            for year in ['2024', '2025']:
+                year_data = company['years_data'][year]
+                year_data['average_invoice_value'] = round(year_data['total_revenue'] / year_data['invoice_count'], 2) if year_data['invoice_count'] > 0 else 0
+                year_data['total_revenue'] = round(year_data['total_revenue'], 2)
+                # Sort year invoices by date (newest first)
+                year_data['invoices'].sort(key=lambda x: x['date'] or '1900-01-01', reverse=True)
+            
+            # Create combined invoices list for display
+            all_invoices = company['years_data']['2024']['invoices'] + company['years_data']['2025']['invoices']
+            all_invoices.sort(key=lambda x: x['date'] or '1900-01-01', reverse=True)
+            company['invoices'] = all_invoices
+            
+            companies_list.append(company)
+        
+        # Sort companies by total revenue (highest first)
+        companies_list.sort(key=lambda x: x['total_revenue'], reverse=True)
+        
+        total_invoices_calculated = sum(c['invoice_count'] for c in companies_list)
+        print(f"DEBUG Combined: Companies processed: {len(companies_list)}, Total invoices: {total_invoices_calculated}")
+        
+        return jsonify({
+            'companies': companies_list,
+            'total_companies': len(companies_list),
+            'total_revenue': sum(c['total_revenue'] for c in companies_list),
+            'total_invoices': total_invoices_calculated,
+            'year_breakdown': {
+                '2024': {
+                    'companies': len([c for c in companies_list if c['years_data']['2024']['invoice_count'] > 0]),
+                    'invoices': sum(c['years_data']['2024']['invoice_count'] for c in companies_list),
+                    'revenue': sum(c['years_data']['2024']['total_revenue'] for c in companies_list)
+                },
+                '2025': {
+                    'companies': len([c for c in companies_list if c['years_data']['2025']['invoice_count'] > 0]),
+                    'invoices': sum(c['years_data']['2025']['invoice_count'] for c in companies_list),
+                    'revenue': sum(c['years_data']['2025']['total_revenue'] for c in companies_list)
+                }
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting combined companies analysis: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/invoice-details/<year>/<int:invoice_id>', methods=['GET'])
+def api_invoice_details(year, invoice_id):
+    """Get detailed invoice information including line items."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get invoice from the appropriate year table
+        table_name = f'sales_{year}'
+        print(f"DEBUG: Looking for invoice with ID {invoice_id} in table {table_name}")
+        
+        # Try to find by database ID first
+        invoice_result = supabase_client.table(table_name).select('*').eq('id', invoice_id).execute()
+        
+        if not invoice_result.data:
+            # Try to find by invoice_id field as fallback
+            invoice_result = supabase_client.table(table_name).select('*').eq('invoice_id', invoice_id).execute()
+            print(f"DEBUG: Fallback search by invoice_id field")
+        
+        if not invoice_result.data:
+            print(f"DEBUG: Invoice {invoice_id} not found in {table_name}")
+            return jsonify({'error': f'Invoice {invoice_id} not found in {year} data'}), 404
+        
+        invoice = invoice_result.data[0]
+        invoice_data = invoice.get('invoice_data', {})
+        
+        return jsonify({
+            'invoice_id': invoice_id,
+            'year': year,
+            'invoice_data': invoice_data,
+            'extracted_fields': {
+                'company_name': invoice.get('company_name'),
+                'invoice_number': invoice.get('invoice_number'),
+                'invoice_date': invoice.get('invoice_date'),
+                'due_date': invoice.get('due_date'),
+                'total_amount': invoice.get('total_amount'),
+                'balance': invoice.get('balance'),
+                'is_paid': invoice.get('is_paid')
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting invoice details: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/populate-companies-enhanced', methods=['POST'])
+def api_populate_companies_enhanced():
+    """Populate companies table with enhanced data from DOUANO API."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # First, get all unique company IDs from invoices
+        print("Getting unique company IDs from invoice data...")
+        
+        def get_company_ids_from_year(year):
+            company_ids = set()
+            batch_size = 1000
+            offset = 0
+            
+            while True:
+                try:
+                    batch_result = supabase_client.table(f'sales_{year}').select('company_id, company_name').range(offset, offset + batch_size - 1).execute()
+                    
+                    if not batch_result.data:
+                        break
+                    
+                    for record in batch_result.data:
+                        if record.get('company_id'):
+                            company_ids.add(record.get('company_id'))
+                    
+                    if len(batch_result.data) < batch_size:
+                        break
+                        
+                    offset += batch_size
+                    
+                    if offset > 50000:
+                        break
+                except Exception as e:
+                    print(f"Error fetching {year} company IDs at offset {offset}: {e}")
+                    break
+            
+            return company_ids
+        
+        # Get company IDs from both years
+        company_ids_2024 = get_company_ids_from_year('2024')
+        company_ids_2025 = get_company_ids_from_year('2025')
+        all_company_ids = company_ids_2024.union(company_ids_2025)
+        
+        print(f"Found {len(all_company_ids)} unique companies across both years")
+        print(f"🚀 Processing all companies with smart rate limiting...")
+        
+        # Fetch complete company data from DOUANO API
+        companies_data = {}
+        api_success_count = 0
+        api_error_count = 0
+        
+        for i, company_id in enumerate(all_company_ids):
+            try:
+                print(f"Fetching company data for ID {company_id}... ({i+1}/{len(all_company_ids)})")
+                
+                # Add rate limiting - wait between requests
+                if i > 0 and i % 10 == 0:  # Every 10 requests, wait longer
+                    print(f"Rate limiting: waiting 2 seconds after {i} requests...")
+                    time.sleep(2)
+                elif i > 0:  # Wait between each request
+                    time.sleep(0.1)
+                
+                # Get company details from DOUANO API with retry logic
+                max_retries = 3
+                retry_count = 0
+                company_response = None
+                error = None
+                
+                while retry_count < max_retries:
+                    company_response, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+                    
+                    if error and "429" in str(error):  # Rate limit error
+                        retry_count += 1
+                        wait_time = min(5 * retry_count, 30)  # Exponential backoff, max 30 seconds
+                        print(f"Rate limited, waiting {wait_time}s before retry {retry_count}/{max_retries}...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        break  # Success or non-rate-limit error
+                
+                if error or not company_response:
+                    print(f"❌ Failed to fetch company {company_id} after {max_retries} retries: {error}")
+                    api_error_count += 1
+                    continue
+                
+                company_data = company_response.get('result', {})
+                if not company_data:
+                    print(f"❌ No data for company {company_id}")
+                    api_error_count += 1
+                    continue
+                
+                # Extract comprehensive company information
+                companies_data[company_id] = {
+                    'company_id': company_id,
+                    'name': company_data.get('name'),
+                    'public_name': company_data.get('public_name'),
+                    'company_tag': company_data.get('tag'),
+                    'vat_number': company_data.get('vat_number'),
+                    
+                    # Classification
+                    'is_customer': company_data.get('is_customer', False),
+                    'is_supplier': company_data.get('is_supplier', False),
+                    
+                    # Status and pricing
+                    'company_status_id': company_data.get('company_status', {}).get('id') if company_data.get('company_status') else None,
+                    'company_status_name': company_data.get('company_status', {}).get('name') if company_data.get('company_status') else None,
+                    'sales_price_class_id': company_data.get('sales_price_class', {}).get('id') if company_data.get('sales_price_class') else None,
+                    'sales_price_class_name': company_data.get('sales_price_class', {}).get('name') if company_data.get('sales_price_class') else None,
+                    
+                    # Communication
+                    'document_delivery_type': company_data.get('document_delivery_type'),
+                    'email_addresses': company_data.get('email_addresses'),
+                    'default_document_notes': company_data.get('default_document_notes', []),
+                    
+                    # Structured data
+                    'company_categories': company_data.get('company_categories', []),
+                    'addresses': company_data.get('addresses', []),
+                    'bank_accounts': company_data.get('bank_accounts', []),
+                    'extension_values': company_data.get('extension_values', []),
+                    
+                    # Raw data
+                    'raw_company_data': company_data,
+                    'data_sources': ['douano_api', 'invoices'],
+                    
+                    # Initialize financial data (will be calculated from invoices)
+                    'total_revenue_2024': 0,
+                    'total_revenue_2025': 0,
+                    'invoice_count_2024': 0,
+                    'invoice_count_2025': 0,
+                    'first_invoice_date': None,
+                    'last_invoice_date': None,
+                    'payment_terms': set(),
+                    'currencies_used': set()
+                }
+                
+                api_success_count += 1
+                print(f"✅ Successfully fetched company {company_id}: {company_data.get('name')}")
+                
+            except Exception as e:
+                print(f"❌ Error fetching company {company_id}: {e}")
+                api_error_count += 1
+                continue
+        
+        print(f"API fetch completed: {api_success_count} success, {api_error_count} errors")
+        
+        # Now calculate financial data from invoices
+        print("Calculating financial data from invoices...")
+        
+        def calculate_financial_data(year):
+            batch_size = 1000
+            offset = 0
+            
+            while True:
+                try:
+                    batch_result = supabase_client.table(f'sales_{year}').select('*').range(offset, offset + batch_size - 1).execute()
+                    
+                    if not batch_result.data:
+                        break
+                    
+                    for invoice in batch_result.data:
+                        company_id = invoice.get('company_id')
+                        if not company_id or company_id not in companies_data:
+                            continue
+                        
+                        company = companies_data[company_id]
+                        invoice_amount = float(invoice.get('total_amount') or 0)
+                        invoice_date = invoice.get('invoice_date')
+                        
+                        # Update year-specific totals
+                        if year == 2024:
+                            company['total_revenue_2024'] += invoice_amount
+                            company['invoice_count_2024'] += 1
+                        else:
+                            company['total_revenue_2025'] += invoice_amount
+                            company['invoice_count_2025'] += 1
+                        
+                        # Update dates
+                        if invoice_date:
+                            if not company['first_invoice_date'] or invoice_date < company['first_invoice_date']:
+                                company['first_invoice_date'] = invoice_date
+                            if not company['last_invoice_date'] or invoice_date > company['last_invoice_date']:
+                                company['last_invoice_date'] = invoice_date
+                        
+                        # Collect metadata from raw invoice data
+                        invoice_data = invoice.get('invoice_data', {})
+                        if invoice_data.get('payment_terms'):
+                            company['payment_terms'].add(str(invoice_data.get('payment_terms')))
+                        if invoice_data.get('currency'):
+                            company['currencies_used'].add(invoice_data.get('currency'))
+                    
+                    if len(batch_result.data) < batch_size:
+                        break
+                        
+                    offset += batch_size
+                    
+                    if offset > 50000:
+                        break
+                        
+                except Exception as e:
+                    print(f"Error calculating financial data for {year} at offset {offset}: {e}")
+                    break
+        
+        # Calculate for both years
+        calculate_financial_data(2024)
+        calculate_financial_data(2025)
+        
+        # Save companies to database
+        print("Saving companies to database...")
+        saved_count = 0
+        updated_count = 0
+        error_count = 0
+        
+        for company in companies_data.values():
+            try:
+                # Calculate totals
+                company['total_revenue_all_time'] = company['total_revenue_2024'] + company['total_revenue_2025']
+                company['invoice_count_all_time'] = company['invoice_count_2024'] + company['invoice_count_2025']
+                company['average_invoice_value'] = round(company['total_revenue_all_time'] / company['invoice_count_all_time'], 2) if company['invoice_count_all_time'] > 0 else 0
+                company['customer_since'] = company['first_invoice_date']
+                company['last_activity_date'] = company['last_invoice_date']
+                
+                # Convert sets to arrays
+                company['payment_terms'] = list(company['payment_terms'])
+                company['currencies_used'] = list(company['currencies_used'])
+                
+                # Prepare record for database - try enhanced fields, fall back to basic if columns don't exist
+                record = {
+                    'company_id': company['company_id'],
+                    'name': company['name'],
+                    'public_name': company['public_name'],
+                    'vat_number': company['vat_number'],
+                    'total_revenue_2024': round(company['total_revenue_2024'], 2),
+                    'total_revenue_2025': round(company['total_revenue_2025'], 2),
+                    'total_revenue_all_time': round(company['total_revenue_all_time'], 2),
+                    'invoice_count_2024': company['invoice_count_2024'],
+                    'invoice_count_2025': company['invoice_count_2025'],
+                    'invoice_count_all_time': company['invoice_count_all_time'],
+                    'average_invoice_value': company['average_invoice_value'],
+                    'first_invoice_date': company['first_invoice_date'],
+                    'last_invoice_date': company['last_invoice_date'],
+                    'customer_since': company['customer_since'],
+                    'last_activity_date': company['last_activity_date'],
+                    'payment_terms': company['payment_terms'],
+                    'currencies_used': company['currencies_used'],
+                    'raw_company_data': company['raw_company_data'],
+                    'data_sources': company['data_sources'],
+                    'last_sync_at': datetime.now().isoformat()
+                }
+                
+                # Try to add enhanced fields if they exist in the schema
+                try:
+                    enhanced_fields = {
+                        'company_tag': company['company_tag'],
+                        'is_customer': company['is_customer'],
+                        'is_supplier': company['is_supplier'],
+                        'company_status_id': company['company_status_id'],
+                        'company_status_name': company['company_status_name'],
+                        'sales_price_class_id': company['sales_price_class_id'],
+                        'sales_price_class_name': company['sales_price_class_name'],
+                        'document_delivery_type': company['document_delivery_type'],
+                        'email_addresses': company['email_addresses'],
+                        'default_document_notes': company['default_document_notes'],
+                        'company_categories': company['company_categories'],
+                        'addresses': company['addresses'],
+                        'bank_accounts': company['bank_accounts'],
+                        'extension_values': company['extension_values']
+                    }
+                    record.update(enhanced_fields)
+                except Exception as e:
+                    print(f"Note: Using basic schema for company {company['company_id']} - enhanced fields not available: {e}")
+                    pass
+                
+                # Check if company exists
+                existing = supabase_client.table('companies').select('id').eq('company_id', company['company_id']).execute()
+                
+                if existing.data:
+                    # Update existing company
+                    record['updated_at'] = datetime.now().isoformat()
+                    supabase_client.table('companies').update(record).eq('company_id', company['company_id']).execute()
+                    updated_count += 1
+                    print(f"✅ Updated company {company['company_id']}: {company['name']}")
+                else:
+                    # Insert new company
+                    supabase_client.table('companies').insert(record).execute()
+                    saved_count += 1
+                    print(f"✅ Saved new company {company['company_id']}: {company['name']}")
+                
+            except Exception as e:
+                print(f"❌ Error saving company {company.get('company_id')}: {e}")
+                error_count += 1
+                continue
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully processed {len(companies_data)} companies with enhanced data',
+            'total_processed': len(companies_data),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': error_count,
+            'api_fetch_stats': {
+                'success': api_success_count,
+                'errors': api_error_count
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in enhanced companies population: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/populate-companies', methods=['POST'])
+def api_populate_companies():
+    """Populate companies table from invoice data across all years."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get data from both years
+        def fetch_year_data(year):
+            all_invoices = []
+            batch_size = 1000
+            offset = 0
+            
+            while True:
+                try:
+                    batch_result = supabase_client.table(f'sales_{year}').select('*').range(offset, offset + batch_size - 1).execute()
+                    
+                    if not batch_result.data:
+                        break
+                        
+                    all_invoices.extend(batch_result.data)
+                    
+                    if len(batch_result.data) < batch_size:
+                        break
+                        
+                    offset += batch_size
+                    
+                    if offset > 50000:
+                        break
+                except Exception as e:
+                    print(f"Error fetching {year} data at offset {offset}: {e}")
+                    break
+            
+            return all_invoices
+        
+        # Fetch invoice data from both years
+        print("Fetching invoice data from both years...")
+        invoices_2024 = fetch_year_data('2024')
+        invoices_2025 = fetch_year_data('2025')
+        
+        print(f"Found {len(invoices_2024)} invoices from 2024, {len(invoices_2025)} invoices from 2025")
+        
+        # Process company data
+        companies_data = {}
+        
+        def process_invoices(invoices, year):
+            for invoice in invoices:
+                invoice_data = invoice.get('invoice_data', {})
+                company_info = invoice_data.get('company', {})
+                
+                # Get company ID
+                company_id = None
+                if company_info and company_info.get('id'):
+                    company_id = company_info.get('id')
+                elif invoice.get('company_id'):
+                    company_id = invoice.get('company_id')
+                    if not company_info:
+                        company_info = {
+                            'id': company_id,
+                            'name': invoice.get('company_name') or 'Unknown Company'
+                        }
+                else:
+                    continue
+                
+                # Initialize or update company data
+                if company_id not in companies_data:
+                    # Get country information
+                    country_info = company_info.get('country', {}) if isinstance(company_info.get('country'), dict) else {}
+                    
+                    companies_data[company_id] = {
+                        'company_id': company_id,
+                        'name': company_info.get('name') or company_info.get('public_name') or invoice.get('company_name') or 'Unknown Company',
+                        'public_name': company_info.get('public_name'),
+                        'vat_number': company_info.get('vat_number'),
+                        'email': company_info.get('email'),
+                        'phone_number': company_info.get('phone_number'),
+                        'website': company_info.get('website'),
+                        
+                        # Address
+                        'address_line1': company_info.get('address_line1'),
+                        'address_line2': company_info.get('address_line2'),
+                        'city': company_info.get('city'),
+                        'post_code': company_info.get('post_code'),
+                        'country_id': country_info.get('id'),
+                        'country_name': country_info.get('name'),
+                        'country_code': country_info.get('country_code'),
+                        'is_eu_country': country_info.get('is_eu_ic_country'),
+                        
+                        # Contact person
+                        'contact_person_name': company_info.get('contact_person', {}).get('name') if company_info.get('contact_person') else None,
+                        'contact_person_email': company_info.get('contact_person', {}).get('email') if company_info.get('contact_person') else None,
+                        'contact_person_phone': company_info.get('contact_person', {}).get('phone') if company_info.get('contact_person') else None,
+                        
+                        # Business info
+                        'industry': company_info.get('industry'),
+                        'company_size': company_info.get('company_size'),
+                        'business_type': company_info.get('business_type'),
+                        'registration_number': company_info.get('registration_number'),
+                        
+                        # Financial data
+                        'total_revenue_2024': 0,
+                        'total_revenue_2025': 0,
+                        'invoice_count_2024': 0,
+                        'invoice_count_2025': 0,
+                        'first_invoice_date': None,
+                        'last_invoice_date': None,
+                        'customer_since': None,
+                        
+                        # Metadata
+                        'payment_terms': set(),
+                        'currencies_used': set(),
+                        'has_attachments': False,
+                        'raw_company_data': company_info,
+                        'data_sources': ['invoices']
+                    }
+                
+                # Update financial data
+                company = companies_data[company_id]
+                invoice_amount = float(invoice.get('total_amount') or 0)
+                invoice_date = invoice.get('invoice_date')
+                
+                # Update year-specific totals
+                if year == 2024:
+                    company['total_revenue_2024'] += invoice_amount
+                    company['invoice_count_2024'] += 1
+                else:
+                    company['total_revenue_2025'] += invoice_amount
+                    company['invoice_count_2025'] += 1
+                
+                # Update dates
+                if invoice_date:
+                    if not company['first_invoice_date'] or invoice_date < company['first_invoice_date']:
+                        company['first_invoice_date'] = invoice_date
+                        company['customer_since'] = invoice_date
+                    if not company['last_invoice_date'] or invoice_date > company['last_invoice_date']:
+                        company['last_invoice_date'] = invoice_date
+                        company['last_activity_date'] = invoice_date
+                
+                # Collect metadata
+                if invoice_data.get('payment_terms'):
+                    company['payment_terms'].add(str(invoice_data.get('payment_terms')))
+                if invoice_data.get('currency'):
+                    company['currencies_used'].add(invoice_data.get('currency'))
+                if invoice_data.get('attachments'):
+                    company['has_attachments'] = True
+        
+        # Process both years
+        process_invoices(invoices_2024, 2024)
+        process_invoices(invoices_2025, 2025)
+        
+        # Finalize and save companies
+        saved_count = 0
+        updated_count = 0
+        error_count = 0
+        
+        for company in companies_data.values():
+            try:
+                # Calculate totals
+                company['total_revenue_all_time'] = company['total_revenue_2024'] + company['total_revenue_2025']
+                company['invoice_count_all_time'] = company['invoice_count_2024'] + company['invoice_count_2025']
+                company['average_invoice_value'] = round(company['total_revenue_all_time'] / company['invoice_count_all_time'], 2) if company['invoice_count_all_time'] > 0 else 0
+                
+                # Convert sets to arrays
+                company['payment_terms'] = list(company['payment_terms'])
+                company['currencies_used'] = list(company['currencies_used'])
+                
+                # Prepare record for database
+                record = {
+                    'company_id': company['company_id'],
+                    'name': company['name'],
+                    'public_name': company['public_name'],
+                    'vat_number': company['vat_number'],
+                    'email': company['email'],
+                    'phone_number': company['phone_number'],
+                    'website': company['website'],
+                    'address_line1': company['address_line1'],
+                    'address_line2': company['address_line2'],
+                    'city': company['city'],
+                    'post_code': company['post_code'],
+                    'country_id': company['country_id'],
+                    'country_name': company['country_name'],
+                    'country_code': company['country_code'],
+                    'is_eu_country': company['is_eu_country'],
+                    'contact_person_name': company['contact_person_name'],
+                    'contact_person_email': company['contact_person_email'],
+                    'contact_person_phone': company['contact_person_phone'],
+                    'industry': company['industry'],
+                    'company_size': company['company_size'],
+                    'business_type': company['business_type'],
+                    'registration_number': company['registration_number'],
+                    'total_revenue_2024': company['total_revenue_2024'],
+                    'total_revenue_2025': company['total_revenue_2025'],
+                    'total_revenue_all_time': company['total_revenue_all_time'],
+                    'invoice_count_2024': company['invoice_count_2024'],
+                    'invoice_count_2025': company['invoice_count_2025'],
+                    'invoice_count_all_time': company['invoice_count_all_time'],
+                    'average_invoice_value': company['average_invoice_value'],
+                    'first_invoice_date': company['first_invoice_date'],
+                    'last_invoice_date': company['last_invoice_date'],
+                    'customer_since': company['customer_since'],
+                    'last_activity_date': company.get('last_activity_date'),
+                    'payment_terms': company['payment_terms'],
+                    'currencies_used': company['currencies_used'],
+                    'has_attachments': company['has_attachments'],
+                    'raw_company_data': company['raw_company_data'],
+                    'data_sources': company['data_sources'],
+                    'last_sync_at': datetime.now().isoformat()
+                }
+                
+                # Check if company exists
+                existing = supabase_client.table('companies').select('id').eq('company_id', company['company_id']).execute()
+                
+                if existing.data:
+                    # Update existing company
+                    record['updated_at'] = datetime.now().isoformat()
+                    supabase_client.table('companies').update(record).eq('company_id', company['company_id']).execute()
+                    updated_count += 1
+                else:
+                    # Insert new company
+                    supabase_client.table('companies').insert(record).execute()
+                    saved_count += 1
+                
+            except Exception as e:
+                print(f"❌ Error saving company {company.get('company_id')}: {e}")
+                error_count += 1
+                continue
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully processed {len(companies_data)} companies',
+            'total_processed': len(companies_data),
+            'saved': saved_count,
+            'updated': updated_count,
+            'errors': error_count,
+            'data_sources': {
+                '2024_invoices': len(invoices_2024),
+                '2025_invoices': len(invoices_2025)
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in companies population: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/companies-stats', methods=['GET'])
+def api_companies_stats():
+    """Get statistics about companies in the database."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get companies data
+        companies_result = supabase_client.table('companies').select('*').range(0, 9999).execute()
+        
+        if not companies_result.data:
+            return jsonify({
+                'total_companies': 0,
+                'total_revenue': 0,
+                'total_invoices': 0,
+                'companies_with_2024_data': 0,
+                'companies_with_2025_data': 0,
+                'companies_with_both_years': 0
+            })
+        
+        companies = companies_result.data
+        
+        stats = {
+            'total_companies': len(companies),
+            'total_revenue': sum(float(c.get('total_revenue_all_time') or 0) for c in companies),
+            'total_invoices': sum(int(c.get('invoice_count_all_time') or 0) for c in companies),
+            'companies_with_2024_data': len([c for c in companies if c.get('invoice_count_2024', 0) > 0]),
+            'companies_with_2025_data': len([c for c in companies if c.get('invoice_count_2025', 0) > 0]),
+            'companies_with_both_years': len([c for c in companies if c.get('invoice_count_2024', 0) > 0 and c.get('invoice_count_2025', 0) > 0]),
+            'total_revenue_2024': sum(float(c.get('total_revenue_2024') or 0) for c in companies),
+            'total_revenue_2025': sum(float(c.get('total_revenue_2025') or 0) for c in companies),
+            'countries_represented': len(set(c.get('country_name') for c in companies if c.get('country_name'))),
+            'companies_with_vat': len([c for c in companies if c.get('vat_number')]),
+            'companies_with_email': len([c for c in companies if c.get('email')]),
+            'companies_with_website': len([c for c in companies if c.get('website')])
+        }
+        
+        return jsonify(stats)
+        
+    except Exception as e:
+        print(f"Error getting companies stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ===========================
+# WhatsApp Integration Routes
+# ===========================
+
+@app.route('/api/whatsapp/webhook', methods=['POST'])
+def whatsapp_webhook():
+    """
+    Twilio WhatsApp webhook endpoint
+    Receives incoming WhatsApp messages
+    """
+    try:
+        if WhatsAppService is None:
+            return jsonify({'error': 'WhatsApp service not available'}), 503
+        
+        # Get message data from Twilio
+        message_data = request.form.to_dict()
+        
+        # Initialize service
+        whatsapp_service = WhatsAppService()
+        
+        # Process the message
+        result = whatsapp_service.process_incoming_message(message_data)
+        
+        # Return TwiML response
+        from twilio.twiml.messaging_response import MessagingResponse
+        response = MessagingResponse()
+        
+        if result.get('success'):
+            # Optionally send an auto-reply
+            # response.message("Thanks for your message! We'll get back to you soon.")
+            pass
+        
+        return str(response), 200, {'Content-Type': 'application/xml'}
+        
+    except Exception as e:
+        print(f"Error in WhatsApp webhook: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whatsapp/inbox')
+def whatsapp_inbox_api():
+    """
+    Get WhatsApp inbox messages
+    """
+    try:
+        if WhatsAppService is None:
+            return jsonify({'error': 'WhatsApp service not available'}), 503
+        
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        
+        whatsapp_service = WhatsAppService()
+        messages = whatsapp_service.get_inbox_messages(limit=limit, offset=offset)
+        
+        return jsonify({
+            'success': True,
+            'messages': messages,
+            'count': len(messages)
+        })
+        
+    except Exception as e:
+        print(f"Error fetching inbox: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whatsapp/conversation/<phone_number>')
+def whatsapp_conversation_api(phone_number):
+    """
+    Get conversation history for a specific phone number
+    """
+    try:
+        if WhatsAppService is None:
+            return jsonify({'error': 'WhatsApp service not available'}), 503
+        
+        whatsapp_service = WhatsAppService()
+        messages = whatsapp_service.get_conversation_history(phone_number)
+        
+        return jsonify({
+            'success': True,
+            'phone_number': phone_number,
+            'messages': messages,
+            'count': len(messages)
+        })
+        
+    except Exception as e:
+        print(f"Error fetching conversation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whatsapp/mark-read', methods=['POST'])
+def whatsapp_mark_read():
+    """
+    Mark messages from a phone number as read
+    """
+    try:
+        if WhatsAppService is None:
+            return jsonify({'error': 'WhatsApp service not available'}), 503
+        
+        data = request.get_json()
+        phone_number = data.get('phone_number')
+        
+        if not phone_number:
+            return jsonify({'error': 'phone_number is required'}), 400
+        
+        whatsapp_service = WhatsAppService()
+        whatsapp_service.mark_as_read(phone_number)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Messages marked as read'
+        })
+        
+    except Exception as e:
+        print(f"Error marking as read: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whatsapp/send', methods=['POST'])
+def whatsapp_send():
+    """
+    Send a WhatsApp message
+    """
+    try:
+        if WhatsAppService is None:
+            return jsonify({'error': 'WhatsApp service not available'}), 503
+        
+        data = request.get_json()
+        to_number = data.get('to_number')
+        message = data.get('message')
+        
+        if not to_number or not message:
+            return jsonify({'error': 'to_number and message are required'}), 400
+        
+        whatsapp_service = WhatsAppService()
+        success = whatsapp_service.send_message(to_number, message)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Message sent successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to send message'
+            }), 500
+        
+    except Exception as e:
+        print(f"Error sending message: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/whatsapp/analytics')
+def whatsapp_analytics_api():
+    """
+    Get WhatsApp analytics
+    """
+    try:
+        if WhatsAppService is None:
+            return jsonify({'error': 'WhatsApp service not available'}), 503
+        
+        whatsapp_service = WhatsAppService()
+        analytics = whatsapp_service.get_analytics()
+        
+        return jsonify({
+            'success': True,
+            'analytics': analytics
+        })
+        
+    except Exception as e:
+        print(f"Error fetching analytics: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/whatsapp-inbox')
+def whatsapp_inbox_page():
+    """
+    WhatsApp inbox page
+    """
+    return render_template('whatsapp_inbox.html')
 
 
 if __name__ == '__main__':

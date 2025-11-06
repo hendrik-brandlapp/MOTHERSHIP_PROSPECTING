@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+
+{% block title %}WhatsApp Inbox - DOUANO Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-2">
+                <i class="fab fa-whatsapp text-success me-2"></i>
+                WhatsApp Inbox
+            </h2>
+            <p class="text-muted mb-0">Messages with AI transcription and task creation</p>
+        </div>
+        <div>
+            <button class="btn btn-primary" onclick="refreshInbox()">
+                <i class="fas fa-sync-alt me-2"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Analytics Cards -->
+    <div class="row mb-4" id="analytics-cards">
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+                                <i class="fas fa-envelope text-primary"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Total Messages</h6>
+                            <h4 class="mb-0" id="total-messages">0</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-success bg-opacity-10 p-3">
+                                <i class="fas fa-microphone text-success"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Voice Messages</h6>
+                            <h4 class="mb-0" id="voice-messages">0</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-info bg-opacity-10 p-3">
+                                <i class="fas fa-tasks text-info"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Tasks Created</h6>
+                            <h4 class="mb-0" id="tasks-created">0</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="rounded-circle bg-warning bg-opacity-10 p-3">
+                                <i class="fas fa-users text-warning"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Unique Contacts</h6>
+                            <h4 class="mb-0" id="unique-contacts">0</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Inbox Layout -->
+    <div class="row">
+        <!-- Message List -->
+        <div class="col-lg-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Messages</h5>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary active" onclick="filterMessages('all')">All</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="filterMessages('audio')">Voice</button>
+                            <button type="button" class="btn btn-outline-primary" onclick="filterMessages('text')">Text</button>
+                            <button type="button" class="btn btn-outline-success" onclick="filterMessages('task_created')">With Tasks</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" id="messages-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 40px;"></th>
+                                    <th>From</th>
+                                    <th>Message</th>
+                                    <th>Type</th>
+                                    <th>Sentiment</th>
+                                    <th>Task</th>
+                                    <th>Received</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="messages-tbody">
+                                <tr>
+                                    <td colspan="8" class="text-center py-5">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="text-muted mt-3 mb-0">Loading messages...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Message Detail Modal -->
+<div class="modal fade" id="messageDetailModal" tabindex="-1" aria-labelledby="messageDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="messageDetailModalLabel">Message Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="message-detail-content">
+                <!-- Content will be loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="reply-btn">
+                    <i class="fas fa-reply me-2"></i>Reply
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.message-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+
+.sentiment-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.message-type-badge {
+    font-size: 0.7rem;
+}
+
+.transcription-text {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 3px solid #007bff;
+    margin: 1rem 0;
+}
+
+.ai-analysis {
+    background: #e7f5ff;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+.task-info {
+    background: #d1f5d3;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+}
+
+.entity-tag {
+    display: inline-block;
+    background: #e9ecef;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    margin: 0.25rem;
+}
+</style>
+
+<script>
+let allMessages = [];
+let currentFilter = 'all';
+
+// Load initial data
+document.addEventListener('DOMContentLoaded', function() {
+    loadAnalytics();
+    loadMessages();
+});
+
+function loadAnalytics() {
+    fetch('/api/whatsapp/analytics')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.analytics) {
+                const analytics = data.analytics;
+                document.getElementById('total-messages').textContent = analytics.total_messages || 0;
+                document.getElementById('voice-messages').textContent = analytics.voice_messages || 0;
+                document.getElementById('tasks-created').textContent = analytics.tasks_created || 0;
+                document.getElementById('unique-contacts').textContent = analytics.unique_contacts || 0;
+            }
+        })
+        .catch(error => {
+            console.error('Error loading analytics:', error);
+        });
+}
+
+function loadMessages() {
+    fetch('/api/whatsapp/inbox?limit=100')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                allMessages = data.messages;
+                renderMessages(allMessages);
+            } else {
+                showError('Failed to load messages');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading messages:', error);
+            showError('Error loading messages: ' + error.message);
+        });
+}
+
+function renderMessages(messages) {
+    const tbody = document.getElementById('messages-tbody');
+    
+    if (messages.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center py-5">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <p class="text-muted mb-0">No messages found</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = messages.map(msg => {
+        const messageIcon = msg.message_type === 'audio' ? 'microphone' : 'comment';
+        const messageColor = msg.message_type === 'audio' ? 'success' : 'primary';
+        const sentimentBadge = getSentimentBadge(msg.ai_sentiment);
+        const taskBadge = msg.task_created ? 
+            '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Created</span>' : 
+            '<span class="badge bg-secondary">None</span>';
+        
+        // Truncate message for display
+        const messagePreview = msg.transcription || msg.message_body || 'No content';
+        const truncated = messagePreview.length > 80 ? 
+            messagePreview.substring(0, 80) + '...' : messagePreview;
+        
+        return `
+            <tr onclick="showMessageDetail('${msg.id}')" style="cursor: pointer;">
+                <td>
+                    <div class="message-icon bg-${messageColor} bg-opacity-10 text-${messageColor}">
+                        <i class="fas fa-${messageIcon}"></i>
+                    </div>
+                </td>
+                <td>
+                    <strong>${formatPhoneNumber(msg.from_number)}</strong>
+                    ${msg.contact_name ? '<br><small class="text-muted">' + msg.contact_name + '</small>' : ''}
+                </td>
+                <td>
+                    <div class="text-truncate" style="max-width: 300px;">
+                        ${escapeHtml(truncated)}
+                    </div>
+                    ${msg.ai_summary ? '<small class="text-muted d-block mt-1">AI: ' + escapeHtml(msg.ai_summary) + '</small>' : ''}
+                </td>
+                <td>
+                    <span class="badge bg-${messageColor} message-type-badge">
+                        ${msg.message_type}
+                    </span>
+                </td>
+                <td>${sentimentBadge}</td>
+                <td>${taskBadge}</td>
+                <td>
+                    <small class="text-muted">${formatDate(msg.received_at)}</small>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); showMessageDetail('${msg.id}')">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function showMessageDetail(messageId) {
+    const message = allMessages.find(m => m.id === messageId);
+    if (!message) return;
+    
+    const modalContent = document.getElementById('message-detail-content');
+    
+    let html = `
+        <div class="mb-3">
+            <h6 class="text-muted">From</h6>
+            <p class="mb-0"><strong>${formatPhoneNumber(message.from_number)}</strong></p>
+            ${message.contact_name ? '<p class="text-muted mb-0">' + escapeHtml(message.contact_name) + '</p>' : ''}
+        </div>
+        
+        <div class="mb-3">
+            <h6 class="text-muted">Received</h6>
+            <p class="mb-0">${formatDateFull(message.received_at)}</p>
+        </div>
+        
+        <div class="mb-3">
+            <h6 class="text-muted">Message Type</h6>
+            <span class="badge bg-${message.message_type === 'audio' ? 'success' : 'primary'}">${message.message_type}</span>
+        </div>
+    `;
+    
+    // Original message
+    if (message.message_body) {
+        html += `
+            <div class="mb-3">
+                <h6 class="text-muted">Message</h6>
+                <p class="mb-0">${escapeHtml(message.message_body)}</p>
+            </div>
+        `;
+    }
+    
+    // Transcription
+    if (message.transcription && message.message_type === 'audio') {
+        html += `
+            <div class="transcription-text">
+                <h6><i class="fas fa-quote-left me-2"></i>Transcription</h6>
+                <p class="mb-0">${escapeHtml(message.transcription)}</p>
+            </div>
+        `;
+    }
+    
+    // AI Analysis
+    if (message.ai_analysis) {
+        html += `
+            <div class="ai-analysis">
+                <h6><i class="fas fa-brain me-2"></i>AI Analysis</h6>
+                ${message.ai_summary ? '<p class="mb-2"><strong>Summary:</strong> ' + escapeHtml(message.ai_summary) + '</p>' : ''}
+                ${message.ai_sentiment ? '<p class="mb-2"><strong>Sentiment:</strong> ' + getSentimentBadge(message.ai_sentiment) + '</p>' : ''}
+            </div>
+        `;
+    }
+    
+    // Task Information
+    if (message.task_created && message.ai_analysis && message.ai_analysis.task_info) {
+        const taskInfo = message.ai_analysis.task_info;
+        html += `
+            <div class="task-info">
+                <h6><i class="fas fa-check-circle me-2"></i>Task Created</h6>
+                <p class="mb-2"><strong>Title:</strong> ${escapeHtml(taskInfo.title || '')}</p>
+                <p class="mb-2"><strong>Type:</strong> ${escapeHtml(taskInfo.task_type || '')}</p>
+                <p class="mb-2"><strong>Priority:</strong> ${taskInfo.priority || 'N/A'}</p>
+                ${taskInfo.description ? '<p class="mb-0"><strong>Description:</strong> ' + escapeHtml(taskInfo.description) + '</p>' : ''}
+            </div>
+        `;
+    }
+    
+    // Entities
+    if (message.extracted_entities && Object.keys(message.extracted_entities).length > 0) {
+        html += '<div class="mb-3"><h6 class="text-muted">Extracted Entities</h6>';
+        const entities = message.extracted_entities;
+        
+        if (entities.people && entities.people.length > 0) {
+            html += '<p class="mb-1"><strong>People:</strong></p>';
+            entities.people.forEach(person => {
+                html += `<span class="entity-tag"><i class="fas fa-user me-1"></i>${escapeHtml(person)}</span>`;
+            });
+        }
+        
+        if (entities.companies && entities.companies.length > 0) {
+            html += '<p class="mb-1 mt-2"><strong>Companies:</strong></p>';
+            entities.companies.forEach(company => {
+                html += `<span class="entity-tag"><i class="fas fa-building me-1"></i>${escapeHtml(company)}</span>`;
+            });
+        }
+        
+        if (entities.dates && entities.dates.length > 0) {
+            html += '<p class="mb-1 mt-2"><strong>Dates:</strong></p>';
+            entities.dates.forEach(date => {
+                html += `<span class="entity-tag"><i class="fas fa-calendar me-1"></i>${escapeHtml(date)}</span>`;
+            });
+        }
+        
+        html += '</div>';
+    }
+    
+    modalContent.innerHTML = html;
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('messageDetailModal'));
+    modal.show();
+}
+
+function filterMessages(type) {
+    currentFilter = type;
+    
+    // Update active button
+    const buttons = document.querySelectorAll('.btn-group .btn');
+    buttons.forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    // Filter messages
+    let filtered = allMessages;
+    
+    if (type === 'audio') {
+        filtered = allMessages.filter(m => m.message_type === 'audio');
+    } else if (type === 'text') {
+        filtered = allMessages.filter(m => m.message_type === 'text');
+    } else if (type === 'task_created') {
+        filtered = allMessages.filter(m => m.task_created === true);
+    }
+    
+    renderMessages(filtered);
+}
+
+function refreshInbox() {
+    loadAnalytics();
+    loadMessages();
+}
+
+// Helper functions
+function formatPhoneNumber(phone) {
+    if (!phone) return 'Unknown';
+    // Basic formatting - customize as needed
+    return phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3');
+}
+
+function formatDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return diffMins + ' min ago';
+    if (diffHours < 24) return diffHours + ' hour' + (diffHours > 1 ? 's' : '') + ' ago';
+    if (diffDays < 7) return diffDays + ' day' + (diffDays > 1 ? 's' : '') + ' ago';
+    
+    return date.toLocaleDateString();
+}
+
+function formatDateFull(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleString();
+}
+
+function getSentimentBadge(sentiment) {
+    if (!sentiment) return '<span class="badge bg-secondary sentiment-badge">N/A</span>';
+    
+    const badges = {
+        'positive': '<span class="badge bg-success sentiment-badge"><i class="fas fa-smile me-1"></i>Positive</span>',
+        'negative': '<span class="badge bg-danger sentiment-badge"><i class="fas fa-frown me-1"></i>Negative</span>',
+        'neutral': '<span class="badge bg-secondary sentiment-badge"><i class="fas fa-meh me-1"></i>Neutral</span>',
+        'urgent': '<span class="badge bg-warning sentiment-badge"><i class="fas fa-exclamation-triangle me-1"></i>Urgent</span>'
+    };
+    
+    return badges[sentiment.toLowerCase()] || '<span class="badge bg-secondary sentiment-badge">' + sentiment + '</span>';
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showError(message) {
+    const tbody = document.getElementById('messages-tbody');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="8" class="text-center py-5">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                <p class="text-danger mb-0">${escapeHtml(message)}</p>
+            </td>
+        </tr>
+    `;
+}
+</script>
+{% endblock %}
+

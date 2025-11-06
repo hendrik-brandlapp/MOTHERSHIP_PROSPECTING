@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: mothership-prospecting
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 10000
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DUANO_CLIENT_ID
+        sync: false
+      - key: DUANO_CLIENT_SECRET
+        sync: false
+      - key: DUANO_API_BASE_URL
+        value: https://yugen.douano.com
+      - key: DUANO_REDIRECT_URI
+        sync: false
+    healthCheckPath: /
+
