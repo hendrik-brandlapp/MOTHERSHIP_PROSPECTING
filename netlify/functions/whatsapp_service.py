@@ -115,27 +115,56 @@ class WhatsAppService:
                 'transcription_status': 'processing'
             }).eq('id', message_id).execute()
             
-            # Download audio file
-            # Note: In production, you'd need to authenticate with Twilio to download
-            response = requests.get(media_url)
+            # Get Twilio credentials for authenticated download
+            account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+            auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+            
+            if not account_sid or not auth_token:
+                raise Exception("Twilio credentials not configured")
+            
+            # Download audio file with Twilio authentication
+            response = requests.get(
+                media_url,
+                auth=(account_sid, auth_token),
+                timeout=30
+            )
             
             if response.status_code != 200:
-                raise Exception(f"Failed to download audio: {response.status_code}")
+                raise Exception(f"Failed to download audio: {response.status_code} - {response.text}")
+            
+            # Detect file extension from content type or URL
+            content_type = response.headers.get('Content-Type', '')
+            if 'ogg' in content_type or 'ogg' in media_url:
+                extension = 'ogg'
+            elif 'mp3' in content_type or 'mp3' in media_url:
+                extension = 'mp3'
+            elif 'mp4' in content_type or 'mp4' in media_url:
+                extension = 'mp4'
+            elif 'mpeg' in content_type or 'mpeg' in media_url:
+                extension = 'mpeg'
+            else:
+                extension = 'ogg'  # Default for WhatsApp
             
             # Save temporarily
-            temp_file = f"/tmp/{message_id}.ogg"
+            temp_file = f"/tmp/{message_id}.{extension}"
             with open(temp_file, 'wb') as f:
                 f.write(response.content)
             
-            # Transcribe using OpenAI Whisper
+            print(f"Audio file downloaded: {len(response.content)} bytes, type: {content_type}")
+            
+            # Transcribe using OpenAI (use newer model for better quality)
             with open(temp_file, 'rb') as audio_file:
                 transcription = self.openai_client.audio.transcriptions.create(
-                    model="whisper-1",
+                    model="gpt-4o-mini-transcribe",  # Updated to newer model
                     file=audio_file,
-                    language="en"  # Change as needed
+                    response_format="text"
                 )
             
-            transcription_text = transcription.text
+            # Handle both string and object responses
+            if hasattr(transcription, 'text'):
+                transcription_text = transcription.text
+            else:
+                transcription_text = str(transcription)
             
             # Update message with transcription
             self.supabase.table('whatsapp_messages').update({
