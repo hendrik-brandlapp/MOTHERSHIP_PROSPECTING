@@ -9035,6 +9035,28 @@ def whatsapp_analytics_api():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/whatsapp/message/<message_id>', methods=['DELETE'])
+def whatsapp_delete_message(message_id):
+    """
+    Delete a WhatsApp message
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not available'}), 503
+        
+        # Delete the message
+        result = supabase_client.table('whatsapp_messages').delete().eq('id', message_id).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Message deleted successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error deleting message: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/whatsapp-inbox')
 def whatsapp_inbox_page():
     """
