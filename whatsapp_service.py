@@ -121,18 +121,28 @@ class WhatsAppService:
             account_sid = os.getenv('TWILIO_ACCOUNT_SID')
             auth_token = os.getenv('TWILIO_AUTH_TOKEN')
             
-            # Debug logging
+            # Debug logging - check for whitespace issues
             print(f"DEBUG: TWILIO_ACCOUNT_SID exists: {bool(account_sid)}")
+            print(f"DEBUG: TWILIO_ACCOUNT_SID length: {len(account_sid) if account_sid else 0}")
+            print(f"DEBUG: TWILIO_ACCOUNT_SID first 10 chars: {repr(account_sid[:10]) if account_sid else 'None'}")
             print(f"DEBUG: TWILIO_AUTH_TOKEN exists: {bool(auth_token)}")
+            print(f"DEBUG: TWILIO_AUTH_TOKEN length: {len(auth_token) if auth_token else 0}")
             
             if not account_sid or not auth_token:
                 raise Exception(f"Twilio credentials not configured - SID: {bool(account_sid)}, Token: {bool(auth_token)}")
             
+            # Strip any whitespace that might have been added
+            account_sid = account_sid.strip()
+            auth_token = auth_token.strip()
+            
             # Use Twilio SDK to fetch media properly
             print(f"DEBUG: Using Twilio SDK to fetch media from: {media_url}")
+            print(f"DEBUG: Initializing Twilio Client with SID: {account_sid}")
             
             # Initialize Twilio client
             twilio_client = Client(account_sid, auth_token)
+            
+            print(f"DEBUG: Twilio client initialized successfully")
             
             # Extract message SID and media SID from URL
             # URL format: https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media/{MediaSid}
