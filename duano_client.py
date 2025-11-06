@@ -99,7 +99,7 @@ class DuanoClient:
         self.client_id = client_id or os.getenv('DUANO_CLIENT_ID', '3')
         self.client_secret = client_secret or os.getenv('DUANO_CLIENT_SECRET', 'KBPJZ11EwPjAmEUKFWDoXGQaDdMRPFES2P6VCxEC')
         self.base_url = base_url or os.getenv('DUANO_API_BASE_URL', 'https://yugen.douano.com')
-        self.redirect_uri = redirect_uri or os.getenv('DUANO_REDIRECT_URI', 'http://localhost:5002/oauth/callback')
+        self.redirect_uri = redirect_uri or os.getenv('DUANO_REDIRECT_URI', 'https://mothership-prospecting.onrender.com/oauth/callback')
         self.timeout = timeout
         self.max_retries = max_retries
         self.debug = debug

@@ -15,7 +15,7 @@ class DuanoConfig:
     client_id: str = field(default_factory=lambda: os.getenv('DUANO_CLIENT_ID', '3'))
     client_secret: str = field(default_factory=lambda: os.getenv('DUANO_CLIENT_SECRET', 'KBPJZ11EwPjAmEUKFWDoXGQaDdMRPFES2P6VCxEC'))
     base_url: str = field(default_factory=lambda: os.getenv('DUANO_API_BASE_URL', 'https://api.duano.com'))
-    redirect_uri: str = field(default_factory=lambda: os.getenv('DUANO_REDIRECT_URI', 'http://localhost:5001/oauth/callback'))
+    redirect_uri: str = field(default_factory=lambda: os.getenv('DUANO_REDIRECT_URI', 'https://mothership-prospecting.onrender.com/oauth/callback'))
     
     # Request Configuration
     timeout: int = field(default_factory=lambda: int(os.getenv('DUANO_TIMEOUT', '30')))

@@ -78,12 +78,12 @@ if create_client and Client:
 
 # DOUANO API Configuration
 DOUANO_CONFIG = {
-    'client_id': '3',
-    'client_secret': 'KBPJZ11EwPjAmEUKFWDoXGQaDdMRPFES2P6VCxEC',
-    'base_url': 'https://yugen.douano.com',
+    'client_id': os.getenv('DUANO_CLIENT_ID', '3'),
+    'client_secret': os.getenv('DUANO_CLIENT_SECRET', 'KBPJZ11EwPjAmEUKFWDoXGQaDdMRPFES2P6VCxEC'),
+    'base_url': os.getenv('DUANO_API_BASE_URL', 'https://yugen.douano.com'),
     'auth_url': 'https://yugen.douano.com/authorize',
     'token_url': 'https://yugen.douano.com/oauth/token',
-    'redirect_uri': 'http://localhost:5002/oauth/callback'
+    'redirect_uri': os.getenv('DUANO_REDIRECT_URI', 'https://mothership-prospecting.onrender.com/oauth/callback')
 }
 
 
