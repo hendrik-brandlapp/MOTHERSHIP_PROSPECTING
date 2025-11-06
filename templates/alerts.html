@@ -91,6 +91,12 @@
                                 <input type="text" class="form-control" id="searchInput" placeholder="Search company name..." onkeyup="filterAlerts()">
                             </div>
                             <div class="col-md-2">
+                                <label class="form-label fw-bold"><i class="fas fa-tags me-1"></i>Category</label>
+                                <select class="form-select" id="categoryFilter" onchange="filterAlerts()" multiple size="1">
+                                    <option value="">All Categories</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
                                 <label class="form-label fw-bold"><i class="fas fa-filter me-1"></i>Priority</label>
                                 <select class="form-select" id="priorityFilter" onchange="filterAlerts()">
                                     <option value="">All Priorities</option>
@@ -488,6 +494,9 @@ async function loadAlerts() {
         allAlerts = data.alerts || [];
         filteredAlerts = [...allAlerts];
         
+        // Populate category filter dropdown
+        populateAlertCategories();
+        
         document.getElementById('loading').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
         
@@ -767,16 +776,42 @@ function filterAlerts() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const priorityFilter = document.getElementById('priorityFilter').value;
     const typeFilter = document.getElementById('typeFilter').value;
+    const categoryFilter = document.getElementById('categoryFilter');
+    const selectedCategories = Array.from(categoryFilter.selectedOptions).map(opt => opt.value).filter(v => v !== '');
     
     // Show/hide filter badge
     const filterBadge = document.getElementById('filter-badge');
-    if (searchTerm || priorityFilter || typeFilter) {
+    if (searchTerm || priorityFilter || typeFilter || selectedCategories.length > 0) {
         filterBadge.style.display = 'inline-block';
     } else {
         filterBadge.style.display = 'none';
     }
     
     filteredAlerts = allAlerts.filter(alert => {
+        // Category filtering
+        if (selectedCategories.length > 0) {
+            const alertCategories = getAlertCategories(alert);
+            const hasNegativeFilter = selectedCategories.some(c => c.startsWith('!'));
+            
+            if (hasNegativeFilter && selectedCategories.every(c => c.startsWith('!'))) {
+                // All negative filters - exclude companies with ANY of these categories
+                const categoriesToExclude = selectedCategories.map(c => c.substring(1));
+                const hasExcludedCategory = alertCategories.some(cat => categoriesToExclude.includes(cat));
+                if (hasExcludedCategory) return false;
+            } else {
+                // Mixed or positive filters
+                const hasMatchingCategory = selectedCategories.some(selectedCat => {
+                    if (selectedCat.startsWith('!')) {
+                        const categoryToExclude = selectedCat.substring(1);
+                        return !alertCategories.includes(categoryToExclude);
+                    } else {
+                        return alertCategories.includes(selectedCat);
+                    }
+                });
+                if (!hasMatchingCategory) return false;
+            }
+        }
+        
         const matchesSearch = !searchTerm || 
             alert.company_name.toLowerCase().includes(searchTerm) ||
             (alert.public_name && alert.public_name.toLowerCase().includes(searchTerm)) ||
@@ -790,6 +825,57 @@ function filterAlerts() {
     });
     
     sortAlerts();
+}
+
+function getAlertCategories(alert) {
+    // Extract categories from raw_company_data in alert
+    if (alert.raw_company_data && alert.raw_company_data.company_categories) {
+        if (Array.isArray(alert.raw_company_data.company_categories)) {
+            return alert.raw_company_data.company_categories.map(cat => cat.name || cat);
+        }
+    }
+    return [];
+}
+
+function populateAlertCategories() {
+    const categorySet = new Set();
+    
+    // Extract all unique categories from all alerts
+    allAlerts.forEach(alert => {
+        const categories = getAlertCategories(alert);
+        categories.forEach(cat => categorySet.add(cat));
+    });
+    
+    const categoryFilter = document.getElementById('categoryFilter');
+    if (!categoryFilter) return;
+    
+    const sortedCategories = Array.from(categorySet).sort();
+    
+    // Clear existing options
+    categoryFilter.innerHTML = '<option value="">All Categories</option>';
+    
+    // Add positive filters
+    const includeGroup = document.createElement('optgroup');
+    includeGroup.label = '✓ Include Categories';
+    sortedCategories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = `✓ ${category}`;
+        includeGroup.appendChild(option);
+    });
+    categoryFilter.appendChild(includeGroup);
+    
+    // Add negative filters
+    const excludeGroup = document.createElement('optgroup');
+    excludeGroup.label = '✗ Exclude Categories';
+    sortedCategories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = `!${category}`;
+        option.textContent = `✗ ${category}`;
+        option.style.color = '#dc3545';
+        excludeGroup.appendChild(option);
+    });
+    categoryFilter.appendChild(excludeGroup);
 }
 
 function sortAlerts() {

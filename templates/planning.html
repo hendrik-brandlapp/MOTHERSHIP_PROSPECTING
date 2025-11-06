@@ -222,6 +222,9 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 document.addEventListener('DOMContentLoaded', function() {
     initializeMap();
     
+    // Auto-load companies and prospects data on page load
+    loadCompaniesData();
+    
     // Filter input event listeners
     const companyFilter = document.getElementById('company-filter');
     const regionFilter = document.getElementById('region-filter');

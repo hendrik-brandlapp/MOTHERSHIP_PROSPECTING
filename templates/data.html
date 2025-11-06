@@ -133,17 +133,20 @@
             <div class="card border-0 shadow-sm">
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label">Search Companies</label>
                             <input type="text" class="form-control" id="searchInput" placeholder="Search by name, VAT, email..." onkeyup="filterCompanies()">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label"><i class="fas fa-tags me-1"></i>Category Filter</label>
+                            <select class="form-select" id="categoryFilter" onchange="filterCompanies()" multiple size="1">
+                                <option value="">All Categories</option>
+                            </select>
+                            <small class="text-muted">Hold Ctrl/Cmd for multiple</small>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Min Revenue</label>
                             <input type="number" class="form-control" id="minRevenue" placeholder="€0" onchange="filterCompanies()">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Min Invoices</label>
-                            <input type="number" class="form-control" id="minInvoices" placeholder="1" onchange="filterCompanies()">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Sort By</label>
@@ -154,8 +157,6 @@
                                 <option value="name_desc">Name (Z-A)</option>
                                 <option value="invoices_desc">Invoice Count (High to Low)</option>
                                 <option value="invoices_asc">Invoice Count (Low to High)</option>
-                                <option value="avg_desc">Avg Invoice (High to Low)</option>
-                                <option value="avg_asc">Avg Invoice (Low to High)</option>
                             </select>
                         </div>
                         <div class="col-md-2">
@@ -164,6 +165,13 @@
                                 <option value="cards">Card View</option>
                                 <option value="table">Table View</option>
                             </select>
+                        </div>
+                    </div>
+                    <div class="row g-2 mt-2">
+                        <div class="col-12">
+                            <div class="d-flex gap-2 flex-wrap" id="category-tags-container">
+                                <!-- Category tags will appear here -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -443,6 +451,9 @@ async function loadData() {
         allCompanies = data.companies || [];
         filteredCompanies = [...allCompanies];
         
+        // Populate category filter dropdown
+        populateCategories();
+        
         // Update stats
         updateStats(data);
         
@@ -684,31 +695,116 @@ function filterCompanies() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const minRevenue = parseFloat(document.getElementById('minRevenue').value) || 0;
     const minInvoices = parseInt(document.getElementById('minInvoices').value) || 0;
+    const categoryFilter = document.getElementById('categoryFilter');
+    const selectedCategories = Array.from(categoryFilter.selectedOptions).map(opt => opt.value).filter(v => v !== '');
     
     filteredCompanies = allCompanies.filter(company => {
-        if (!searchTerm || searchTerm.trim() === '') {
-            // No search term, just check revenue and invoices
-            return company.total_revenue >= minRevenue && company.invoice_count >= minInvoices;
+        // Category filtering
+        if (selectedCategories.length > 0) {
+            const companyCategories = getCompanyCategories(company);
+            const hasMatchingCategory = selectedCategories.some(selectedCat => {
+                // Check if it's a negative filter (starts with !)
+                if (selectedCat.startsWith('!')) {
+                    const categoryToExclude = selectedCat.substring(1);
+                    // Exclude companies with this category
+                    return !companyCategories.includes(categoryToExclude);
+                } else {
+                    // Include companies with this category
+                    return companyCategories.includes(selectedCat);
+                }
+            });
+            
+            // If using negative filters, invert the logic
+            const hasNegativeFilter = selectedCategories.some(c => c.startsWith('!'));
+            if (hasNegativeFilter && selectedCategories.every(c => c.startsWith('!'))) {
+                // All filters are negative - exclude companies matching ANY negative filter
+                const categoriesToExclude = selectedCategories.map(c => c.substring(1));
+                const hasExcludedCategory = companyCategories.some(cat => categoriesToExclude.includes(cat));
+                if (hasExcludedCategory) return false;
+            } else if (!hasMatchingCategory) {
+                return false;
+            }
         }
         
-        // Build searchable text from all fields
-        const searchableText = [
-            company.name || '',
-            company.vat_number || '',
-            company.email || '',
-            company.contact_person || '',
-            company.address?.city || '',
-            company.address?.country || ''
-        ].join(' ').toLowerCase();
+        // Search term filtering
+        if (searchTerm && searchTerm.trim() !== '') {
+            const searchableText = [
+                company.name || '',
+                company.vat_number || '',
+                company.email || '',
+                company.contact_person || '',
+                company.address?.city || '',
+                company.address?.country || ''
+            ].join(' ').toLowerCase();
+            
+            if (!searchableText.includes(searchTerm)) return false;
+        }
         
-        const matchesSearch = searchableText.includes(searchTerm);
-        const matchesRevenue = company.total_revenue >= minRevenue;
-        const matchesInvoices = company.invoice_count >= minInvoices;
+        // Revenue and invoice filters
+        if (company.total_revenue < minRevenue) return false;
+        if (company.invoice_count < minInvoices) return false;
         
-        return matchesSearch && matchesRevenue && matchesInvoices;
+        return true;
     });
     
     sortCompanies();
+}
+
+function getCompanyCategories(company) {
+    // Extract categories from raw_company_data
+    if (company.raw_company_data && company.raw_company_data.company_categories) {
+        if (Array.isArray(company.raw_company_data.company_categories)) {
+            return company.raw_company_data.company_categories.map(cat => cat.name || cat);
+        }
+    }
+    
+    // Fallback: try direct company_categories field
+    if (company.company_categories) {
+        if (Array.isArray(company.company_categories)) {
+            return company.company_categories.map(cat => cat.name || cat);
+        }
+    }
+    
+    return [];
+}
+
+function populateCategories() {
+    const categorySet = new Set();
+    
+    // Extract all unique categories from all companies
+    allCompanies.forEach(company => {
+        const categories = getCompanyCategories(company);
+        categories.forEach(cat => categorySet.add(cat));
+    });
+    
+    const categoryFilter = document.getElementById('categoryFilter');
+    const sortedCategories = Array.from(categorySet).sort();
+    
+    // Clear existing options except "All Categories"
+    categoryFilter.innerHTML = '<option value="">All Categories</option>';
+    
+    // Add positive filters (include these categories)
+    const includeGroup = document.createElement('optgroup');
+    includeGroup.label = '✓ Include Categories';
+    sortedCategories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = `✓ ${category}`;
+        includeGroup.appendChild(option);
+    });
+    categoryFilter.appendChild(includeGroup);
+    
+    // Add negative filters (exclude these categories)
+    const excludeGroup = document.createElement('optgroup');
+    excludeGroup.label = '✗ Exclude Categories';
+    sortedCategories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = `!${category}`;
+        option.textContent = `✗ ${category}`;
+        option.style.color = '#dc3545';
+        excludeGroup.appendChild(option);
+    });
+    categoryFilter.appendChild(excludeGroup);
 }
 
 function sortCompanies() {
@@ -1239,10 +1335,11 @@ async function showInvoiceDetails(companyId, invoiceId) {
                                                     <span class="badge bg-info">${item.quantity || item.qty || 0}</span>
                                                 </td>
                                                 <td>
-                                                    <strong class="text-success">€${(item.unit_price || item.unit_price_incl_tax || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
+                                                    <strong class="text-success">€${(item.price || item.unit_price || item.unit_price_incl_tax || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
+                                                    ${item.discount ? `<br><small class="text-warning"><i class="fas fa-tag me-1"></i>${(item.discount * 100).toFixed(0)}% discount</small>` : ''}
                                                 </td>
                                                 <td>
-                                                    <strong class="text-dark">€${(item.total_incl_tax || item.total_excl_tax || item.line_total || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
+                                                    <strong class="text-dark">€${(item.payable_amount || item.revenue || item.total_incl_tax || item.total_excl_tax || (item.price * item.quantity) || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
                                                 </td>
                                             </tr>
                                         `).join('')}
