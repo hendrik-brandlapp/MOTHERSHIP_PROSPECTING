@@ -128,13 +128,33 @@ class WhatsAppService:
                 raise Exception(f"Twilio credentials not configured - SID: {bool(account_sid)}, Token: {bool(auth_token)}")
             
             # Download audio file with Twilio authentication
+            # Try multiple auth methods for different Twilio services
+            print(f"DEBUG: Attempting to download from: {media_url}")
+            
+            # Method 1: HTTP Basic Auth (standard for Twilio)
             response = requests.get(
                 media_url,
                 auth=(account_sid, auth_token),
                 timeout=30
             )
             
+            # Method 2: If Basic Auth fails, try with base64 encoded auth header
+            if response.status_code == 401:
+                print("DEBUG: Basic auth failed, trying with base64 header...")
+                import base64
+                credentials = f"{account_sid}:{auth_token}"
+                encoded_credentials = base64.b64encode(credentials.encode()).decode()
+                response = requests.get(
+                    media_url,
+                    headers={
+                        'Authorization': f'Basic {encoded_credentials}'
+                    },
+                    timeout=30
+                )
+            
             if response.status_code != 200:
+                print(f"DEBUG: Download failed with status {response.status_code}")
+                print(f"DEBUG: Response: {response.text}")
                 raise Exception(f"Failed to download audio: {response.status_code} - {response.text}")
             
             # Detect file extension from content type or URL
