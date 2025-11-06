@@ -119,8 +119,13 @@ class WhatsAppService:
             account_sid = os.getenv('TWILIO_ACCOUNT_SID')
             auth_token = os.getenv('TWILIO_AUTH_TOKEN')
             
+            # Debug logging
+            print(f"DEBUG: TWILIO_ACCOUNT_SID exists: {bool(account_sid)}")
+            print(f"DEBUG: TWILIO_ACCOUNT_SID value: {account_sid[:10] if account_sid else 'None'}...")
+            print(f"DEBUG: TWILIO_AUTH_TOKEN exists: {bool(auth_token)}")
+            
             if not account_sid or not auth_token:
-                raise Exception("Twilio credentials not configured")
+                raise Exception(f"Twilio credentials not configured - SID: {bool(account_sid)}, Token: {bool(auth_token)}")
             
             # Download audio file with Twilio authentication
             response = requests.get(
