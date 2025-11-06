@@ -110,51 +110,71 @@ class WhatsAppService:
             Transcribed text or None if failed
         """
         try:
+            from twilio.rest import Client
+            
             # Update status to processing
             self.supabase.table('whatsapp_messages').update({
                 'transcription_status': 'processing'
             }).eq('id', message_id).execute()
             
-            # Get Twilio credentials for authenticated download
+            # Get Twilio credentials
             account_sid = os.getenv('TWILIO_ACCOUNT_SID')
             auth_token = os.getenv('TWILIO_AUTH_TOKEN')
             
             # Debug logging
             print(f"DEBUG: TWILIO_ACCOUNT_SID exists: {bool(account_sid)}")
-            print(f"DEBUG: TWILIO_ACCOUNT_SID value: {account_sid[:10] if account_sid else 'None'}...")
             print(f"DEBUG: TWILIO_AUTH_TOKEN exists: {bool(auth_token)}")
             
             if not account_sid or not auth_token:
                 raise Exception(f"Twilio credentials not configured - SID: {bool(account_sid)}, Token: {bool(auth_token)}")
             
-            # Download audio file with Twilio authentication
-            # Try multiple auth methods for different Twilio services
-            print(f"DEBUG: Attempting to download from: {media_url}")
+            # Use Twilio SDK to fetch media properly
+            print(f"DEBUG: Using Twilio SDK to fetch media from: {media_url}")
             
-            # Method 1: HTTP Basic Auth (standard for Twilio)
+            # Initialize Twilio client
+            twilio_client = Client(account_sid, auth_token)
+            
+            # Extract message SID and media SID from URL
+            # URL format: https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Messages/{MessageSid}/Media/{MediaSid}
+            url_parts = media_url.split('/')
+            message_sid = url_parts[-3] if len(url_parts) >= 3 else None
+            media_sid = url_parts[-1] if len(url_parts) >= 1 else None
+            
+            print(f"DEBUG: Message SID: {message_sid}, Media SID: {media_sid}")
+            
+            if not message_sid or not media_sid:
+                raise Exception(f"Could not extract SIDs from media URL: {media_url}")
+            
+            # Fetch media metadata using Twilio SDK
+            media = twilio_client.messages(message_sid).media(media_sid).fetch()
+            
+            print(f"DEBUG: Media fetched - Content Type: {media.content_type}")
+            
+            # Build authenticated download URL using Twilio's format
+            # The SDK gives us the URI, we need to download the actual content
+            download_url = f"https://api.twilio.com{media.uri.replace('.json', '')}"
+            
+            print(f"DEBUG: Downloading from: {download_url}")
+            
+            # Use the Twilio client's HTTP client for authenticated requests
+            # This uses the same auth session as the SDK
+            import base64
+            auth_string = base64.b64encode(f"{account_sid}:{auth_token}".encode()).decode()
+            
             response = requests.get(
-                media_url,
-                auth=(account_sid, auth_token),
+                download_url,
+                headers={
+                    'Authorization': f'Basic {auth_string}',
+                    'User-Agent': 'python-requests'
+                },
                 timeout=30
             )
             
-            # Method 2: If Basic Auth fails, try with base64 encoded auth header
-            if response.status_code == 401:
-                print("DEBUG: Basic auth failed, trying with base64 header...")
-                import base64
-                credentials = f"{account_sid}:{auth_token}"
-                encoded_credentials = base64.b64encode(credentials.encode()).decode()
-                response = requests.get(
-                    media_url,
-                    headers={
-                        'Authorization': f'Basic {encoded_credentials}'
-                    },
-                    timeout=30
-                )
+            print(f"DEBUG: Download response status: {response.status_code}")
             
             if response.status_code != 200:
-                print(f"DEBUG: Download failed with status {response.status_code}")
-                print(f"DEBUG: Response: {response.text}")
+                print(f"DEBUG: Response headers: {response.headers}")
+                print(f"DEBUG: Response text: {response.text[:500]}")
                 raise Exception(f"Failed to download audio: {response.status_code} - {response.text}")
             
             # Detect file extension from content type or URL
