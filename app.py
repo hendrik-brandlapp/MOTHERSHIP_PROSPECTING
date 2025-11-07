@@ -9085,5 +9085,65 @@ def whatsapp_inbox_page():
     return render_template('whatsapp_inbox.html')
 
 
+@app.route('/api/company-notes/<company_id>', methods=['POST'])
+def api_update_company_notes(company_id):
+    """
+    Update company notes and assigned salesperson
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        data = request.get_json()
+        notes = data.get('notes', '')
+        salesperson = data.get('assigned_salesperson', '')
+        
+        # Update in Supabase
+        result = supabase_client.table('companies').update({
+            'notes': notes,
+            'assigned_salesperson': salesperson,
+            'updated_at': datetime.now().isoformat()
+        }).eq('company_id', int(company_id)).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Notes and salesperson updated successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error updating company notes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/prospect-notes/<prospect_id>', methods=['POST'])
+def api_update_prospect_notes(prospect_id):
+    """
+    Update prospect notes and assigned salesperson
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        data = request.get_json()
+        notes = data.get('notes', '')
+        salesperson = data.get('assigned_salesperson', '')
+        
+        # Update in Supabase
+        result = supabase_client.table('prospects').update({
+            'notes': notes,
+            'assigned_salesperson': salesperson,
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', prospect_id).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Notes and salesperson updated successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error updating prospect notes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5002)

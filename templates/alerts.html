@@ -83,15 +83,27 @@
         <!-- Filters and Search -->
         <div class="row mb-4">
             <div class="col-12">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <div class="row g-3 align-items-end">
-                            <div class="col-md-3">
-                                <label class="form-label fw-bold"><i class="fas fa-search me-1"></i>Search</label>
-                                <input type="text" class="form-control" id="searchInput" placeholder="Search company name..." onkeyup="filterAlerts()">
+                <div class="card-modern">
+                    <div class="card-modern-body">
+                        <!-- Search Bar - Full Width -->
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <div class="position-relative">
+                                    <i class="fas fa-search position-absolute" style="left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-tertiary);"></i>
+                                    <input type="text" class="form-control ps-5" id="searchInput" 
+                                           placeholder="Search company name, email, or description..." 
+                                           onkeyup="filterAlerts()"
+                                           style="border-radius: var(--radius-md); padding: 0.75rem 1rem 0.75rem 2.75rem; border: 1px solid var(--border-color);">
+                                </div>
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label fw-bold"><i class="fas fa-tags me-1"></i>Categories</label>
+                        </div>
+                        
+                        <!-- Filters Row - Organized -->
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label" style="font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <i class="fas fa-tags me-1"></i>Categories
+                                </label>
                                 <div class="searchable-dropdown-wrapper">
                                     <div class="dropdown-trigger-modern" id="alert-category-dropdown-trigger">
                                         <span class="trigger-text text-muted">All categories</span>
@@ -107,17 +119,23 @@
                                 </div>
                                 <div class="selected-tags mt-2" id="alert-category-selected-tags"></div>
                             </div>
-                            <div class="col-md-2">
-                                <label class="form-label fw-bold"><i class="fas fa-filter me-1"></i>Priority</label>
+                            
+                            <div class="col-md-3">
+                                <label class="form-label" style="font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Priority
+                                </label>
                                 <select class="form-select" id="priorityFilter" onchange="filterAlerts()">
                                     <option value="">All Priorities</option>
                                     <option value="HIGH">High</option>
                                     <option value="MEDIUM">Medium</option>
                                     <option value="LOW">Low</option>
                                 </select>
-        </div>
-        <div class="col-md-3">
-                                <label class="form-label fw-bold"><i class="fas fa-tag me-1"></i>Alert Type</label>
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <label class="form-label" style="font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em;">
+                                    <i class="fas fa-bell me-1"></i>Alert Type
+                                </label>
                                 <select class="form-select" id="typeFilter" onchange="filterAlerts()">
                                     <option value="">All Types</option>
                                     <option value="PATTERN_DISRUPTION">📈 Pattern Break</option>
