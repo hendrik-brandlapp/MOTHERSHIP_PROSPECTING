@@ -5,14 +5,16 @@
 {% block extra_head %}
 <style>
     /* Google Maps Style - Full Page Layout */
+    .page-content {
+        padding: 0 !important;
+    }
+    
     .planning-container {
-        position: fixed;
-        top: 0;
-        left: 240px; /* Sidebar width */
-        right: 0;
-        bottom: 0;
+        width: 100%;
+        height: calc(100vh - 0px); /* Full viewport height */
         display: flex;
         background: var(--bg-primary);
+        position: relative;
     }
 
     /* Floating Left Panel */
