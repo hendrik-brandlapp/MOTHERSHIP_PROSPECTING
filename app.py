@@ -1573,7 +1573,7 @@ def planning():
     # Mapbox API key
     mapbox_api_key = "pk.eyJ1IjoiaGVuZHJpa3l1Z2VuIiwiYSI6ImNtY24zZnB4YTAwNTYybnMzNGVpemZxdGEifQ.HIpLMTGycSiEsf7ytxaSJg"
     
-    return render_template('planning_working.html', 
+    return render_template('planning.html', 
                          mapbox_api_key=mapbox_api_key,
                          google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
