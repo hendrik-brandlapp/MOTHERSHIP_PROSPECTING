@@ -543,18 +543,30 @@ async function addCompaniesToMap(companiesToAdd = companies) {
 
 // Get company address from invoice_address field
 function getCompanyAddress(company) {
-    if (company.invoice_address) {
-        const addr = company.invoice_address;
-        const addressParts = [
-            addr.address_line1 || addr.address1 || addr.street,
-            addr.address_line2 || addr.address2,
-            addr.city || addr.town,
-            addr.post_code || addr.postal_code || addr.zip_code || addr.zip,
-            addr.country?.name || addr.country_name || addr.country
-        ].filter(part => part && part.trim());
-        
-        return addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
+    // Direct fields from Supabase companies table
+    const addressParts = [
+        company.address_line1 || company.address,
+        company.city,
+        company.post_code,
+        company.country_name
+    ].filter(part => part && part.trim());
+    
+    if (addressParts.length > 0) {
+        return addressParts.join(', ');
     }
+    
+    // Fallback: Try raw_company_data.invoice_address
+    if (company.raw_company_data && company.raw_company_data.invoice_address) {
+        const addr = company.raw_company_data.invoice_address;
+        const parts = [
+            addr.address_line1,
+            addr.city,
+            addr.post_code,
+            addr.country?.name || addr.country_name
+        ].filter(Boolean);
+        if (parts.length > 0) return parts.join(', ');
+    }
+    
     return 'No address available';
 }
 
@@ -620,6 +632,15 @@ function toggleCompanySelection(companyId) {
     }
     displayCompaniesList();
     updateSelectedCount();
+}
+
+// Auto-visualize when selecting
+function visualizeSelected() {
+    if (currentTab === 'companies') {
+        visualizeSelectedCompanies();
+    } else {
+        visualizeSelectedProspects();
+    }
 }
 
 // Select all visible items (companies and prospects)
