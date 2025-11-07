@@ -14,34 +14,39 @@
     
     <style>
         :root {
-            /* Modern Color System */
-            --bg-primary: #FAFAFA;
+            /* Modern Color System - Enhanced */
+            --bg-primary: #F8F9FC;
             --bg-surface: #FFFFFF;
             --bg-elevated: #FFFFFF;
-            --bg-hover: #F6F7F8;
-            --bg-active: #F1F2F4;
+            --bg-hover: #F1F3F9;
+            --bg-active: #E8EBF4;
             
-            /* Accent - Electric Indigo */
-            --accent: #6366F1;
-            --accent-hover: #4F46E5;
-            --accent-light: #EEF2FF;
-            --accent-subtle: #F5F7FF;
+            /* Accent - Vibrant Indigo with Depth */
+            --accent: #5B5FEF;
+            --accent-hover: #4C4FE0;
+            --accent-light: #EDEFFD;
+            --accent-subtle: #F7F8FE;
+            --accent-glow: rgba(91, 95, 239, 0.15);
             
-            /* Text Colors */
-            --text-primary: #18181B;
-            --text-secondary: #71717A;
-            --text-tertiary: #A1A1AA;
+            /* Text Colors - Better Contrast */
+            --text-primary: #0F1419;
+            --text-secondary: #536471;
+            --text-tertiary: #8B98A5;
             --text-inverse: #FFFFFF;
             
-            /* Semantic Colors */
-            --success: #10B981;
-            --success-bg: #ECFDF5;
-            --warning: #F59E0B;
-            --warning-bg: #FFF7ED;
-            --danger: #EF4444;
-            --danger-bg: #FEF2F2;
-            --info: #3B82F6;
-            --info-bg: #EFF6FF;
+            /* Semantic Colors - Vibrant but Professional */
+            --success: #00BA88;
+            --success-bg: #EDFCF6;
+            --success-glow: rgba(0, 186, 136, 0.12);
+            --warning: #FF9F43;
+            --warning-bg: #FFF4E8;
+            --warning-glow: rgba(255, 159, 67, 0.12);
+            --danger: #FF4757;
+            --danger-bg: #FFF0F1;
+            --danger-glow: rgba(255, 71, 87, 0.12);
+            --info: #5B9FED;
+            --info-bg: #EFF7FF;
+            --info-glow: rgba(91, 159, 237, 0.12);
             
             /* Borders */
             --border-color: #E4E4E7;
@@ -323,49 +328,77 @@
             padding: var(--space-lg);
         }
 
-        /* Buttons - Minimal and Clean */
-        .btn-modern {
+        /* Premium Buttons */
+        .btn, .btn-modern {
             display: inline-flex;
             align-items: center;
-            gap: var(--space-xs);
-            padding: 0.625rem 1.25rem;
-            font-size: 0.9375rem;
+            gap: 0.5rem;
+            padding: 0.625rem 1.125rem;
+            font-size: 0.875rem;
             font-weight: 500;
             border-radius: var(--radius-md);
-            border: none;
+            border: 1px solid transparent;
             cursor: pointer;
-            transition: all 0.15s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
             font-family: 'Inter', sans-serif;
+            text-decoration: none;
+            white-space: nowrap;
         }
 
-        .btn-primary-modern {
+        .btn-primary, .btn-primary-modern {
             background: var(--accent);
+            color: white;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 0 0 0 var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--accent-glow), 0 2px 4px rgba(0,0,0,0.08);
+        }
+
+        .btn-success {
+            background: var(--success);
             color: white;
         }
 
-        .btn-primary-modern:hover {
-            background: var(--accent-hover);
+        .btn-success:hover {
+            background: #00A876;
             transform: translateY(-1px);
-            box-shadow: var(--shadow-md);
+            box-shadow: 0 4px 12px var(--success-glow);
         }
 
-        .btn-secondary-modern {
-            background: var(--bg-hover);
-            color: var(--text-primary);
+        .btn-warning {
+            background: var(--warning);
+            color: white;
         }
 
-        .btn-secondary-modern:hover {
-            background: var(--bg-active);
+        .btn-outline-primary {
+            background: transparent;
+            border-color: var(--border-color);
+            color: var(--accent);
         }
 
-        .btn-ghost-modern {
+        .btn-outline-primary:hover {
+            background: var(--accent-subtle);
+            border-color: var(--accent);
+            color: var(--accent-hover);
+        }
+
+        .btn-ghost {
             background: transparent;
             color: var(--text-secondary);
+            border: none;
         }
 
-        .btn-ghost-modern:hover {
+        .btn-ghost:hover {
             background: var(--bg-hover);
             color: var(--text-primary);
+        }
+
+        .btn-sm {
+            padding: 0.5rem 0.875rem;
+            font-size: 0.8125rem;
         }
 
         /* Form Inputs - Clean and Modern */
@@ -543,6 +576,150 @@
             }
         }
 
+        /* Premium Modals */
+        .modal-content {
+            border: none;
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-xl);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: var(--space-lg) var(--space-xl);
+        }
+
+        .modal-title {
+            font-family: 'Inter Tight', sans-serif;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: var(--space-xl);
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        .modal-footer {
+            background: var(--bg-hover);
+            border-top: 1px solid var(--border-subtle);
+            padding: var(--space-lg) var(--space-xl);
+        }
+
+        /* Searchable Dropdown */
+        .searchable-dropdown {
+            position: relative;
+            width: 100%;
+        }
+
+        .dropdown-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.625rem 1rem;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .dropdown-trigger:hover {
+            border-color: var(--accent);
+            background: var(--bg-hover);
+        }
+
+        .dropdown-menu-custom {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            left: 0;
+            right: 0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            z-index: 1000;
+            max-height: 300px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .dropdown-menu-custom.show {
+            display: block;
+        }
+
+        .dropdown-search {
+            padding: var(--space-sm);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .dropdown-search input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 0.875rem;
+        }
+
+        .dropdown-options {
+            max-height: 240px;
+            overflow-y: auto;
+            padding: var(--space-xs);
+        }
+
+        .dropdown-option {
+            padding: 0.5rem var(--space-sm);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .dropdown-option:hover {
+            background: var(--bg-hover);
+        }
+
+        .dropdown-option.selected {
+            background: var(--accent-subtle);
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* Modern Tabs */
+        .nav-tabs-modern {
+            border: none;
+            gap: var(--space-xs);
+            background: var(--bg-hover);
+            padding: 0.25rem;
+            border-radius: var(--radius-md);
+            display: inline-flex;
+        }
+
+        .nav-tabs-modern .nav-link {
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 0.5rem 1rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+
+        .nav-tabs-modern .nav-link:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-tabs-modern .nav-link.active {
+            background: var(--bg-surface);
+            color: var(--accent);
+            box-shadow: var(--shadow-xs);
+        }
+
         /* Animations */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -564,6 +741,23 @@
         @keyframes loading {
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
+        }
+
+        /* Utility Classes */
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        .glow-accent {
+            box-shadow: 0 0 0 0 var(--accent-glow);
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+            50% { box-shadow: 0 0 0 8px var(--accent-glow); }
         }
     </style>
     
