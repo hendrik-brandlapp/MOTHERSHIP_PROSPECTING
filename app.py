@@ -9372,9 +9372,10 @@ def geocode_all_companies():
         
         # Import the geocoding logic
         try:
-            from geocode_companies import get_company_address, geocode_address_mapbox, update_company_coordinates
-        except ImportError:
-            return jsonify({'error': 'Geocoding module not available'}), 500
+            from geocode_companies import get_company_address, geocode_address_mapbox
+        except ImportError as e:
+            print(f"Geocoding import error: {e}")
+            return jsonify({'error': f'Geocoding module not available: {str(e)}'}), 500
         
         # Get request parameters
         data = request.json or {}
@@ -9424,10 +9425,19 @@ def geocode_all_companies():
             if geocode_result:
                 lat, lng, quality = geocode_result
                 
-                # Update database
-                if update_company_coordinates(company['id'], lat, lng, quality, address):
+                # Update database directly with supabase_client
+                try:
+                    supabase_client.table('companies').update({
+                        'latitude': lat,
+                        'longitude': lng,
+                        'geocoded_address': address,
+                        'geocoding_quality': quality,
+                        'geocoded_at': datetime.utcnow().isoformat(),
+                        'geocoding_provider': 'mapbox'
+                    }).eq('id', company['id']).execute()
                     success_count += 1
-                else:
+                except Exception as update_error:
+                    print(f"Error updating coordinates: {update_error}")
                     failed_count += 1
             else:
                 failed_count += 1
