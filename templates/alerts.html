@@ -917,21 +917,26 @@ function renderAlertCategoryTags() {
         return;
     }
     
-    container.innerHTML = categories.map(category => {
+    // Clear and recreate
+    container.innerHTML = '';
+    
+    categories.forEach(category => {
         const state = categoryStates[category];
-        
-        if (state === null) return ''; // Hidden/removed
+        if (state === null) return;
         
         const stateClass = state === 'included' ? 'included' : 'excluded';
         const icon = state === 'included' ? 'check-circle' : 'times-circle';
         
-        return `
-            <span class="category-tag ${stateClass}" onclick="toggleAlertCategory('${escapeHtml(category)}')">
-                <i class="fas fa-${icon}"></i>
-                ${escapeHtml(category)}
-            </span>
+        const tag = document.createElement('span');
+        tag.className = `category-tag ${stateClass}`;
+        tag.innerHTML = `
+            <i class="fas fa-${icon}"></i>
+            ${escapeHtml(category)}
         `;
-    }).join('');
+        tag.onclick = () => toggleAlertCategory(category);
+        
+        container.appendChild(tag);
+    });
 }
 
 function toggleAlertCategory(category) {
