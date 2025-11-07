@@ -1,0 +1,1 @@
+{"functions":[{"bundler":"esbuild","buildData":{"runtimeAPIVersion":1},"mainFile":"/Users/hendrikdewinne/MOTHERSHIP_PROSPECTING/netlify/functions/api.js","name":"api","priority":10,"path":"/Users/hendrikdewinne/MOTHERSHIP_PROSPECTING/.netlify/functions/api.zip","runtime":"js"}],"system":{"arch":"arm64","platform":"darwin"},"timestamp":1762455549374,"version":1}

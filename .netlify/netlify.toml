@@ -1,0 +1,83 @@
+functionsDirectory = "/Users/hendrikdewinne/MOTHERSHIP_PROSPECTING/netlify/functions"
+functionsDirectoryOrigin = "config-v1"
+redirectsOrigin = "config"
+plugins = []
+headers = []
+
+[build]
+publish = "/Users/hendrikdewinne/MOTHERSHIP_PROSPECTING/public"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "npm run build"
+functions = "/Users/hendrikdewinne/MOTHERSHIP_PROSPECTING/netlify/functions"
+
+[build.environment]
+NODE_VERSION = "18"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[functions]
+
+[functions.whatsapp-webhook]
+runtime = "python3.9"
+
+[functions."*"]
+node_bundler = "esbuild"
+
+[[redirects]]
+from = "/oauth/*"
+to = "/.netlify/functions/api/oauth/:splat"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/api/whatsapp/webhook"
+to = "/.netlify/functions/whatsapp-webhook"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/api/*"
+to = "/.netlify/functions/api/:splat"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
