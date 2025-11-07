@@ -81,22 +81,19 @@
         </div>
 
         <!-- Filters and Search -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card-modern">
-                    <div class="card-modern-body">
-                        <!-- Search Bar - Full Width -->
-                        <div class="row mb-3">
-                            <div class="col-12">
-                                <div class="position-relative">
-                                    <i class="fas fa-search position-absolute" style="left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-tertiary);"></i>
-                                    <input type="text" class="form-control ps-5" id="searchInput" 
-                                           placeholder="Search company name, email, or description..." 
-                                           onkeyup="filterAlerts()"
-                                           style="border-radius: var(--radius-md); padding: 0.75rem 1rem 0.75rem 2.75rem; border: 1px solid var(--border-color);">
-                                </div>
-                            </div>
+        <div class="mb-4">
+            <div class="card-modern">
+                <div class="card-modern-body">
+                    <!-- Search Bar - Full Width -->
+                    <div class="mb-3">
+                        <div class="position-relative">
+                            <i class="fas fa-search position-absolute" style="left: 1rem; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); z-index: 1;"></i>
+                            <input type="text" class="form-control ps-5" id="searchInput" 
+                                   placeholder="Search company name, email, or description..." 
+                                   onkeyup="filterAlerts()"
+                                   style="border-radius: var(--radius-md); padding: 0.75rem 1rem 0.75rem 2.75rem; border: 1px solid var(--border-color);">
                         </div>
+                    </div>
                         
                         <!-- Filters Row - Organized -->
                         <div class="row g-3">
