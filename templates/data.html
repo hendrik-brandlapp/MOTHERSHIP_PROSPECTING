@@ -11,18 +11,18 @@
                     <h2>Data Analysis</h2>
                     <p class="text-muted mb-0">Comprehensive company and invoice data analysis</p>
                 </div>
-                <div>
-                    <button class="btn btn-success me-2" onclick="syncLatestData()">
-                        <i class="fas fa-sync-alt me-2"></i>Daily Sync
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="syncLatestData()" title="Sync latest data from DUANO">
+                        <i class="fas fa-sync-alt"></i>
                     </button>
-                    <button class="btn btn-info me-2" onclick="refreshCompanyMetrics()">
-                        <i class="fas fa-calculator me-2"></i>Refresh Metrics
+                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshCompanyMetrics()" title="Refresh company metrics">
+                        <i class="fas fa-calculator"></i>
                     </button>
-                    <button class="btn btn-warning me-2" onclick="populateCompaniesDatabase()">
-                        <i class="fas fa-database me-2"></i>Populate Companies DB
+                    <button class="btn btn-sm btn-outline-secondary" onclick="populateCompaniesDatabase()" title="Populate from invoices">
+                        <i class="fas fa-database"></i>
                     </button>
-                    <button class="btn btn-outline-primary" onclick="loadData()">
-                        <i class="fas fa-refresh me-2"></i>Refresh Data
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadData()" title="Refresh data">
+                        <i class="fas fa-refresh"></i>
                     </button>
                 </div>
             </div>
