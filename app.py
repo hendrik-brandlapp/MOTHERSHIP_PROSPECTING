@@ -7201,8 +7201,8 @@ def api_get_alerts():
         priority = request.args.get('priority')
         alert_type = request.args.get('type')
         
-        # Build query
-        query = supabase_client.table('customer_alerts').select('*')
+        # Build query - join with companies to get raw_company_data
+        query = supabase_client.table('customer_alerts').select('*, companies!inner(raw_company_data)')
         
         # Apply filters
         if status:
@@ -7218,8 +7218,14 @@ def api_get_alerts():
         # Execute query
         result = query.execute()
         
-        # Calculate summary
-        alerts = result.data
+        # Flatten the joined data
+        alerts = []
+        for alert in result.data:
+            # Extract raw_company_data from joined companies table
+            if 'companies' in alert and alert['companies']:
+                alert['raw_company_data'] = alert['companies'].get('raw_company_data')
+                del alert['companies']  # Remove nested object
+            alerts.append(alert)
         summary = {
             'total_alerts': len(alerts),
             'high_priority': len([a for a in alerts if a['priority'] == 'HIGH']),

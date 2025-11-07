@@ -939,13 +939,11 @@ function renderAlertCategoryTags() {
 function toggleAlertCategory(category) {
     const currentState = categoryStates[category];
     
-    // Cycle through states: included → excluded → removed (null) → included
+    // Toggle between included and excluded only (never remove)
     if (currentState === 'included') {
         categoryStates[category] = 'excluded';
-    } else if (currentState === 'excluded') {
-        categoryStates[category] = null; // Remove from view
     } else {
-        categoryStates[category] = 'included'; // Add back
+        categoryStates[category] = 'included';
     }
     
     renderAlertCategoryTags();
