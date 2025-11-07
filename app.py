@@ -45,7 +45,11 @@ except Exception:
 try:
     from route_optimizer import optimize_trip_route
 except Exception:
-    optimize_trip_route = None
+    try:
+        # Fallback to simple optimizer if ortools is not available
+        from simple_route_optimizer import optimize_trip_route
+    except Exception:
+        optimize_trip_route = None
 
 load_dotenv()
 
