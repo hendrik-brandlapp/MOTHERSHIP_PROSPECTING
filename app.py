@@ -9271,31 +9271,38 @@ def create_trip():
         if not destinations or len(destinations) == 0:
             return jsonify({'error': 'At least one destination is required'}), 400
         
-        # Try to optimize route if optimizer is available
+        # Try to optimize route with timeout protection
         if optimize_trip_route:
             try:
+                # Use simple optimizer without Google Maps API calls (faster, no memory issues)
+                # Don't pass google_maps_api_key to avoid external API calls on Render
                 optimization_result = optimize_trip_route(
                     start_location=start_location,
                     destinations=destinations,
-                    google_maps_api_key=GOOGLE_MAPS_API_KEY
+                    google_maps_api_key=None  # Use Haversine distance only
                 )
                 
                 if optimization_result.get('success'):
                     ordered_stops = optimization_result['ordered_stops']
-                    total_distance_km = optimization_result['total_distance_km']
-                    estimated_duration_minutes = optimization_result['estimated_duration_minutes']
+                    total_distance_km = optimization_result.get('total_distance_km', 0)
+                    estimated_duration_minutes = optimization_result.get('estimated_duration_minutes', len(destinations) * 30)
+                    print(f"✅ Route optimized: {total_distance_km}km, {estimated_duration_minutes}min")
                 else:
                     # Optimization failed, use simple order
+                    print(f"⚠️ Optimization failed: {optimization_result.get('error')}")
                     ordered_stops = destinations
                     total_distance_km = 0
                     estimated_duration_minutes = len(destinations) * 30
             except Exception as opt_error:
-                print(f"Route optimization failed: {opt_error}, using simple order")
+                print(f"⚠️ Route optimization error: {opt_error}, using simple order")
+                import traceback
+                traceback.print_exc()
                 ordered_stops = destinations
                 total_distance_km = 0
                 estimated_duration_minutes = len(destinations) * 30
         else:
             # No optimizer available, use simple order
+            print("⚠️ No route optimizer available, using simple order")
             ordered_stops = destinations
             total_distance_km = 0
             estimated_duration_minutes = len(destinations) * 30
