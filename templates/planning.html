@@ -291,8 +291,10 @@ async function loadCompaniesData() {
             console.log(`📦 Cache contains ${companies.length} companies`);
             showToast(`Loaded ${companies.length} companies from cache`, 'success');
         } else {
-            console.log('📡 Making API call to /api/supabase-companies-planning');
-            const response = await fetch('/api/supabase-companies-planning');
+            console.log('📡 Fetching companies directly from Supabase');
+            
+            // Use the existing Supabase companies endpoint from data page
+            const response = await fetch('/api/supabase-companies');
             console.log('📡 Response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -304,7 +306,7 @@ async function loadCompaniesData() {
                 throw new Error(data.error);
             }
             
-            companies = data.result?.data || [];
+            companies = data.companies || [];
             
             // Debug: Log first company structure to understand available fields
             if (companies.length > 0) {

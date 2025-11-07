@@ -91,10 +91,21 @@
                                 <input type="text" class="form-control" id="searchInput" placeholder="Search company name..." onkeyup="filterAlerts()">
                             </div>
                             <div class="col-md-3">
-                                <label class="form-label fw-bold"><i class="fas fa-tags me-1"></i>Category Filters</label>
-                                <div class="category-tags-filter" id="category-tags-filter">
-                                    <span class="text-muted small">Loading...</span>
+                                <label class="form-label fw-bold"><i class="fas fa-tags me-1"></i>Categories</label>
+                                <div class="searchable-dropdown-wrapper">
+                                    <div class="dropdown-trigger-modern" id="alert-category-dropdown-trigger">
+                                        <span class="trigger-text text-muted">All categories</span>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                    <div class="dropdown-menu-modern" id="alert-category-dropdown-menu">
+                                        <div class="dropdown-search-box">
+                                            <i class="fas fa-search"></i>
+                                            <input type="text" placeholder="Search categories..." id="alert-category-search-input">
+                                        </div>
+                                        <div class="dropdown-options-list" id="alert-category-dropdown-options"></div>
+                                    </div>
                                 </div>
+                                <div class="selected-tags mt-2" id="alert-category-selected-tags"></div>
                             </div>
                             <div class="col-md-2">
                                 <label class="form-label fw-bold"><i class="fas fa-filter me-1"></i>Priority</label>
@@ -907,35 +918,129 @@ function populateAlertCategories() {
 }
 
 function renderAlertCategoryTags() {
-    const container = document.getElementById('category-tags-filter');
-    if (!container) return;
+    // Render dropdown options
+    const optionsContainer = document.getElementById('alert-category-dropdown-options');
+    const selectedContainer = document.getElementById('alert-category-selected-tags');
+    if (!optionsContainer) return;
     
     const categories = Object.keys(categoryStates).sort();
     
     if (categories.length === 0) {
-        container.innerHTML = '<span class="text-muted small">No categories found</span>';
+        optionsContainer.innerHTML = '<div class="p-3 text-center text-muted small">No categories found</div>';
         return;
     }
     
-    // Clear and recreate
-    container.innerHTML = '';
-    
+    // Render options in dropdown
+    optionsContainer.innerHTML = '';
     categories.forEach(category => {
         const state = categoryStates[category];
-        if (state === null) return;
+        const stateClass = state === 'excluded' ? 'excluded' : 'included';
+        const icon = state === 'excluded' ? 'times-circle' : 'check-circle';
         
-        const stateClass = state === 'included' ? 'included' : 'excluded';
-        const icon = state === 'included' ? 'check-circle' : 'times-circle';
-        
-        const tag = document.createElement('span');
-        tag.className = `category-tag ${stateClass}`;
-        tag.innerHTML = `
-            <i class="fas fa-${icon}"></i>
-            ${escapeHtml(category)}
+        const option = document.createElement('div');
+        option.className = `dropdown-option-item ${stateClass}`;
+        option.innerHTML = `
+            <div class="option-checkbox">
+                <i class="fas fa-${icon}"></i>
+            </div>
+            <span class="option-label">${escapeHtml(category)}</span>
         `;
-        tag.onclick = () => toggleAlertCategory(category);
+        option.onclick = () => {
+            toggleAlertCategory(category);
+        };
         
-        container.appendChild(tag);
+        optionsContainer.appendChild(option);
+    });
+    
+    // Render selected tags (only show excluded ones to save space)
+    const excludedCategories = categories.filter(cat => categoryStates[cat] === 'excluded');
+    
+    selectedContainer.innerHTML = '';
+    if (excludedCategories.length > 0) {
+        excludedCategories.forEach(category => {
+            const tag = document.createElement('span');
+            tag.className = 'selected-tag excluded';
+            tag.innerHTML = `
+                <span>Excluding: ${escapeHtml(category)}</span>
+                <i class="fas fa-times"></i>
+            `;
+            tag.onclick = () => toggleAlertCategory(category);
+            selectedContainer.appendChild(tag);
+        });
+    }
+    
+    // Update trigger text
+    const trigger = document.getElementById('alert-category-dropdown-trigger');
+    if (!trigger) return;
+    
+    const triggerText = trigger.querySelector('.trigger-text');
+    const excludedCount = excludedCategories.length;
+    
+    if (excludedCount === 0) {
+        triggerText.textContent = 'All categories';
+        triggerText.className = 'trigger-text text-muted';
+    } else {
+        triggerText.textContent = `${excludedCount} excluded`;
+        triggerText.className = 'trigger-text text-danger';
+    }
+}
+
+// Initialize alerts dropdown toggle
+document.addEventListener('DOMContentLoaded', function() {
+    const trigger = document.getElementById('alert-category-dropdown-trigger');
+    const menu = document.getElementById('alert-category-dropdown-menu');
+    const searchInput = document.getElementById('alert-category-search-input');
+    
+    if (trigger && menu) {
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menu.classList.toggle('show');
+            if (menu.classList.contains('show') && searchInput) {
+                searchInput.focus();
+            }
+        });
+        
+        document.addEventListener('click', () => {
+            menu.classList.remove('show');
+        });
+        
+        menu.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            filterAlertCategoryDropdown(e.target.value);
+        });
+    }
+});
+
+function filterAlertCategoryDropdown(searchTerm) {
+    const optionsContainer = document.getElementById('alert-category-dropdown-options');
+    const categories = Object.keys(categoryStates).sort();
+    
+    const filtered = categories.filter(cat => 
+        cat.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    optionsContainer.innerHTML = '';
+    filtered.forEach(category => {
+        const state = categoryStates[category];
+        const stateClass = state === 'excluded' ? 'excluded' : 'included';
+        const icon = state === 'excluded' ? 'times-circle' : 'check-circle';
+        
+        const option = document.createElement('div');
+        option.className = `dropdown-option-item ${stateClass}`;
+        option.innerHTML = `
+            <div class="option-checkbox">
+                <i class="fas fa-${icon}"></i>
+            </div>
+            <span class="option-label">${escapeHtml(category)}</span>
+        `;
+        option.onclick = () => toggleAlertCategory(category);
+        
+        optionsContainer.appendChild(option);
     });
 }
 
