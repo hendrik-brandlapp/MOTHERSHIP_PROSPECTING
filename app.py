@@ -9155,16 +9155,20 @@ def api_update_prospect_notes(prospect_id):
 # ========================================
 
 @app.route('/trips')
-@login_required
 def trips_page():
     """Render trips management page"""
-    return render_template('trips.html')
+    if not is_token_valid():
+        return redirect(url_for('index'))
+    
+    return render_template('trips.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
 
 @app.route('/api/trips', methods=['GET'])
-@login_required
 def get_trips():
     """Get all trips"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
     try:
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
@@ -9198,9 +9202,11 @@ def get_trips():
 
 
 @app.route('/api/trips/<trip_id>', methods=['GET'])
-@login_required
 def get_trip(trip_id):
     """Get a single trip with all its stops"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
     try:
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
@@ -9229,9 +9235,11 @@ def get_trip(trip_id):
 
 
 @app.route('/api/trips', methods=['POST'])
-@login_required
 def create_trip():
     """Create a new trip with optimized route"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
     try:
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
@@ -9327,9 +9335,11 @@ def create_trip():
 
 
 @app.route('/api/trips/<trip_id>', methods=['PUT'])
-@login_required
 def update_trip(trip_id):
     """Update trip details"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
     try:
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
@@ -9364,9 +9374,11 @@ def update_trip(trip_id):
 
 
 @app.route('/api/trips/<trip_id>', methods=['DELETE'])
-@login_required
 def delete_trip(trip_id):
     """Delete a trip (and all its stops via CASCADE)"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
     try:
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
@@ -9384,9 +9396,11 @@ def delete_trip(trip_id):
 
 
 @app.route('/api/trips/<trip_id>/stops/<stop_id>', methods=['DELETE'])
-@login_required
 def delete_trip_stop(trip_id, stop_id):
     """Delete a stop from a trip and reorder remaining stops"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
     try:
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
@@ -9424,9 +9438,11 @@ def delete_trip_stop(trip_id, stop_id):
 
 
 @app.route('/api/trips/<trip_id>/optimize', methods=['POST'])
-@login_required
 def reoptimize_trip(trip_id):
     """Re-optimize an existing trip's route"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
     try:
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
