@@ -132,6 +132,16 @@
         background: var(--accent-subtle);
         border-color: var(--accent);
     }
+    
+    .list-item.no-coordinates {
+        opacity: 0.6;
+        border-color: #fbbf24;
+        background: #fffbeb;
+    }
+    
+    .list-item.no-coordinates:hover {
+        opacity: 0.8;
+    }
 
     .list-item-title {
         font-weight: 600;
@@ -195,8 +205,15 @@
     <div class="planning-sidebar">
         <!-- Header -->
         <div class="planning-sidebar-header">
-            <h2 class="page-title mb-2">Planning</h2>
-            <p class="page-subtitle mb-0">Select locations to visualize</p>
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h2 class="page-title mb-2">Planning</h2>
+                    <p class="page-subtitle mb-0">Select locations to visualize</p>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="refreshData()" title="Refresh companies data">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
         </div>
 
         <!-- Content -->
@@ -420,6 +437,11 @@ async function loadCompaniesData() {
                 console.log('📋 Available fields:', Object.keys(companies[0]));
                 console.log('🏠 Address field:', companies[0].address);
                 console.log('🏠 Sample address:', getCompanyAddress(companies[0]));
+                console.log('📍 Coordinates:', companies[0].latitude, companies[0].longitude);
+                
+                // Count companies with coordinates
+                const withCoords = companies.filter(c => c.latitude && c.longitude).length;
+                console.log(`📊 Companies with coordinates: ${withCoords}/${companies.length}`);
             }
             
             // Cache the data
@@ -1034,10 +1056,14 @@ function displayCompaniesList() {
         const address = getCompanyAddress(company);
         const isSelected = selectedCompanies.has(company.id);
         const isOnMap = markers.some(item => item.company && item.company.id === company.id);
+        const hasCoordinates = company.latitude && company.longitude;
         
         return `
-            <div class="list-item ${isSelected ? 'selected' : ''}" onclick="toggleCompanySelection(${company.id}); event.stopPropagation();">
-                <div class="list-item-title">${company.name || 'Unnamed Company'}</div>
+            <div class="list-item ${isSelected ? 'selected' : ''} ${!hasCoordinates ? 'no-coordinates' : ''}" onclick="toggleCompanySelection(${company.id}); event.stopPropagation();">
+                <div class="list-item-title">
+                    ${company.name || 'Unnamed Company'}
+                    ${hasCoordinates ? '<i class="fas fa-map-marker-alt text-success ms-1" title="Has GPS coordinates"></i>' : '<i class="fas fa-map-marker-alt text-muted ms-1" title="No GPS coordinates"></i>'}
+                </div>
                 <div class="list-item-meta">
                     <i class="fas fa-map-marker-alt me-1"></i>${address}
                 </div>
@@ -1072,10 +1098,14 @@ function displayProspectsList() {
         const address = getProspectAddress(prospect);
         const isSelected = selectedProspects.has(prospect.id);
         const isOnMap = markers.some(item => item.prospect && item.prospect.id === prospect.id);
+        const hasCoordinates = prospect.latitude && prospect.longitude;
         
         return `
-            <div class="list-item ${isSelected ? 'selected' : ''}" onclick="toggleProspectSelection('${prospect.id}'); event.stopPropagation();">
-                <div class="list-item-title">${prospect.name || prospect.company_name || 'Unnamed Prospect'}</div>
+            <div class="list-item ${isSelected ? 'selected' : ''} ${!hasCoordinates ? 'no-coordinates' : ''}" onclick="toggleProspectSelection('${prospect.id}'); event.stopPropagation();">
+                <div class="list-item-title">
+                    ${prospect.name || prospect.company_name || 'Unnamed Prospect'}
+                    ${hasCoordinates ? '<i class="fas fa-map-marker-alt text-success ms-1" title="Has GPS coordinates"></i>' : '<i class="fas fa-map-marker-alt text-muted ms-1" title="No GPS coordinates"></i>'}
+                </div>
                 <div class="list-item-meta">
                     <i class="fas fa-map-marker-alt me-1"></i>${address}
                 </div>
@@ -1139,25 +1169,32 @@ function toggleProspectSelection(prospectId) {
     displayProspectsList(); // Refresh the list to show updated checkboxes
 }
 
-// Refresh companies cache
-async function refreshCompaniesCache() {
+// Refresh all data (clear cache and reload)
+async function refreshData() {
     try {
-        console.log('🔄 Refreshing companies cache...');
-        showToast('Refreshing companies data...', 'info');
+        console.log('🔄 Refreshing all data...');
+        showToast('Refreshing data from database...', 'info');
         
-        // Clear cache
+        // Clear all caches
         sessionStorage.removeItem(COMPANIES_CACHE_KEY);
         sessionStorage.removeItem(COMPANIES_CACHE_TIME_KEY);
+        sessionStorage.removeItem(PROSPECTS_CACHE_KEY);
+        sessionStorage.removeItem(PROSPECTS_CACHE_TIME_KEY);
         
-        // Force reload companies
+        // Force reload companies and prospects
         await loadCompaniesData();
         
-        showToast('Companies cache refreshed successfully', 'success');
+        showToast('Data refreshed successfully!', 'success');
         
     } catch (error) {
-        console.error('Error refreshing cache:', error);
-        showToast('Failed to refresh cache: ' + error.message, 'error');
+        console.error('Error refreshing data:', error);
+        showToast('Failed to refresh data: ' + error.message, 'error');
     }
+}
+
+// Legacy function for backward compatibility
+async function refreshCompaniesCache() {
+    await refreshData();
 }
 
 // Utility function for debouncing
@@ -1244,38 +1281,62 @@ async function createTrip() {
     createBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
     
     try {
-        // Collect all selected locations
+        // Collect all selected locations WITH VALID COORDINATES
         const locations = [];
+        let skippedCount = 0;
         
-        // Add selected companies
+        // Add selected companies (only those with coordinates)
         selectedCompanies.forEach(companyId => {
             const company = companies.find(c => c.id === companyId);
             if (company) {
-                locations.push({
-                    type: 'company',
-                    id: company.id,
-                    name: company.name,
-                    address: getCompanyAddress(company),
-                    latitude: company.latitude || null,
-                    longitude: company.longitude || null
-                });
+                if (company.latitude && company.longitude) {
+                    locations.push({
+                        type: 'company',
+                        id: company.id,
+                        name: company.name,
+                        address: getCompanyAddress(company),
+                        latitude: company.latitude,
+                        longitude: company.longitude
+                    });
+                } else {
+                    console.warn(`Skipping ${company.name} - no coordinates`);
+                    skippedCount++;
+                }
             }
         });
         
-        // Add selected prospects
+        // Add selected prospects (only those with coordinates)
         selectedProspects.forEach(prospectId => {
             const prospect = prospects.find(p => p.id == prospectId);
             if (prospect) {
-                locations.push({
-                    type: 'prospect',
-                    id: prospect.id,
-                    name: prospect.name || prospect.company_name,
-                    address: getProspectAddress(prospect),
-                    latitude: prospect.latitude || null,
-                    longitude: prospect.longitude || null
-                });
+                if (prospect.latitude && prospect.longitude) {
+                    locations.push({
+                        type: 'prospect',
+                        id: prospect.id,
+                        name: prospect.name || prospect.company_name,
+                        address: getProspectAddress(prospect),
+                        latitude: prospect.latitude,
+                        longitude: prospect.longitude
+                    });
+                } else {
+                    console.warn(`Skipping ${prospect.name || prospect.company_name} - no coordinates`);
+                    skippedCount++;
+                }
             }
         });
+        
+        // Check if we have any valid locations
+        if (locations.length === 0) {
+            showToast('None of the selected locations have GPS coordinates. Please geocode them first.', 'error');
+            createBtn.disabled = false;
+            createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
+            return;
+        }
+        
+        // Warn if some were skipped
+        if (skippedCount > 0) {
+            showToast(`${skippedCount} location(s) skipped (no coordinates). Creating trip with ${locations.length} locations.`, 'warning');
+        }
         
         // Prepare start location (use first selected location or default to Brussels)
         const startLocation = locations.length > 0 && locations[0].latitude && locations[0].longitude 
