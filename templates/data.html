@@ -743,7 +743,6 @@ async function populateCompaniesDatabase() {
 function filterCompanies() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const minRevenue = parseFloat(document.getElementById('minRevenue').value) || 0;
-    const minInvoices = parseInt(document.getElementById('minInvoices').value) || 0;
     
     filteredCompanies = allCompanies.filter(company => {
         // Category filtering
@@ -778,9 +777,8 @@ function filterCompanies() {
             if (!searchableText.includes(searchTerm)) return false;
         }
         
-        // Revenue and invoice filters
+        // Revenue filter
         if (company.total_revenue < minRevenue) return false;
-        if (company.invoice_count < minInvoices) return false;
         
         return true;
     });
