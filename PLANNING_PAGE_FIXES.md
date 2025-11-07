@@ -8,22 +8,24 @@
 - **Result**: Clean single-container layout with just the sidebar and map
 
 ### 2. ✅ Fixed Address Display ("No address available")
-- **Problem**: The `getCompanyAddress()` function was looking for `invoice_address` nested object, but the API returns address fields directly on the company object
-- **Solution**: Updated address fetching functions to use direct fields:
+- **Problem**: The `getCompanyAddress()` function was looking for direct fields like `company.address_line1`, but the API returns address fields in a nested `address` object
+- **Solution**: Updated address fetching functions to use the nested address object (matching the data page implementation):
   ```javascript
   // Before (incorrect):
-  company.invoice_address.address_line1
-  
-  // After (correct):
   company.address_line1
   company.city
   company.post_code
-  company.country_name
+  
+  // After (correct):
+  company.address.street
+  company.address.city
+  company.address.postal_code
+  company.address.country
   ```
 - **Updated Functions**:
-  - `getCompanyAddress()` - Now checks direct fields first, then falls back to nested `address` object
-  - `getCompanyRegion()` - Now uses `company.city` and `company.country_name` directly
-  - `getProspectAddress()` - Simplified to handle prospect address structures
+  - `getCompanyAddress()` - Now uses `company.address` object, with fallback to `raw_company_data.invoice_address`
+  - `getCompanyRegion()` - Now uses `company.address.city` and `company.address.country`
+  - Both functions now match the data page implementation exactly
 
 ### 3. ✅ Automatic Visualization (No "Visualize" Button Needed)
 - **Problem**: Users had to manually click "Visualize" after selecting items
@@ -89,15 +91,30 @@ The planning page now correctly uses the API response structure from `/api/compa
 {
   "id": 123,
   "name": "Company Name",
-  "address_line1": "Street Address",
-  "address_line2": "Suite/Apt",
-  "city": "Brussels",
-  "post_code": "1000",
-  "country_name": "Belgium",
   "vat_number": "BE0123456789",
+  "address": {
+    "street": "Street Address",
+    "street2": "Suite/Apt",
+    "city": "Brussels",
+    "postal_code": "1000",
+    "country": "Belgium"
+  },
+  "raw_company_data": {
+    "invoice_address": {
+      "address_line1": "Street Address",
+      "post_code": "1000",
+      "city": "Brussels",
+      "country": { "name": "Belgium" }
+    }
+  },
   ...
 }
 ```
+
+**Key Points:**
+- Address data is in the nested `address` object
+- Fallback to `raw_company_data.invoice_address` for compatibility
+- Matches the implementation used in the data page
 
 ## Notes
 
