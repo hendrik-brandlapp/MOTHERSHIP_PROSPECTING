@@ -440,6 +440,62 @@
     position: relative;
     height: 80px;
 }
+
+/* Category Tag Filtering */
+.category-tags-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    min-height: 48px;
+    align-items: center;
+}
+
+.category-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.category-tag.included {
+    background: #d1f5d3;
+    border: 2px solid #10b981;
+    color: #065f46;
+}
+
+.category-tag.excluded {
+    background: #fee2e2;
+    border: 2px solid #ef4444;
+    color: #991b1b;
+    opacity: 0.6;
+}
+
+.category-tag:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.category-tag i {
+    font-size: 0.75rem;
+}
+
+.category-tag.included i {
+    color: #10b981;
+}
+
+.category-tag.excluded i {
+    color: #ef4444;
+}
 </style>
 
 <script>
