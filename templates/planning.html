@@ -259,148 +259,6 @@
     </div>
 </div>
 
-        <!-- Bottom Row: Selection Controls and Details -->
-        <div class="col-lg-7">
-            <!-- Selection Summary Card -->
-            <div class="card mb-3" id="selection-summary-card" style="display: none;">
-                <div class="card-body p-3">
-                    <h6 class="card-title mb-2">
-                        <i class="fas fa-chart-bar me-2"></i>Selection Summary
-                    </h6>
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <div class="text-center p-2 bg-primary bg-opacity-10 rounded">
-                                <div class="fw-bold text-primary" id="summary-companies-selected">0</div>
-                                <small class="text-muted">Companies</small>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="text-center p-2 bg-success bg-opacity-10 rounded">
-                                <div class="fw-bold text-success" id="summary-prospects-selected">0</div>
-                                <small class="text-muted">Prospects</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Company & Prospect Selection -->
-            <div class="card">
-                <div class="card-header bg-white border-bottom">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">
-                            <i class="fas fa-layer-group me-2"></i>Select Items
-                        </h6>
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-primary btn-sm" onclick="selectAllItems()">
-                                <i class="fas fa-check-double me-1"></i>All
-                            </button>
-                            <button class="btn btn-outline-secondary btn-sm" onclick="deselectAllItems()">
-                                <i class="fas fa-times me-1"></i>None
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <!-- Tabs -->
-                    <ul class="nav nav-tabs nav-fill border-0" id="selection-tabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="companies-tab" data-bs-toggle="pill" data-bs-target="#companies-panel" type="button" role="tab">
-                                <i class="fas fa-building me-1"></i>Companies 
-                                <span class="badge bg-primary ms-1" id="companies-count">0</span>
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="prospects-tab" data-bs-toggle="pill" data-bs-target="#prospects-panel" type="button" role="tab">
-                                <i class="fas fa-search me-1"></i>Prospects 
-                                <span class="badge bg-success ms-1" id="prospects-count">0</span>
-                            </button>
-                        </li>
-                    </ul>
-                    
-                    <!-- Tab Content -->
-                    <div class="tab-content" id="selection-tab-content">
-                        <!-- Companies Tab -->
-                        <div class="tab-pane fade show active p-3" id="companies-panel" role="tabpanel">
-                            <!-- Search and Filter -->
-                            <div class="row g-2 mb-3">
-                                <div class="col-7">
-                                    <input type="text" class="form-control form-control-sm" id="company-filter" placeholder="Search companies...">
-                                </div>
-                                <div class="col-5">
-                                    <select class="form-select form-select-sm" id="region-filter">
-                                        <option value="">All Regions</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <!-- Selection Status -->
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <small class="text-muted">
-                                    <span id="selected-companies-count">0</span> of <span id="total-companies">0</span> selected
-                                </small>
-                                <small class="text-muted">
-                                    <i class="fas fa-map-marker-alt text-success me-1"></i><span id="map-markers-count">0</span> on map
-                                </small>
-                            </div>
-                            
-                            <!-- Companies List -->
-                            <div id="companies-list" style="max-height: 300px; overflow-y: auto;" class="border rounded p-2">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fas fa-download fa-2x mb-2"></i>
-                                    <p class="mb-0">Click "Load Data" to start</p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Prospects Tab -->
-                        <div class="tab-pane fade p-3" id="prospects-panel" role="tabpanel">
-                            <!-- Search -->
-                            <div class="mb-3">
-                                <input type="text" class="form-control form-control-sm" id="prospect-filter" placeholder="Search prospects...">
-                            </div>
-                            
-                            <!-- Selection Status -->
-                            <div class="mb-2">
-                                <small class="text-muted">
-                                    <span id="selected-prospects-count">0</span> of <span id="total-prospects">0</span> selected
-                                </small>
-                            </div>
-                            
-                            <!-- Prospects List -->
-                            <div id="prospects-list" style="max-height: 300px; overflow-y: auto;" class="border rounded p-2">
-                                <div class="text-center text-muted py-4">
-                                    <i class="fas fa-download fa-2x mb-2"></i>
-                                    <p class="mb-0">Load data to see prospects</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Right Side: Details Panel -->
-        <div class="col-lg-5">
-            <div class="card">
-                <div class="card-header bg-white border-bottom">
-                    <h6 class="mb-0">
-                        <i class="fas fa-info-circle me-2"></i>Details
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div id="company-details">
-                        <div class="text-center text-muted py-4">
-                            <i class="fas fa-mouse-pointer fa-2x mb-3"></i>
-                            <p class="mb-0">Select companies/prospects and click "Visualize" to see them on the map</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 
 {% endblock %}
 
@@ -435,21 +293,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-load companies and prospects data on page load
     loadCompaniesData();
     
-    // Filter input event listeners
-    const companyFilter = document.getElementById('company-filter');
-    const regionFilter = document.getElementById('region-filter');
-    const prospectFilter = document.getElementById('prospect-filter');
-    
-    if (companyFilter) {
-        companyFilter.addEventListener('input', debounce(filterCompanies, 300));
-    }
-    
-    if (regionFilter) {
-        regionFilter.addEventListener('change', filterCompanies);
-    }
-    
-    if (prospectFilter) {
-        prospectFilter.addEventListener('input', debounce(filterProspects, 300));
+    // Search input event listener for sidebar
+    const sidebarSearch = document.getElementById('sidebar-search');
+    if (sidebarSearch) {
+        sidebarSearch.addEventListener('input', debounce(handleSidebarSearch, 300));
     }
     
     // Auto-load companies if cached data exists
@@ -536,7 +383,6 @@ async function loadCompaniesData() {
         
         // Initialize filtered companies and populate UI
         filteredCompanies = [...companies];
-        populateRegionFilter();
         displayCompaniesList();
         
         // Also load prospects
@@ -668,83 +514,134 @@ async function addCompaniesToMap(companiesToAdd = companies) {
     }
 }
 
-// Get company address from invoice_address field
+// Get company address - use fields directly from company object (from API)
 function getCompanyAddress(company) {
-    if (company.invoice_address) {
-        const addr = company.invoice_address;
-        const addressParts = [
-            addr.address_line1 || addr.address1 || addr.street,
-            addr.address_line2 || addr.address2,
-            addr.city || addr.town,
-            addr.post_code || addr.postal_code || addr.zip_code || addr.zip,
-            addr.country?.name || addr.country_name || addr.country
+    // Try direct fields first (from companies API)
+    const addressParts = [
+        company.address_line1,
+        company.address_line2,
+        company.city,
+        company.post_code,
+        company.country_name || company.country?.name
+    ].filter(part => part && part.trim());
+    
+    if (addressParts.length > 0) {
+        return addressParts.join(', ');
+    }
+    
+    // Try nested address object as fallback
+    if (company.address) {
+        const addr = company.address;
+        const nestedParts = [
+            addr.street || addr.address_line1,
+            addr.street2 || addr.address_line2,
+            addr.city,
+            addr.postal_code || addr.post_code,
+            addr.country
         ].filter(part => part && part.trim());
         
-        return addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
+        if (nestedParts.length > 0) {
+            return nestedParts.join(', ');
+        }
     }
+    
     return 'No address available';
 }
 
 // Get company region (city or country)
 function getCompanyRegion(company) {
-    if (company.invoice_address) {
-        const addr = company.invoice_address;
-        return addr.city || addr.town || addr.country?.name || addr.country_name || addr.country || 'Unknown Region';
+    // Try direct fields first
+    const region = company.city || company.country_name || company.country?.name || 'Unknown Region';
+    
+    // Try nested address object as fallback
+    if (region === 'Unknown Region' && company.address) {
+        return company.address.city || company.address.country || 'Unknown Region';
     }
-    return 'Unknown Region';
+    
+    return region;
 }
 
-// Populate region filter dropdown
-function populateRegionFilter() {
-    const regionFilter = document.getElementById('region-filter');
-    if (!regionFilter) return;
-    
-    // Get unique regions
-    const regions = [...new Set(companies.map(company => getCompanyRegion(company)))].sort();
-    
-    // Clear existing options (except "All Regions")
-    regionFilter.innerHTML = '<option value="">All Regions</option>';
-    
-    // Add region options
-    regions.forEach(region => {
-        if (region && region !== 'Unknown Region') {
-            const option = document.createElement('option');
-            option.value = region;
-            option.textContent = region;
-            regionFilter.appendChild(option);
-        }
-    });
-}
 
-// Filter companies based on search and region
-function filterCompanies() {
-    const searchTerm = document.getElementById('company-filter').value.toLowerCase().trim();
-    const selectedRegion = document.getElementById('region-filter').value;
+// Handle sidebar search
+function handleSidebarSearch() {
+    const searchTerm = document.getElementById('sidebar-search').value.toLowerCase().trim();
     
-    filteredCompanies = companies.filter(company => {
-        // Text search
-        const matchesSearch = !searchTerm || 
-            company.name?.toLowerCase().includes(searchTerm) ||
-            company.vat_number?.toLowerCase().includes(searchTerm) ||
-            getCompanyAddress(company).toLowerCase().includes(searchTerm);
-        
-        // Region filter
-        const matchesRegion = !selectedRegion || getCompanyRegion(company) === selectedRegion;
-        
-        return matchesSearch && matchesRegion;
-    });
+    // Check which tab is active
+    const companiesListVisible = document.getElementById('companies-list').style.display !== 'none';
     
-    displayCompaniesList();
+    if (companiesListVisible) {
+        // Filter companies
+        filteredCompanies = companies.filter(company => {
+            return !searchTerm || 
+                company.name?.toLowerCase().includes(searchTerm) ||
+                company.vat_number?.toLowerCase().includes(searchTerm) ||
+                getCompanyAddress(company).toLowerCase().includes(searchTerm);
+        });
+        displayCompaniesList();
+    } else {
+        // Filter prospects
+        filteredProspects = prospects.filter(prospect => {
+            return !searchTerm || 
+                prospect.name?.toLowerCase().includes(searchTerm) ||
+                prospect.company_name?.toLowerCase().includes(searchTerm) ||
+                prospect.description?.toLowerCase().includes(searchTerm) ||
+                getProspectAddress(prospect).toLowerCase().includes(searchTerm);
+        });
+        displayProspectsList();
+    }
+    
     updateSelectionCounts();
 }
 
-// Toggle company selection
+// Switch between companies and prospects tabs
+function switchTab(tabName) {
+    const companiesList = document.getElementById('companies-list');
+    const prospectsList = document.getElementById('prospects-list');
+    const tabCompanies = document.getElementById('tab-companies');
+    const tabProspects = document.getElementById('tab-prospects');
+    
+    // Clear search when switching tabs
+    const searchInput = document.getElementById('sidebar-search');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    
+    if (tabName === 'companies') {
+        // Show companies
+        companiesList.style.display = 'block';
+        prospectsList.style.display = 'none';
+        tabCompanies.classList.add('active');
+        tabProspects.classList.remove('active');
+        
+        // Reset filter
+        filteredCompanies = [...companies];
+        displayCompaniesList();
+    } else {
+        // Show prospects
+        companiesList.style.display = 'none';
+        prospectsList.style.display = 'block';
+        tabCompanies.classList.remove('active');
+        tabProspects.classList.add('active');
+        
+        // Reset filter
+        filteredProspects = [...prospects];
+        displayProspectsList();
+    }
+    
+    updateSelectionCounts();
+}
+
+// Toggle company selection with automatic visualization
 function toggleCompanySelection(companyId) {
     if (selectedCompanies.has(companyId)) {
         selectedCompanies.delete(companyId);
     } else {
         selectedCompanies.add(companyId);
     }
+    
+    // Auto-visualize on map
+    visualizeSelected();
+    
     updateSelectionCounts();
 }
 
@@ -787,54 +684,35 @@ function deselectAllCompanies() {
 
 // Update selection counts
 function updateSelectionCounts() {
-    // Company counts
-    const selectedCompaniesCount = document.getElementById('selected-companies-count');
-    const totalCompanies = document.getElementById('total-companies');
-    const companiesCount = document.getElementById('companies-count');
+    // Update badge counts in tabs
+    const companiesCountBadge = document.getElementById('companies-count');
+    const prospectsCountBadge = document.getElementById('prospects-count');
+    const selectedCountBadge = document.getElementById('selected-count');
     
-    // Prospect counts
-    const selectedProspectsCount = document.getElementById('selected-prospects-count');
-    const totalProspects = document.getElementById('total-prospects');
-    const prospectsCount = document.getElementById('prospects-count');
+    if (companiesCountBadge) {
+        companiesCountBadge.textContent = companies.length;
+    }
     
-    // Map counts
-    const mapMarkersCount = document.getElementById('map-markers-count');
-    const mapMarkersCountDisplay = document.getElementById('map-markers-count-display');
+    if (prospectsCountBadge) {
+        prospectsCountBadge.textContent = prospects.length;
+    }
     
-    // Summary elements
-    const summaryCompaniesSelected = document.getElementById('summary-companies-selected');
-    const summaryProspectsSelected = document.getElementById('summary-prospects-selected');
-    const selectionSummaryCard = document.getElementById('selection-summary-card');
-    
-    // Update counts
-    if (selectedCompaniesCount) selectedCompaniesCount.textContent = selectedCompanies.size;
-    if (totalCompanies) totalCompanies.textContent = filteredCompanies.length;
-    if (companiesCount) companiesCount.textContent = companies.length;
-    
-    if (selectedProspectsCount) selectedProspectsCount.textContent = selectedProspects.size;
-    if (totalProspects) totalProspects.textContent = filteredProspects.length;
-    if (prospectsCount) prospectsCount.textContent = prospects.length;
-    
-    if (mapMarkersCount) mapMarkersCount.textContent = markers.length;
-    if (mapMarkersCountDisplay) mapMarkersCountDisplay.textContent = markers.length;
-    
-    // Update summary card
-    if (summaryCompaniesSelected) summaryCompaniesSelected.textContent = selectedCompanies.size;
-    if (summaryProspectsSelected) summaryProspectsSelected.textContent = selectedProspects.size;
-    
-    // Show/hide selection summary based on whether anything is selected
-    const hasSelection = selectedCompanies.size > 0 || selectedProspects.size > 0;
-    if (selectionSummaryCard) {
-        selectionSummaryCard.style.display = hasSelection ? 'block' : 'none';
+    if (selectedCountBadge) {
+        const totalSelected = selectedCompanies.size + selectedProspects.size;
+        selectedCountBadge.textContent = totalSelected;
     }
 }
 
 // Visualize selected companies and prospects on map
-async function visualizeSelectedCompanies() {
+async function visualizeSelected() {
     const totalSelected = selectedCompanies.size + selectedProspects.size;
     
+    // Clear existing markers first
+    clearMarkers();
+    
     if (totalSelected === 0) {
-        showToast('Please select at least one company or prospect to visualize', 'warning');
+        // If nothing selected, just clear the map silently
+        updateSelectionCounts();
         return;
     }
     
@@ -846,7 +724,6 @@ async function visualizeSelectedCompanies() {
     
     try {
         console.log(`🗺️ Visualizing ${selectedCompanies.size} companies and ${selectedProspects.size} prospects...`);
-        showToast(`Adding ${totalSelected} items to map...`, 'info');
         
         // Get selected companies and prospects with null checks
         const companiesToVisualize = companies.filter(company => company && company.id && selectedCompanies.has(company.id));
@@ -871,12 +748,15 @@ async function visualizeSelectedCompanies() {
         displayProspectsList();
         updateSelectionCounts();
         
-        showToast(`${markers.length} items added to map`, 'success');
-        
     } catch (error) {
         console.error('Error visualizing items:', error);
         showToast('Failed to visualize items: ' + error.message, 'error');
     }
+}
+
+// Legacy function for backward compatibility
+async function visualizeSelectedCompanies() {
+    await visualizeSelected();
 }
 
 // Clear all markers from map
@@ -1086,9 +966,9 @@ function displayCompaniesList() {
     if (filteredCompanies.length === 0) {
         console.log('⚠️ No companies to display');
         container.innerHTML = `
-            <div class="text-center text-muted py-4">
-                <i class="fas fa-building fa-3x mb-3"></i>
-                <p>No companies match the current filters</p>
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-building fa-3x mb-3 opacity-25"></i>
+                <p>No companies found</p>
             </div>
         `;
         return;
@@ -1098,84 +978,19 @@ function displayCompaniesList() {
         const address = getCompanyAddress(company);
         const isSelected = selectedCompanies.has(company.id);
         const isOnMap = markers.some(item => item.company && item.company.id === company.id);
-        const region = getCompanyRegion(company);
         
         return `
-            <div class="company-item border-bottom py-2" data-company-id="${company.id}">
-                <div class="d-flex align-items-start">
-                    <div class="form-check me-2 mt-1">
-                        <input class="form-check-input" type="checkbox" 
-                               id="company-${company.id}" 
-                               ${isSelected ? 'checked' : ''}
-                               onchange="toggleCompanySelection(${company.id})">
-                    </div>
-                    <div class="flex-grow-1" onclick="showCompanyDetails(${company.id})">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h6 class="mb-1">${company.name || 'Unnamed Company'}</h6>
-                                <small class="text-muted d-block">${address}</small>
-                                <small class="text-info">${region}</small>
-                            </div>
-                            <div class="text-end">
-                                ${isOnMap ? '<i class="fas fa-map-marker-alt text-success" title="On Map"></i>' : ''}
-                                ${company.vat_number ? `<small class="d-block text-muted">${company.vat_number}</small>` : ''}
-                            </div>
-                        </div>
-                    </div>
+            <div class="list-item ${isSelected ? 'selected' : ''}" onclick="toggleCompanySelection(${company.id}); event.stopPropagation();">
+                <div class="list-item-title">${company.name || 'Unnamed Company'}</div>
+                <div class="list-item-meta">
+                    <i class="fas fa-map-marker-alt me-1"></i>${address}
                 </div>
+                ${company.vat_number ? `<div class="list-item-meta mt-1">
+                    <i class="fas fa-file-invoice me-1"></i>${company.vat_number}
+                </div>` : ''}
             </div>
         `;
     }).join('');
-    
-    container.innerHTML = html;
-}
-
-// Display prospect details panel
-function displayProspectDetailsPanel(prospect) {
-    const container = document.getElementById('company-details');
-    const address = getProspectAddress(prospect);
-    
-    const html = `
-        <div class="prospect-details-card">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-                <h5 class="mb-0 text-success">${prospect.name || prospect.company_name || 'Unnamed Prospect'}</h5>
-                <span class="badge bg-success rounded-pill">
-                    <i class="fas fa-search me-1"></i>Prospect
-                </span>
-            </div>
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <strong><i class="fas fa-map-marker-alt me-2"></i>Address:</strong><br>
-                        <span class="text-muted">${address}</span>
-                    </div>
-                    ${prospect.vat_number ? `<div class="mb-3">
-                        <strong><i class="fas fa-file-invoice me-2"></i>VAT Number:</strong><br>
-                        <span class="text-muted">${prospect.vat_number}</span>
-                    </div>` : ''}
-                    ${prospect.email ? `<div class="mb-3">
-                        <strong><i class="fas fa-envelope me-2"></i>Email:</strong><br>
-                        <span class="text-muted">${prospect.email}</span>
-                    </div>` : ''}
-                </div>
-                <div class="col-md-6">
-                    ${prospect.description ? `<div class="mb-3">
-                        <strong><i class="fas fa-info-circle me-2"></i>Description:</strong><br>
-                        <span class="text-muted">${prospect.description}</span>
-                    </div>` : ''}
-                    ${prospect.phone ? `<div class="mb-3">
-                        <strong><i class="fas fa-phone me-2"></i>Phone:</strong><br>
-                        <span class="text-muted">${prospect.phone}</span>
-                    </div>` : ''}
-                    <div class="mb-3">
-                        <strong><i class="fas fa-calendar me-2"></i>Added:</strong><br>
-                        <span class="text-muted">${prospect.created_at ? new Date(prospect.created_at).toLocaleDateString() : 'Unknown'}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
     
     container.innerHTML = html;
 }
@@ -1189,19 +1004,12 @@ function displayProspectsList() {
     if (filteredProspects.length === 0) {
         console.log('⚠️ No prospects to display');
         container.innerHTML = `
-            <div class="text-center text-muted py-4">
-                <i class="fas fa-search fa-3x mb-3"></i>
-                <p>No prospects match the current filters</p>
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-search fa-3x mb-3 opacity-25"></i>
+                <p>No prospects found</p>
             </div>
         `;
         return;
-    }
-    
-    // Debug: Log first few prospects
-    if (filteredProspects.length > 0) {
-        console.log('🔍 First prospect data:', filteredProspects[0]);
-        console.log('🔍 Prospect ID type:', typeof filteredProspects[0].id, 'Value:', filteredProspects[0].id);
-        console.log('🔍 Current selected prospects:', Array.from(selectedProspects));
     }
     
     const html = filteredProspects.map(prospect => {
@@ -1209,31 +1017,15 @@ function displayProspectsList() {
         const isSelected = selectedProspects.has(prospect.id);
         const isOnMap = markers.some(item => item.prospect && item.prospect.id === prospect.id);
         
-        console.log(`🔍 Prospect ${prospect.name || prospect.company_name}: ID=${prospect.id}, Selected=${isSelected}`);
-        
         return `
-            <div class="prospect-item border-bottom py-2" data-prospect-id="${prospect.id}">
-                <div class="d-flex align-items-start">
-                    <div class="form-check me-2 mt-1">
-                        <input class="form-check-input" type="checkbox" 
-                               id="prospect-${prospect.id}" 
-                               ${isSelected ? 'checked' : ''}
-                               onchange="toggleProspectSelection('${prospect.id}')">
-                    </div>
-                    <div class="flex-grow-1" onclick="showProspectDetails('${prospect.id}')">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h6 class="mb-1 text-success">${prospect.name || prospect.company_name || 'Unnamed Prospect'}</h6>
-                                <small class="text-muted d-block">${address}</small>
-                                ${prospect.description ? `<small class="text-info">${prospect.description}</small>` : ''}
-                            </div>
-                            <div class="text-end">
-                                ${isOnMap ? '<i class="fas fa-map-marker-alt text-success" title="On Map"></i>' : ''}
-                                ${prospect.vat_number ? `<small class="d-block text-muted">${prospect.vat_number}</small>` : ''}
-                            </div>
-                        </div>
-                    </div>
+            <div class="list-item ${isSelected ? 'selected' : ''}" onclick="toggleProspectSelection('${prospect.id}'); event.stopPropagation();">
+                <div class="list-item-title">${prospect.name || prospect.company_name || 'Unnamed Prospect'}</div>
+                <div class="list-item-meta">
+                    <i class="fas fa-map-marker-alt me-1"></i>${address}
                 </div>
+                ${prospect.description ? `<div class="list-item-meta mt-1">
+                    <i class="fas fa-info-circle me-1"></i>${prospect.description}
+                </div>` : ''}
             </div>
         `;
     }).join('');
@@ -1243,11 +1035,8 @@ function displayProspectsList() {
 
 // Get prospect address 
 function getProspectAddress(prospect) {
-    console.log('🔍 Getting address for prospect:', prospect);
-    
     // Prospects might have different address structure
     if (prospect.address) {
-        console.log('✅ Found direct address field:', prospect.address);
         return prospect.address;
     }
     
@@ -1259,29 +1048,10 @@ function getProspectAddress(prospect) {
         prospect.country
     ].filter(part => part && part.trim());
     
-    const finalAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
-    console.log('🏠 Built address from parts:', finalAddress, 'Parts:', addressParts);
-    
-    return finalAddress;
+    return addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
 }
 
-// Filter prospects
-function filterProspects() {
-    const searchTerm = document.getElementById('prospect-filter').value.toLowerCase().trim();
-    
-    filteredProspects = prospects.filter(prospect => {
-        return !searchTerm || 
-            prospect.name?.toLowerCase().includes(searchTerm) ||
-            prospect.company_name?.toLowerCase().includes(searchTerm) ||
-            prospect.description?.toLowerCase().includes(searchTerm) ||
-            getProspectAddress(prospect).toLowerCase().includes(searchTerm);
-    });
-    
-    displayProspectsList();
-    updateSelectionCounts();
-}
-
-// Toggle prospect selection
+// Toggle prospect selection with automatic visualization
 function toggleProspectSelection(prospectId) {
     console.log('🔄 Toggling prospect selection for ID:', prospectId, 'Type:', typeof prospectId);
     console.log('📊 Current selected prospects:', Array.from(selectedProspects));
@@ -1305,123 +1075,13 @@ function toggleProspectSelection(prospectId) {
     }
     
     console.log('📊 New selected prospects:', Array.from(selectedProspects));
+    
+    // Auto-visualize on map
+    visualizeSelected();
+    
     updateSelectionCounts();
     displayProspectsList(); // Refresh the list to show updated checkboxes
 }
-
-// Show company details (called when clicking on company name)
-function showCompanyDetails(companyId) {
-    const company = companies.find(c => c && c.id === companyId);
-    if (!company) {
-        console.warn('Company not found:', companyId);
-        return;
-    }
-    
-    console.log('Selected company:', company.name);
-    
-    // Display company details
-    displayCompanyDetails(company);
-    
-    // Find and focus on marker if it exists
-    const markerItem = markers.find(item => item.company && item.company.id === companyId);
-    if (markerItem) {
-        // Fly to marker
-        map.flyTo({
-            center: markerItem.coordinates,
-            zoom: 15,
-            duration: 1500
-        });
-        
-        // Open popup
-        markerItem.marker.getPopup().addTo(map);
-    }
-}
-
-// Show prospect details (called when clicking on prospect name)
-function showProspectDetails(prospectId) {
-    console.log('🔍 Looking for prospect with ID:', prospectId, 'Type:', typeof prospectId);
-    const prospect = prospects.find(p => p.id == prospectId); // Use == to handle string/number comparison
-    if (!prospect) {
-        console.warn('❌ Prospect not found with ID:', prospectId);
-        console.log('📋 Available prospect IDs:', prospects.map(p => p.id));
-        return;
-    }
-    
-    console.log('✅ Selected prospect:', prospect.name || prospect.company_name);
-    
-    // Display prospect details
-    displayProspectDetailsPanel(prospect);
-    
-    // Find and focus on marker if it exists
-    const markerItem = markers.find(item => item.prospect && item.prospect.id == prospectId);
-    if (markerItem) {
-        // Fly to marker
-        map.flyTo({
-            center: markerItem.coordinates,
-            zoom: 15,
-            duration: 1500
-        });
-        
-        // Open popup
-        markerItem.marker.getPopup().addTo(map);
-    }
-}
-
-// Legacy function for compatibility
-function selectCompany(companyId) {
-    showCompanyDetails(companyId);
-}
-
-// Display company details panel
-function displayCompanyDetails(company) {
-    const container = document.getElementById('company-details');
-    const address = getCompanyAddress(company);
-    
-    const html = `
-        <div class="company-details-card">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-                <h5 class="mb-0">${company.name || 'Unnamed Company'}</h5>
-                <span class="badge ${company.company_status?.name === 'Actief' ? 'bg-success' : 'bg-warning'} rounded-pill">
-                    ${company.company_status?.name || 'Unknown'}
-                </span>
-            </div>
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <strong><i class="fas fa-map-marker-alt me-2"></i>Address:</strong><br>
-                        <span class="text-muted">${address}</span>
-                    </div>
-                    ${company.vat_number ? `<div class="mb-3">
-                        <strong><i class="fas fa-file-invoice me-2"></i>VAT Number:</strong><br>
-                        <span class="text-muted">${company.vat_number}</span>
-                    </div>` : ''}
-                    ${company.email_addresses ? `<div class="mb-3">
-                        <strong><i class="fas fa-envelope me-2"></i>Email:</strong><br>
-                        <span class="text-muted">${company.email_addresses}</span>
-                    </div>` : ''}
-                </div>
-                <div class="col-md-6">
-                    ${company.sales_price_class ? `<div class="mb-3">
-                        <strong><i class="fas fa-tag me-2"></i>Price Class:</strong><br>
-                        <span class="text-muted">${company.sales_price_class.name}</span>
-                    </div>` : ''}
-                    ${company.company_categories && company.company_categories.length > 0 ? `<div class="mb-3">
-                        <strong><i class="fas fa-tags me-2"></i>Categories:</strong><br>
-                        ${company.company_categories.map(cat => `<span class="badge bg-light text-dark me-1">${cat.name}</span>`).join('')}
-                    </div>` : ''}
-                    <div class="mb-3">
-                        <strong><i class="fas fa-calendar me-2"></i>Created:</strong><br>
-                        <span class="text-muted">${new Date(company.created_at).toLocaleDateString()}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    container.innerHTML = html;
-}
-
 
 // Refresh companies cache
 async function refreshCompaniesCache() {
