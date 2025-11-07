@@ -291,10 +291,10 @@ async function loadCompaniesData() {
             console.log(`📦 Cache contains ${companies.length} companies`);
             showToast(`Loaded ${companies.length} companies from cache`, 'success');
         } else {
-            console.log('📡 Fetching companies directly from Supabase');
+            console.log('📡 Fetching companies from Supabase (same as Companies page)');
             
-            // Use the existing Supabase companies endpoint from data page
-            const response = await fetch('/api/supabase-companies');
+            // Use the EXACT same endpoint as Companies page
+            const response = await fetch('/api/companies-from-db?year=2025');
             console.log('📡 Response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
