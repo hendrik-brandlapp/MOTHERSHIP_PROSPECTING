@@ -248,6 +248,10 @@
                 <span>Visualize</span>
                 <span class="stat-badge" id="selected-count">0</span>
             </button>
+            <button class="map-fab" onclick="showCreateTripModal()" id="create-trip-btn" style="background: var(--success);">
+                <i class="fas fa-map-marked-alt"></i>
+                <span>Create Trip</span>
+            </button>
             <button class="map-fab" onclick="clearMap()">
                 <i class="fas fa-eraser"></i>
                 Clear
@@ -259,6 +263,51 @@
     </div>
 </div>
 
+<!-- Create Trip Modal -->
+<div class="modal fade" id="createTripModal" tabindex="-1" aria-labelledby="createTripModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createTripModalLabel">
+                    <i class="fas fa-map-marked-alt me-2"></i>Create New Trip
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createTripForm">
+                    <div class="mb-3">
+                        <label for="tripName" class="form-label">Trip Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="tripName" placeholder="e.g., North Region Visit" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-7 mb-3">
+                            <label for="tripDate" class="form-label">Trip Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="tripDate" required>
+                        </div>
+                        <div class="col-md-5 mb-3">
+                            <label for="tripStartTime" class="form-label">Start Time <span class="text-danger">*</span></label>
+                            <input type="time" class="form-control" id="tripStartTime" value="09:00" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tripNotes" class="form-label">Notes (Optional)</label>
+                        <textarea class="form-control" id="tripNotes" rows="3" placeholder="Add any notes about this trip..."></textarea>
+                    </div>
+                    <div class="alert alert-info mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong id="trip-selection-count">0</strong> locations selected for this trip
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="createTrip()">
+                    <i class="fas fa-check me-2"></i>Create Trip
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 
@@ -1146,6 +1195,128 @@ function showToast(message, type = 'info') {
     toast.addEventListener('hidden.bs.toast', () => {
         toast.remove();
     });
+}
+
+// TRIP CREATION FUNCTIONALITY
+function showCreateTripModal() {
+    const totalSelected = selectedCompanies.size + selectedProspects.size;
+    
+    if (totalSelected === 0) {
+        showToast('Please select at least one company or prospect to create a trip', 'warning');
+        return;
+    }
+    
+    // Update selection count in modal
+    document.getElementById('trip-selection-count').textContent = totalSelected;
+    
+    // Set default date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('tripDate').value = today;
+    document.getElementById('tripDate').setAttribute('min', today);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('createTripModal'));
+    modal.show();
+}
+
+async function createTrip() {
+    const tripName = document.getElementById('tripName').value.trim();
+    const tripDate = document.getElementById('tripDate').value;
+    const tripStartTime = document.getElementById('tripStartTime').value;
+    const tripNotes = document.getElementById('tripNotes').value.trim();
+    
+    if (!tripName || !tripDate || !tripStartTime) {
+        showToast('Please fill in all required fields', 'error');
+        return;
+    }
+    
+    const totalSelected = selectedCompanies.size + selectedProspects.size;
+    if (totalSelected === 0) {
+        showToast('Please select at least one location', 'error');
+        return;
+    }
+    
+    // Disable create button
+    const createBtn = event.target;
+    createBtn.disabled = true;
+    createBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating...';
+    
+    try {
+        // Collect all selected locations
+        const locations = [];
+        
+        // Add selected companies
+        selectedCompanies.forEach(companyId => {
+            const company = companies.find(c => c.id === companyId);
+            if (company) {
+                locations.push({
+                    type: 'company',
+                    id: company.id,
+                    name: company.name,
+                    address: getCompanyAddress(company),
+                    latitude: company.latitude || null,
+                    longitude: company.longitude || null
+                });
+            }
+        });
+        
+        // Add selected prospects
+        selectedProspects.forEach(prospectId => {
+            const prospect = prospects.find(p => p.id == prospectId);
+            if (prospect) {
+                locations.push({
+                    type: 'prospect',
+                    id: prospect.id,
+                    name: prospect.name || prospect.company_name,
+                    address: getProspectAddress(prospect),
+                    latitude: prospect.latitude || null,
+                    longitude: prospect.longitude || null
+                });
+            }
+        });
+        
+        // Create trip
+        const response = await fetch('/api/trips', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: tripName,
+                date: tripDate,
+                start_time: tripStartTime,
+                notes: tripNotes,
+                locations: locations
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('Trip created successfully!', 'success');
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('createTripModal'));
+            modal.hide();
+            
+            // Reset form
+            document.getElementById('createTripForm').reset();
+            
+            // Redirect to trips page after a short delay
+            setTimeout(() => {
+                window.location.href = '/trips';
+            }, 1500);
+        } else {
+            showToast(result.error || 'Failed to create trip', 'error');
+            createBtn.disabled = false;
+            createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
+        }
+    } catch (error) {
+        console.error('Error creating trip:', error);
+        showToast('Failed to create trip: ' + error.message, 'error');
+        createBtn.disabled = false;
+        createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
+    }
 }
 </script>
 
