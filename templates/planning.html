@@ -279,6 +279,7 @@ let selectedCompanies = new Set();
 let selectedProspects = new Set();
 let markers = [];
 const mapboxToken = '{{ mapbox_api_key }}';
+let currentTab = 'companies';
 
 // Cache configuration
 const COMPANIES_CACHE_KEY = 'duano_companies_cache_v1';
@@ -293,34 +294,47 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Auto-load companies and prospects data on page load
     loadCompaniesData();
+    loadProspectsData();
     
-    // Filter input event listeners
-    const companyFilter = document.getElementById('company-filter');
-    const regionFilter = document.getElementById('region-filter');
-    const prospectFilter = document.getElementById('prospect-filter');
-    
-    if (companyFilter) {
-        companyFilter.addEventListener('input', debounce(filterCompanies, 300));
-    }
-    
-    if (regionFilter) {
-        regionFilter.addEventListener('change', filterCompanies);
-    }
-    
-    if (prospectFilter) {
-        prospectFilter.addEventListener('input', debounce(filterProspects, 300));
-    }
-    
-    // Auto-load companies if cached data exists
-    const cachedData = sessionStorage.getItem(COMPANIES_CACHE_KEY);
-    const cachedTime = sessionStorage.getItem(COMPANIES_CACHE_TIME_KEY);
-    const now = Date.now();
-    
-    if (cachedData && cachedTime && (now - parseInt(cachedTime)) < CACHE_DURATION) {
-        console.log('🚀 Auto-loading companies from cache on page load');
-        loadCompaniesData();
+    // Search functionality for sidebar
+    const sidebarSearch = document.getElementById('sidebar-search');
+    if (sidebarSearch) {
+        sidebarSearch.addEventListener('input', debounce(handleSidebarSearch, 300));
     }
 });
+
+// Tab Switching Function
+function switchTab(tab) {
+    currentTab = tab;
+    
+    // Update tab buttons
+    document.getElementById('tab-companies').classList.toggle('active', tab === 'companies');
+    document.getElementById('tab-prospects').classList.toggle('active', tab === 'prospects');
+    
+    // Show/hide lists
+    document.getElementById('companies-list').style.display = tab === 'companies' ? 'block' : 'none';
+    document.getElementById('prospects-list').style.display = tab === 'prospects' ? 'block' : 'none';
+}
+
+// Sidebar search handler
+function handleSidebarSearch(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    
+    if (currentTab === 'companies') {
+        filteredCompanies = companies.filter(c => 
+            c.name?.toLowerCase().includes(searchTerm) ||
+            c.city?.toLowerCase().includes(searchTerm) ||
+            c.country_name?.toLowerCase().includes(searchTerm)
+        );
+        displayCompaniesList();
+    } else {
+        filteredProspects = prospects.filter(p =>
+            p.name?.toLowerCase().includes(searchTerm) ||
+            p.address?.toLowerCase().includes(searchTerm)
+        );
+        displayProspectsList();
+    }
+}
 
 // Initialize Mapbox map
 function initializeMap() {
@@ -604,7 +618,8 @@ function toggleCompanySelection(companyId) {
     } else {
         selectedCompanies.add(companyId);
     }
-    updateSelectionCounts();
+    displayCompaniesList();
+    updateSelectedCount();
 }
 
 // Select all visible items (companies and prospects)
@@ -955,38 +970,41 @@ function displayCompaniesList() {
     
     const html = filteredCompanies.map(company => {
         const address = getCompanyAddress(company);
-        const isSelected = selectedCompanies.has(company.id);
-        const isOnMap = markers.some(item => item.company && item.company.id === company.id);
-        const region = getCompanyRegion(company);
+        const isSelected = selectedCompanies.has(company.company_id);
+        const revenue = company.total_revenue_all_time || 0;
         
         return `
-            <div class="company-item border-bottom py-2" data-company-id="${company.id}">
-                <div class="d-flex align-items-start">
-                    <div class="form-check me-2 mt-1">
-                        <input class="form-check-input" type="checkbox" 
-                               id="company-${company.id}" 
-                               ${isSelected ? 'checked' : ''}
-                               onchange="toggleCompanySelection(${company.id})">
-                    </div>
-                    <div class="flex-grow-1" onclick="showCompanyDetails(${company.id})">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h6 class="mb-1">${company.name || 'Unnamed Company'}</h6>
-                                <small class="text-muted d-block">${address}</small>
-                                <small class="text-info">${region}</small>
-                            </div>
-                            <div class="text-end">
-                                ${isOnMap ? '<i class="fas fa-map-marker-alt text-success" title="On Map"></i>' : ''}
-                                ${company.vat_number ? `<small class="d-block text-muted">${company.vat_number}</small>` : ''}
-                            </div>
-                        </div>
-                    </div>
+            <div class="list-item ${isSelected ? 'selected' : ''}" onclick="toggleCompanySelection(${company.company_id})">
+                <div class="list-item-title">${escapeHtml(company.name || 'Unnamed')}</div>
+                <div class="list-item-meta">
+                    <i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(address)}
                 </div>
+                ${revenue > 0 ? `
+                    <div class="list-item-meta mt-1">
+                        <i class="fas fa-euro-sign me-1"></i>€${parseFloat(revenue).toLocaleString('nl-BE')}
+                    </div>
+                ` : ''}
             </div>
         `;
     }).join('');
     
     container.innerHTML = html;
+    updateSelectedCount();
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function updateSelectedCount() {
+    const total = selectedCompanies.size + selectedProspects.size;
+    const countEl = document.getElementById('selected-count');
+    if (countEl) {
+        countEl.textContent = total;
+    }
 }
 
 // Display prospect details panel
