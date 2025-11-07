@@ -7220,16 +7220,26 @@ def api_get_alerts():
         alerts = result.data
         
         # Fetch raw_company_data for each alert's company
+        # Build a mapping of company_id to raw_company_data for efficiency
+        company_ids = list(set([alert.get('company_id') for alert in alerts if alert.get('company_id')]))
+        
+        company_data_map = {}
+        if company_ids:
+            try:
+                # Fetch all companies in one query
+                companies_result = supabase_client.table('companies').select('company_id, raw_company_data').in_('company_id', company_ids).execute()
+                for company in companies_result.data:
+                    company_data_map[company['company_id']] = company.get('raw_company_data')
+            except Exception as e:
+                print(f"Error fetching company data: {e}")
+        
+        # Add raw_company_data to each alert
         for alert in alerts:
             company_id = alert.get('company_id')
-            if company_id:
-                try:
-                    company_result = supabase_client.table('companies').select('raw_company_data').eq('company_id', company_id).limit(1).execute()
-                    if company_result.data and len(company_result.data) > 0:
-                        alert['raw_company_data'] = company_result.data[0].get('raw_company_data')
-                except Exception as e:
-                    print(f"Could not fetch company data for {company_id}: {e}")
-                    alert['raw_company_data'] = None
+            if company_id and company_id in company_data_map:
+                alert['raw_company_data'] = company_data_map[company_id]
+            else:
+                alert['raw_company_data'] = None
         summary = {
             'total_alerts': len(alerts),
             'high_priority': len([a for a in alerts if a['priority'] == 'HIGH']),
