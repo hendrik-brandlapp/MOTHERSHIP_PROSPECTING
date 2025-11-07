@@ -171,21 +171,21 @@
         color: #424242;
     }
     
-    /* Pipeline Overview Cards */
+    /* Pipeline Overview Cards - Compact Design */
     .pipeline-overview {
         background: white;
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         border: 1px solid #e5e7eb;
     }
     
     .pipeline-stage {
         background: #f8fafc;
         border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 1rem;
+        border-radius: 6px;
+        padding: 0.625rem 0.75rem;
         text-align: center;
         transition: all 0.2s ease;
         cursor: pointer;
@@ -235,22 +235,22 @@
     }
     
     .pipeline-stage .stage-icon {
-        font-size: 1.5rem;
-        margin-bottom: 0.5rem;
+        font-size: 1.25rem;
+        margin-bottom: 0.375rem;
         display: block;
     }
     
     .pipeline-stage .stage-count {
-        font-size: 1.5rem;
+        font-size: 1.375rem;
         font-weight: 700;
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.125rem;
         color: #1f2937;
     }
     
     .pipeline-stage .stage-label {
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         color: #6b7280;
-        font-weight: 500;
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.025em;
     }
@@ -272,24 +272,30 @@
         opacity: 1;
     }
     
-    /* Tab Navigation */
+    /* Tab Navigation - Enhanced Visibility */
     .nav-pills .nav-link {
         border-radius: 8px;
-        font-weight: 500;
-        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        padding: 0.875rem 1.75rem;
         transition: all 0.2s ease;
-        color: #6b7280;
-        background: transparent;
+        color: #1f2937;
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        margin-right: 0.5rem;
     }
     
     .nav-pills .nav-link:hover:not(.active) {
         background: #f3f4f6;
-        color: #374151;
+        color: #111827;
+        border-color: #d1d5db;
+        transform: translateY(-1px);
     }
     
     .nav-pills .nav-link.active {
         background: var(--primary-color);
         color: white;
+        border-color: var(--primary-color);
+        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
     }
     
     /* Notes Section */
@@ -466,18 +472,15 @@
         <div class="tab-pane" id="database-content">
             <!-- Pipeline Overview -->
             <div class="pipeline-overview">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h6 class="mb-1 fw-semibold text-dark">📈 Sales Pipeline</h6>
-                        <small class="text-muted">Track your prospects through each stage</small>
-                    </div>
-                    <button class="btn btn-outline-primary btn-sm" onclick="refreshPipelineStats()">
-                        <i class="fas fa-sync-alt me-1"></i>Refresh
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0 fw-semibold text-dark" style="font-size: 0.9rem;">📈 Sales Pipeline</h6>
+                    <button class="btn btn-outline-primary btn-sm py-1 px-2" onclick="refreshPipelineStats()" style="font-size: 0.75rem;">
+                        <i class="fas fa-sync-alt"></i>
                     </button>
                 </div>
                 <!-- Active Pipeline Stages -->
-                <div class="mb-3">
-                    <h6 class="mb-2 text-muted fw-normal" style="font-size: 0.8rem;">ACTIVE PIPELINE</h6>
+                <div class="mb-2">
+                    <h6 class="mb-1 text-muted fw-normal" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">Active Pipeline</h6>
                     <div class="row g-2" id="active-pipeline-stats">
                         <div class="col-6 col-lg-2">
                             <div class="pipeline-stage" onclick="filterByStatus('new_leads')">
@@ -526,7 +529,7 @@
                 
                 <!-- Inactive/Archive Stages -->
                 <div>
-                    <h6 class="mb-2 text-muted fw-normal" style="font-size: 0.8rem;">INACTIVE & ARCHIVE</h6>
+                    <h6 class="mb-1 text-muted fw-normal" style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em;">Inactive & Archive</h6>
                     <div class="row g-2" id="inactive-pipeline-stats">
                         <div class="col-6 col-lg-4">
                             <div class="pipeline-stage pipeline-stage-inactive" onclick="filterByStatus('ex_customer')">
@@ -553,10 +556,10 @@
                 </div>
             </div>
 
-            <!-- Enhanced Filter Controls -->
-            <div class="d-flex flex-wrap align-items-center gap-3 mb-4 p-3 bg-white rounded border">
-                <input type="text" class="form-control" id="prospect-filter" placeholder="Filter prospects..." style="max-width: 250px;">
-                <select class="form-select" id="status-filter" style="max-width: 180px;">
+            <!-- Compact Filter Controls -->
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3 p-2 bg-white rounded border" style="font-size: 0.875rem;">
+                <input type="text" class="form-control form-control-sm" id="prospect-filter" placeholder="Search..." style="max-width: 200px;">
+                <select class="form-select form-select-sm" id="status-filter" style="max-width: 160px;">
                     <option value="">All Statuses</option>
                     <option value="new_leads">🔍 New Leads</option>
                     <option value="visited">👁️ Visited</option>
@@ -568,27 +571,27 @@
                     <option value="contact_later">⏳ Contact Later</option>
                     <option value="unqualified">❌ Unqualified</option>
                 </select>
-                <select class="form-select" id="region-filter" style="max-width: 150px;">
+                <select class="form-select form-select-sm" id="region-filter" style="max-width: 130px;">
                     <option value="">All Regions</option>
                 </select>
-                <select class="form-select" id="prospect-type-filter" style="max-width: 150px;">
+                <select class="form-select form-select-sm" id="prospect-type-filter" style="max-width: 130px;">
                     <option value="">All Types</option>
                 </select>
-                <select class="form-select" id="city-filter" style="max-width: 150px;">
+                <select class="form-select form-select-sm" id="city-filter" style="max-width: 130px;">
                     <option value="">All Cities</option>
                 </select>
-                <select class="form-select" id="keyword-filter" style="max-width: 150px;">
+                <select class="form-select form-select-sm" id="keyword-filter" style="max-width: 130px;">
                     <option value="">All Keywords</option>
                 </select>
-                <div class="ms-auto d-flex gap-2">
-                    <button class="btn btn-outline-secondary btn-sm" onclick="clearAllFilters()">
-                        <i class="fas fa-times me-1"></i>Clear
+                <div class="ms-auto d-flex gap-1">
+                    <button class="btn btn-outline-secondary btn-sm px-2 py-1" onclick="clearAllFilters()" title="Clear filters">
+                        <i class="fas fa-times"></i>
                     </button>
-                    <button class="btn btn-primary" onclick="refreshProspects()">
-                        <i class="fas fa-sync-alt me-2"></i>Refresh
+                    <button class="btn btn-primary btn-sm px-2 py-1" onclick="refreshProspects()" title="Refresh">
+                        <i class="fas fa-sync-alt"></i>
                     </button>
-                    <button class="btn btn-success" onclick="retryFailedEnrichments()">
-                        <i class="fas fa-sparkles me-2"></i>Enrich
+                    <button class="btn btn-success btn-sm px-2 py-1" onclick="retryFailedEnrichments()" title="Enrich">
+                        <i class="fas fa-sparkles"></i>
                     </button>
                 </div>
             </div>
