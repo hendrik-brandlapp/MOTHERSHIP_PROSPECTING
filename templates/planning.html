@@ -291,8 +291,8 @@ async function loadCompaniesData() {
             console.log(`📦 Cache contains ${companies.length} companies`);
             showToast(`Loaded ${companies.length} companies from cache`, 'success');
         } else {
-            console.log('📡 Making API call to /api/companies');
-            const response = await fetch('/api/companies');
+            console.log('📡 Making API call to /api/supabase-companies-planning');
+            const response = await fetch('/api/supabase-companies-planning');
             console.log('📡 Response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);

@@ -9085,5 +9085,34 @@ def whatsapp_inbox_page():
     return render_template('whatsapp_inbox.html')
 
 
+@app.route('/api/supabase-companies-planning')
+def api_supabase_companies_planning():
+    """
+    Get companies from Supabase for planning page (with geocoding data)
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Fetch companies with geocoding data
+        result = supabase_client.table('companies')\
+            .select('company_id, name, address, city, country, latitude, longitude, raw_company_data')\
+            .execute()
+        
+        companies = result.data if result.data else []
+        
+        return jsonify({
+            'success': True,
+            'result': {
+                'data': companies
+            },
+            'count': len(companies)
+        })
+        
+    except Exception as e:
+        print(f"Error fetching companies for planning: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5002)
