@@ -369,7 +369,8 @@ async function loadCompaniesData() {
             if (companies.length > 0) {
                 console.log('🏢 Sample company data for planning:', companies[0]);
                 console.log('📋 Available fields:', Object.keys(companies[0]));
-                console.log('🏠 Invoice address field:', companies[0].invoice_address);
+                console.log('🏠 Address field:', companies[0].address);
+                console.log('🏠 Sample address:', getCompanyAddress(companies[0]));
             }
             
             // Cache the data
@@ -514,51 +515,57 @@ async function addCompaniesToMap(companiesToAdd = companies) {
     }
 }
 
-// Get company address - use fields directly from company object (from API)
+// Get company address - matches data page implementation
 function getCompanyAddress(company) {
-    // Try direct fields first (from companies API)
-    const addressParts = [
-        company.address_line1,
-        company.address_line2,
-        company.city,
-        company.post_code,
-        company.country_name || company.country?.name
-    ].filter(part => part && part.trim());
-    
-    if (addressParts.length > 0) {
-        return addressParts.join(', ');
-    }
-    
-    // Try nested address object as fallback
+    // The API returns address in a nested object: company.address
     if (company.address) {
         const addr = company.address;
-        const nestedParts = [
-            addr.street || addr.address_line1,
-            addr.street2 || addr.address_line2,
+        const addressParts = [
+            addr.street,
+            addr.street2,
+            addr.postal_code,
             addr.city,
-            addr.postal_code || addr.post_code,
             addr.country
         ].filter(part => part && part.trim());
         
-        if (nestedParts.length > 0) {
-            return nestedParts.join(', ');
+        if (addressParts.length > 0) {
+            return addressParts.join(', ');
+        }
+    }
+    
+    // Fallback: try raw_company_data.invoice_address (for detailed view)
+    if (company.raw_company_data && company.raw_company_data.invoice_address) {
+        const inv = company.raw_company_data.invoice_address;
+        const invAddressParts = [
+            inv.address_line1,
+            inv.address_line2,
+            inv.post_code,
+            inv.city,
+            inv.country?.name || inv.country
+        ].filter(part => part && part.trim());
+        
+        if (invAddressParts.length > 0) {
+            return invAddressParts.join(', ');
         }
     }
     
     return 'No address available';
 }
 
-// Get company region (city or country)
+// Get company region (city or country) - matches data page implementation
 function getCompanyRegion(company) {
-    // Try direct fields first
-    const region = company.city || company.country_name || company.country?.name || 'Unknown Region';
-    
-    // Try nested address object as fallback
-    if (region === 'Unknown Region' && company.address) {
+    // The API returns address in a nested object: company.address
+    if (company.address) {
         return company.address.city || company.address.country || 'Unknown Region';
     }
     
-    return region;
+    // Fallback: try raw_company_data.invoice_address
+    if (company.raw_company_data && company.raw_company_data.invoice_address) {
+        const inv = company.raw_company_data.invoice_address;
+        return inv.city || inv.country?.name || inv.country || 'Unknown Region';
+    }
+    
+    return 'Unknown Region';
 }
 
 
@@ -1230,3 +1237,4 @@ function showToast(message, type = 'info') {
 }
 </style>
 {% endblock %}
+
