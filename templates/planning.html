@@ -623,7 +623,7 @@ function filterCompanies() {
     updateSelectionCounts();
 }
 
-// Toggle company selection
+// Toggle company selection and auto-visualize
 function toggleCompanySelection(companyId) {
     if (selectedCompanies.has(companyId)) {
         selectedCompanies.delete(companyId);
@@ -632,6 +632,9 @@ function toggleCompanySelection(companyId) {
     }
     displayCompaniesList();
     updateSelectedCount();
+    
+    // Auto-visualize selected companies
+    visualizeSelectedCompanies();
 }
 
 // Auto-visualize when selecting
