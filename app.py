@@ -9353,6 +9353,97 @@ def create_trip():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/geocode-companies', methods=['POST'])
+def geocode_all_companies():
+    """Geocode all companies that don't have coordinates yet"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        # Import the geocoding logic
+        try:
+            from geocode_companies import get_company_address, geocode_address_mapbox, update_company_coordinates
+        except ImportError:
+            return jsonify({'error': 'Geocoding module not available'}), 500
+        
+        # Get request parameters
+        data = request.json or {}
+        limit = data.get('limit', 100)  # Default to 100 companies at a time
+        force = data.get('force', False)
+        
+        # Fetch companies without coordinates
+        query = supabase_client.table('companies').select('*')
+        
+        if not force:
+            # Only companies without geocoded_at timestamp
+            query = query.is_('geocoded_at', 'null')
+        
+        if limit:
+            query = query.limit(limit)
+        
+        result = query.execute()
+        companies = result.data
+        
+        if not companies:
+            return jsonify({
+                'success': True,
+                'message': 'No companies need geocoding',
+                'geocoded': 0,
+                'failed': 0,
+                'skipped': 0
+            })
+        
+        # Mapbox API key
+        mapbox_key = "pk.eyJ1IjoiaGVuZHJpa3l1Z2VuIiwiYSI6ImNtY24zZnB4YTAwNTYybnMzNGVpemZxdGEifQ.HIpLMTGycSiEsf7ytxaSJg"
+        
+        # Process each company
+        success_count = 0
+        failed_count = 0
+        skipped_count = 0
+        
+        for company in companies:
+            address = get_company_address(company)
+            
+            if not address:
+                skipped_count += 1
+                continue
+            
+            # Geocode using Mapbox
+            geocode_result = geocode_address_mapbox(address, 'BE')
+            
+            if geocode_result:
+                lat, lng, quality = geocode_result
+                
+                # Update database
+                if update_company_coordinates(company['id'], lat, lng, quality, address):
+                    success_count += 1
+                else:
+                    failed_count += 1
+            else:
+                failed_count += 1
+            
+            # Small delay to respect rate limits
+            time.sleep(0.1)
+        
+        return jsonify({
+            'success': True,
+            'geocoded': success_count,
+            'failed': failed_count,
+            'skipped': skipped_count,
+            'total_processed': len(companies),
+            'message': f'Geocoded {success_count} companies successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error geocoding companies: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/trips/<trip_id>', methods=['PUT'])
 def update_trip(trip_id):
     """Update trip details"""

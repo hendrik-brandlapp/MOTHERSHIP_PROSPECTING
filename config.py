@@ -75,3 +75,11 @@ def load_config(config_file: Optional[str] = None) -> DuanoConfig:
     config = DuanoConfig.from_env()
     config.validate()
     return config
+
+
+# Mapbox Configuration
+MAPBOX_API_KEY = os.getenv('MAPBOX_API_KEY', 'pk.eyJ1IjoiaGVuZHJpa3l1Z2VuIiwiYSI6ImNtY24zZnB4YTAwNTYybnMzNGVpemZxdGEifQ.HIpLMTGycSiEsf7ytxaSJg')
+
+# Supabase Configuration  
+SUPABASE_URL = os.getenv('SUPABASE_URL', 'https://gpjoypslbrpvnhqzvacc.supabase.co')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdwam95cHNsYnJwdm5ocXp2YWNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTM3MDQxNTAsImV4cCI6MjA2OTI4MDE1MH0.u0hGzIKziSPz2i576NhuyCetV6_iQwCoft7FIjDJCiI')
