@@ -1,20 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}Planning - CRMinal{% endblock %}
+{% block title %}Planning - DOUANO{% endblock %}
 
 {% block extra_head %}
 <style>
     /* Google Maps Style - Full Page Layout */
-    .page-content {
-        padding: 0 !important;
-    }
-    
     .planning-container {
-        width: 100%;
-        height: calc(100vh - 0px); /* Full viewport height */
+        position: fixed;
+        top: 0;
+        left: 240px; /* Sidebar width */
+        right: 0;
+        bottom: 0;
         display: flex;
         background: var(--bg-primary);
-        position: relative;
     }
 
     /* Floating Left Panel */
@@ -199,16 +197,16 @@
         <div class="planning-sidebar-header">
             <h2 class="page-title mb-2">Planning</h2>
             <p class="page-subtitle mb-0">Select locations to visualize</p>
-                        </div>
-                        
+        </div>
+
         <!-- Content -->
         <div class="planning-sidebar-content">
-                            <!-- Search -->
+            <!-- Search -->
             <div class="search-box-modern">
                 <i class="fas fa-search"></i>
                 <input type="text" id="sidebar-search" placeholder="Search locations...">
-                            </div>
-                            
+            </div>
+
             <!-- Tab Switcher -->
             <div class="tab-pills">
                 <button class="tab-pill active" id="tab-companies" onclick="switchTab('companies')">
@@ -221,25 +219,25 @@
                     Prospects
                     <span class="stat-badge ms-auto" id="prospects-count">0</span>
                 </button>
-                            </div>
-                            
+            </div>
+
             <!-- Companies List -->
             <div id="companies-list">
                 <div class="text-center py-5 text-muted">
                     <i class="fas fa-building fa-3x mb-3 opacity-25"></i>
                     <p>Loading companies...</p>
-                                </div>
-                            </div>
+                </div>
+            </div>
 
             <!-- Prospects List (Hidden by default) -->
             <div id="prospects-list" style="display: none;">
                 <div class="text-center py-5 text-muted">
                     <i class="fas fa-map-marker-alt fa-3x mb-3 opacity-25"></i>
                     <p>Loading prospects...</p>
-                        </div>
-                    </div>
                 </div>
             </div>
+        </div>
+    </div>
 
     <!-- Map Container - Full Width -->
     <div class="planning-map-container">
@@ -261,6 +259,149 @@
     </div>
 </div>
 
+        <!-- Bottom Row: Selection Controls and Details -->
+        <div class="col-lg-7">
+            <!-- Selection Summary Card -->
+            <div class="card mb-3" id="selection-summary-card" style="display: none;">
+                <div class="card-body p-3">
+                    <h6 class="card-title mb-2">
+                        <i class="fas fa-chart-bar me-2"></i>Selection Summary
+                    </h6>
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <div class="text-center p-2 bg-primary bg-opacity-10 rounded">
+                                <div class="fw-bold text-primary" id="summary-companies-selected">0</div>
+                                <small class="text-muted">Companies</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center p-2 bg-success bg-opacity-10 rounded">
+                                <div class="fw-bold text-success" id="summary-prospects-selected">0</div>
+                                <small class="text-muted">Prospects</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Company & Prospect Selection -->
+            <div class="card">
+                <div class="card-header bg-white border-bottom">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">
+                            <i class="fas fa-layer-group me-2"></i>Select Items
+                        </h6>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary btn-sm" onclick="selectAllItems()">
+                                <i class="fas fa-check-double me-1"></i>All
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="deselectAllItems()">
+                                <i class="fas fa-times me-1"></i>None
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <!-- Tabs -->
+                    <ul class="nav nav-tabs nav-fill border-0" id="selection-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="companies-tab" data-bs-toggle="pill" data-bs-target="#companies-panel" type="button" role="tab">
+                                <i class="fas fa-building me-1"></i>Companies 
+                                <span class="badge bg-primary ms-1" id="companies-count">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="prospects-tab" data-bs-toggle="pill" data-bs-target="#prospects-panel" type="button" role="tab">
+                                <i class="fas fa-search me-1"></i>Prospects 
+                                <span class="badge bg-success ms-1" id="prospects-count">0</span>
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <!-- Tab Content -->
+                    <div class="tab-content" id="selection-tab-content">
+                        <!-- Companies Tab -->
+                        <div class="tab-pane fade show active p-3" id="companies-panel" role="tabpanel">
+                            <!-- Search and Filter -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-7">
+                                    <input type="text" class="form-control form-control-sm" id="company-filter" placeholder="Search companies...">
+                                </div>
+                                <div class="col-5">
+                                    <select class="form-select form-select-sm" id="region-filter">
+                                        <option value="">All Regions</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Selection Status -->
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted">
+                                    <span id="selected-companies-count">0</span> of <span id="total-companies">0</span> selected
+                                </small>
+                                <small class="text-muted">
+                                    <i class="fas fa-map-marker-alt text-success me-1"></i><span id="map-markers-count">0</span> on map
+                                </small>
+                            </div>
+                            
+                            <!-- Companies List -->
+                            <div id="companies-list" style="max-height: 300px; overflow-y: auto;" class="border rounded p-2">
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-download fa-2x mb-2"></i>
+                                    <p class="mb-0">Click "Load Data" to start</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Prospects Tab -->
+                        <div class="tab-pane fade p-3" id="prospects-panel" role="tabpanel">
+                            <!-- Search -->
+                            <div class="mb-3">
+                                <input type="text" class="form-control form-control-sm" id="prospect-filter" placeholder="Search prospects...">
+                            </div>
+                            
+                            <!-- Selection Status -->
+                            <div class="mb-2">
+                                <small class="text-muted">
+                                    <span id="selected-prospects-count">0</span> of <span id="total-prospects">0</span> selected
+                                </small>
+                            </div>
+                            
+                            <!-- Prospects List -->
+                            <div id="prospects-list" style="max-height: 300px; overflow-y: auto;" class="border rounded p-2">
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-download fa-2x mb-2"></i>
+                                    <p class="mb-0">Load data to see prospects</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Details Panel -->
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-white border-bottom">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Details
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="company-details">
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-mouse-pointer fa-2x mb-3"></i>
+                            <p class="mb-0">Select companies/prospects and click "Visualize" to see them on the map</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 {% endblock %}
 
 {% block extra_scripts %}
@@ -279,7 +420,6 @@ let selectedCompanies = new Set();
 let selectedProspects = new Set();
 let markers = [];
 const mapboxToken = '{{ mapbox_api_key }}';
-let currentTab = 'companies';
 
 // Cache configuration
 const COMPANIES_CACHE_KEY = 'duano_companies_cache_v1';
@@ -294,47 +434,34 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Auto-load companies and prospects data on page load
     loadCompaniesData();
-    loadProspectsData();
     
-    // Search functionality for sidebar
-    const sidebarSearch = document.getElementById('sidebar-search');
-    if (sidebarSearch) {
-        sidebarSearch.addEventListener('input', debounce(handleSidebarSearch, 300));
+    // Filter input event listeners
+    const companyFilter = document.getElementById('company-filter');
+    const regionFilter = document.getElementById('region-filter');
+    const prospectFilter = document.getElementById('prospect-filter');
+    
+    if (companyFilter) {
+        companyFilter.addEventListener('input', debounce(filterCompanies, 300));
+    }
+    
+    if (regionFilter) {
+        regionFilter.addEventListener('change', filterCompanies);
+    }
+    
+    if (prospectFilter) {
+        prospectFilter.addEventListener('input', debounce(filterProspects, 300));
+    }
+    
+    // Auto-load companies if cached data exists
+    const cachedData = sessionStorage.getItem(COMPANIES_CACHE_KEY);
+    const cachedTime = sessionStorage.getItem(COMPANIES_CACHE_TIME_KEY);
+    const now = Date.now();
+    
+    if (cachedData && cachedTime && (now - parseInt(cachedTime)) < CACHE_DURATION) {
+        console.log('🚀 Auto-loading companies from cache on page load');
+        loadCompaniesData();
     }
 });
-
-// Tab Switching Function
-function switchTab(tab) {
-    currentTab = tab;
-    
-    // Update tab buttons
-    document.getElementById('tab-companies').classList.toggle('active', tab === 'companies');
-    document.getElementById('tab-prospects').classList.toggle('active', tab === 'prospects');
-    
-    // Show/hide lists
-    document.getElementById('companies-list').style.display = tab === 'companies' ? 'block' : 'none';
-    document.getElementById('prospects-list').style.display = tab === 'prospects' ? 'block' : 'none';
-}
-
-// Sidebar search handler
-function handleSidebarSearch(e) {
-    const searchTerm = e.target.value.toLowerCase();
-    
-    if (currentTab === 'companies') {
-        filteredCompanies = companies.filter(c => 
-            c.name?.toLowerCase().includes(searchTerm) ||
-            c.city?.toLowerCase().includes(searchTerm) ||
-            c.country_name?.toLowerCase().includes(searchTerm)
-        );
-        displayCompaniesList();
-    } else {
-        filteredProspects = prospects.filter(p =>
-            p.name?.toLowerCase().includes(searchTerm) ||
-            p.address?.toLowerCase().includes(searchTerm)
-        );
-        displayProspectsList();
-    }
-}
 
 // Initialize Mapbox map
 function initializeMap() {
@@ -360,6 +487,7 @@ function initializeMap() {
 async function loadCompaniesData() {
     try {
         console.log('📡 Loading companies for planning...');
+        showToast('Loading companies...', 'info');
         
         // Check cache first
         const cachedData = sessionStorage.getItem(COMPANIES_CACHE_KEY);
@@ -371,7 +499,7 @@ async function loadCompaniesData() {
             console.log('📦 Using cached companies data for planning');
             companies = JSON.parse(cachedData);
             console.log(`📦 Cache contains ${companies.length} companies`);
-            console.log(`✅ Loaded ${companies.length} companies from cache`);
+            showToast(`Loaded ${companies.length} companies from cache`, 'success');
         } else {
             console.log('📡 Fetching companies from Supabase (same as Companies page)');
             
@@ -401,7 +529,7 @@ async function loadCompaniesData() {
             sessionStorage.setItem(COMPANIES_CACHE_KEY, JSON.stringify(companies));
             sessionStorage.setItem(COMPANIES_CACHE_TIME_KEY, String(now));
             
-            // showToast(`Loaded ${companies.length} companies`, 'success');
+            showToast(`Loaded ${companies.length} companies`, 'success');
         }
         
         console.log(`✅ Loaded ${companies.length} companies for planning`);
@@ -410,9 +538,6 @@ async function loadCompaniesData() {
         filteredCompanies = [...companies];
         populateRegionFilter();
         displayCompaniesList();
-        
-        // Auto-visualize all companies on map
-        await addCompaniesToMap(companies);
         
         // Also load prospects
         await loadProspectsData();
@@ -423,7 +548,7 @@ async function loadCompaniesData() {
         
     } catch (error) {
         console.error('Error loading companies:', error);
-        // showToast('Failed to load companies: ' + error.message, 'error');
+        showToast('Failed to load companies: ' + error.message, 'error');
         
         // Show error in UI
         const container = document.getElementById('companies-list');
@@ -481,9 +606,6 @@ async function loadProspectsData() {
         // Initialize filtered prospects and populate UI
         filteredProspects = [...prospects];
         displayProspectsList();
-        
-        // Auto-visualize all prospects on map
-        await addProspectsToMap(prospects);
         
     } catch (error) {
         console.error('Error loading prospects:', error);
@@ -548,30 +670,18 @@ async function addCompaniesToMap(companiesToAdd = companies) {
 
 // Get company address from invoice_address field
 function getCompanyAddress(company) {
-    // Direct fields from Supabase companies table
+    if (company.invoice_address) {
+        const addr = company.invoice_address;
         const addressParts = [
-        company.address_line1 || company.address,
-        company.city,
-        company.post_code,
-        company.country_name
-    ].filter(part => part && typeof part === 'string' && part.trim() !== '');
-    
-    if (addressParts.length > 0) {
-        return addressParts.join(', ');
+            addr.address_line1 || addr.address1 || addr.street,
+            addr.address_line2 || addr.address2,
+            addr.city || addr.town,
+            addr.post_code || addr.postal_code || addr.zip_code || addr.zip,
+            addr.country?.name || addr.country_name || addr.country
+        ].filter(part => part && part.trim());
+        
+        return addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
     }
-    
-    // Fallback: Try raw_company_data.invoice_address
-    if (company.raw_company_data && company.raw_company_data.invoice_address) {
-        const addr = company.raw_company_data.invoice_address;
-        const parts = [
-            addr.address_line1,
-            addr.city,
-            addr.post_code,
-            addr.country?.name || addr.country_name
-        ].filter(part => part && typeof part === 'string' && part.trim() !== '');
-        if (parts.length > 0) return parts.join(', ');
-    }
-    
     return 'No address available';
 }
 
@@ -628,27 +738,14 @@ function filterCompanies() {
     updateSelectionCounts();
 }
 
-// Toggle company selection and auto-visualize
+// Toggle company selection
 function toggleCompanySelection(companyId) {
     if (selectedCompanies.has(companyId)) {
         selectedCompanies.delete(companyId);
     } else {
         selectedCompanies.add(companyId);
     }
-    displayCompaniesList();
-    updateSelectedCount();
-    
-    // Auto-visualize selected companies
-    visualizeSelectedCompanies();
-}
-
-// Auto-visualize when selecting
-function visualizeSelected() {
-    if (currentTab === 'companies') {
-        visualizeSelectedCompanies();
-    } else {
-        visualizeSelectedProspects();
-    }
+    updateSelectionCounts();
 }
 
 // Select all visible items (companies and prospects)
@@ -737,19 +834,19 @@ async function visualizeSelectedCompanies() {
     const totalSelected = selectedCompanies.size + selectedProspects.size;
     
     if (totalSelected === 0) {
-        // showToast('Please select at least one company or prospect to visualize', 'warning');
+        showToast('Please select at least one company or prospect to visualize', 'warning');
         return;
     }
     
     // Validate data is loaded
     if (!Array.isArray(companies) || !Array.isArray(prospects)) {
-        // showToast('Please load data first before visualizing', 'warning');
+        showToast('Please load data first before visualizing', 'warning');
         return;
     }
     
     try {
         console.log(`🗺️ Visualizing ${selectedCompanies.size} companies and ${selectedProspects.size} prospects...`);
-        // showToast(`Adding ${totalSelected} items to map...`, 'info');
+        showToast(`Adding ${totalSelected} items to map...`, 'info');
         
         // Get selected companies and prospects with null checks
         const companiesToVisualize = companies.filter(company => company && company.id && selectedCompanies.has(company.id));
@@ -774,11 +871,11 @@ async function visualizeSelectedCompanies() {
         displayProspectsList();
         updateSelectionCounts();
         
-        // showToast(`${markers.length} items added to map`, 'success');
+        showToast(`${markers.length} items added to map`, 'success');
         
     } catch (error) {
         console.error('Error visualizing items:', error);
-        // showToast('Failed to visualize items: ' + error.message, 'error');
+        showToast('Failed to visualize items: ' + error.message, 'error');
     }
 }
 
@@ -788,7 +885,7 @@ function clearMap() {
     displayCompaniesList();
     displayProspectsList();
     updateSelectionCounts();
-    // showToast('Map cleared', 'info');
+    showToast('Map cleared', 'info');
 }
 
 // Geocode address using Mapbox Geocoding API
@@ -999,41 +1096,38 @@ function displayCompaniesList() {
     
     const html = filteredCompanies.map(company => {
         const address = getCompanyAddress(company);
-        const isSelected = selectedCompanies.has(company.company_id);
-        const revenue = company.total_revenue_all_time || 0;
+        const isSelected = selectedCompanies.has(company.id);
+        const isOnMap = markers.some(item => item.company && item.company.id === company.id);
+        const region = getCompanyRegion(company);
         
         return `
-            <div class="list-item ${isSelected ? 'selected' : ''}" onclick="toggleCompanySelection(${company.company_id})">
-                <div class="list-item-title">${escapeHtml(company.name || 'Unnamed')}</div>
-                <div class="list-item-meta">
-                    <i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(address)}
+            <div class="company-item border-bottom py-2" data-company-id="${company.id}">
+                <div class="d-flex align-items-start">
+                    <div class="form-check me-2 mt-1">
+                        <input class="form-check-input" type="checkbox" 
+                               id="company-${company.id}" 
+                               ${isSelected ? 'checked' : ''}
+                               onchange="toggleCompanySelection(${company.id})">
                     </div>
-                ${revenue > 0 ? `
-                    <div class="list-item-meta mt-1">
-                        <i class="fas fa-euro-sign me-1"></i>€${parseFloat(revenue).toLocaleString('nl-BE')}
+                    <div class="flex-grow-1" onclick="showCompanyDetails(${company.id})">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">${company.name || 'Unnamed Company'}</h6>
+                                <small class="text-muted d-block">${address}</small>
+                                <small class="text-info">${region}</small>
                             </div>
-                ` : ''}
+                            <div class="text-end">
+                                ${isOnMap ? '<i class="fas fa-map-marker-alt text-success" title="On Map"></i>' : ''}
+                                ${company.vat_number ? `<small class="d-block text-muted">${company.vat_number}</small>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     }).join('');
     
     container.innerHTML = html;
-    updateSelectedCount();
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function updateSelectedCount() {
-    const total = selectedCompanies.size + selectedProspects.size;
-    const countEl = document.getElementById('selected-count');
-    if (countEl) {
-        countEl.textContent = total;
-    }
 }
 
 // Display prospect details panel
@@ -1110,33 +1204,41 @@ function displayProspectsList() {
         console.log('🔍 Current selected prospects:', Array.from(selectedProspects));
     }
     
-    // Update prospects count badge
-    const prospectsCountBadge = document.getElementById('prospects-count');
-    if (prospectsCountBadge) {
-        prospectsCountBadge.textContent = filteredProspects.length;
-    }
-    
     const html = filteredProspects.map(prospect => {
         const address = getProspectAddress(prospect);
         const isSelected = selectedProspects.has(prospect.id);
+        const isOnMap = markers.some(item => item.prospect && item.prospect.id === prospect.id);
+        
+        console.log(`🔍 Prospect ${prospect.name || prospect.company_name}: ID=${prospect.id}, Selected=${isSelected}`);
         
         return `
-            <div class="list-item ${isSelected ? 'selected' : ''}" onclick="toggleProspectSelection('${prospect.id}')">
-                <div class="list-item-title">${escapeHtml(prospect.name || 'Unnamed Prospect')}</div>
-                <div class="list-item-meta">
-                    <i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(address)}
+            <div class="prospect-item border-bottom py-2" data-prospect-id="${prospect.id}">
+                <div class="d-flex align-items-start">
+                    <div class="form-check me-2 mt-1">
+                        <input class="form-check-input" type="checkbox" 
+                               id="prospect-${prospect.id}" 
+                               ${isSelected ? 'checked' : ''}
+                               onchange="toggleProspectSelection('${prospect.id}')">
                     </div>
-                ${prospect.status ? `
-                    <div class="list-item-meta mt-1">
-                        <i class="fas fa-flag me-1"></i>${escapeHtml(prospect.status)}
+                    <div class="flex-grow-1" onclick="showProspectDetails('${prospect.id}')">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1 text-success">${prospect.name || prospect.company_name || 'Unnamed Prospect'}</h6>
+                                <small class="text-muted d-block">${address}</small>
+                                ${prospect.description ? `<small class="text-info">${prospect.description}</small>` : ''}
                             </div>
-                ` : ''}
+                            <div class="text-end">
+                                ${isOnMap ? '<i class="fas fa-map-marker-alt text-success" title="On Map"></i>' : ''}
+                                ${prospect.vat_number ? `<small class="d-block text-muted">${prospect.vat_number}</small>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     }).join('');
     
     container.innerHTML = html;
-    updateSelectedCount();
 }
 
 // Get prospect address 
@@ -1325,7 +1427,7 @@ function displayCompanyDetails(company) {
 async function refreshCompaniesCache() {
     try {
         console.log('🔄 Refreshing companies cache...');
-        // showToast('Refreshing companies data...', 'info');
+        showToast('Refreshing companies data...', 'info');
         
         // Clear cache
         sessionStorage.removeItem(COMPANIES_CACHE_KEY);
@@ -1334,11 +1436,11 @@ async function refreshCompaniesCache() {
         // Force reload companies
         await loadCompaniesData();
         
-        // showToast('Companies cache refreshed successfully', 'success');
+        showToast('Companies cache refreshed successfully', 'success');
         
     } catch (error) {
         console.error('Error refreshing cache:', error);
-        // showToast('Failed to refresh cache: ' + error.message, 'error');
+        showToast('Failed to refresh cache: ' + error.message, 'error');
     }
 }
 
@@ -1356,7 +1458,7 @@ function debounce(func, wait) {
 }
 
 // Toast notification function
-function // showToast(message, type = 'info') {
+function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'primary'} border-0 position-fixed`;
     toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
@@ -1379,4 +1481,92 @@ function // showToast(message, type = 'info') {
     });
 }
 </script>
+
+<style>
+/* Custom marker styles */
+.custom-marker {
+    cursor: pointer;
+}
+
+.marker-pin {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+/* Company markers (blue) */
+.company-pin {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+/* Prospect markers (green) */
+.prospect-pin {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.marker-pin:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Popup styles */
+.marker-popup {
+    max-width: 250px;
+}
+
+.marker-popup h6 {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* Company list styles */
+.company-item {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 4px;
+}
+
+.company-item:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+}
+
+.company-item.has-location {
+    border-left: 3px solid #10b981;
+}
+
+/* Search result styles */
+.search-result-item {
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.search-result-item:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+}
+
+/* Map container styles */
+#map {
+    border-radius: 0 0 16px 16px;
+}
+
+/* Company details card */
+.company-details-card {
+    background: rgba(248, 250, 252, 0.5);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+}
+</style>
 {% endblock %}
