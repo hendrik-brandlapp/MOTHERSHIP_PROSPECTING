@@ -411,6 +411,9 @@ async function loadCompaniesData() {
         populateRegionFilter();
         displayCompaniesList();
         
+        // Auto-visualize all companies on map
+        await addCompaniesToMap(companies);
+        
         // Also load prospects
         await loadProspectsData();
         
@@ -478,6 +481,9 @@ async function loadProspectsData() {
         // Initialize filtered prospects and populate UI
         filteredProspects = [...prospects];
         displayProspectsList();
+        
+        // Auto-visualize all prospects on map
+        await addProspectsToMap(prospects);
         
     } catch (error) {
         console.error('Error loading prospects:', error);
