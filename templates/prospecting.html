@@ -272,30 +272,28 @@
         opacity: 1;
     }
     
-    /* Tab Navigation - Enhanced Visibility */
+    /* Tab Navigation - Match Data Analysis Page Style */
     .nav-pills .nav-link {
         border-radius: 8px;
-        font-weight: 600;
-        padding: 0.875rem 1.75rem;
+        font-weight: 500;
+        padding: 0.75rem 1.5rem;
         transition: all 0.2s ease;
-        color: #1f2937;
-        background: #f9fafb;
-        border: 2px solid #e5e7eb;
+        color: var(--bs-primary);
+        background: white;
+        border: 2px solid var(--bs-primary);
         margin-right: 0.5rem;
     }
     
     .nav-pills .nav-link:hover:not(.active) {
-        background: #f3f4f6;
-        color: #111827;
-        border-color: #d1d5db;
         transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
     
     .nav-pills .nav-link.active {
-        background: var(--primary-color);
-        color: white;
-        border-color: var(--primary-color);
-        box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.3);
+        background-color: var(--bs-primary) !important;
+        border-color: var(--bs-primary) !important;
+        color: white !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
     
     /* Notes Section */
