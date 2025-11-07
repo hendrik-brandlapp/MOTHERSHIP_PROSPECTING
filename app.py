@@ -42,6 +42,11 @@ try:
 except Exception:
     WhatsAppService = None
 
+try:
+    from route_optimizer import optimize_trip_route
+except Exception:
+    optimize_trip_route = None
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -9142,6 +9147,365 @@ def api_update_prospect_notes(prospect_id):
         
     except Exception as e:
         print(f"Error updating prospect notes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ========================================
+# TRIPS MANAGEMENT ENDPOINTS
+# ========================================
+
+@app.route('/trips')
+@login_required
+def trips_page():
+    """Render trips management page"""
+    return render_template('trips.html')
+
+
+@app.route('/api/trips', methods=['GET'])
+@login_required
+def get_trips():
+    """Get all trips"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        # Get query parameters for filtering
+        status = request.args.get('status')
+        from_date = request.args.get('from_date')
+        to_date = request.args.get('to_date')
+        
+        # Build query
+        query = supabase_client.table('trips').select('*')
+        
+        if status:
+            query = query.eq('status', status)
+        if from_date:
+            query = query.gte('trip_date', from_date)
+        if to_date:
+            query = query.lte('trip_date', to_date)
+        
+        # Execute query
+        response = query.order('trip_date', desc=True).execute()
+        
+        return jsonify({
+            'success': True,
+            'trips': response.data
+        })
+        
+    except Exception as e:
+        print(f"Error fetching trips: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/<trip_id>', methods=['GET'])
+@login_required
+def get_trip(trip_id):
+    """Get a single trip with all its stops"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        # Get trip details
+        trip_response = supabase_client.table('trips').select('*').eq('id', trip_id).execute()
+        
+        if not trip_response.data:
+            return jsonify({'error': 'Trip not found'}), 404
+        
+        trip = trip_response.data[0]
+        
+        # Get trip stops
+        stops_response = supabase_client.table('trip_stops').select('*').eq('trip_id', trip_id).order('stop_order').execute()
+        
+        trip['stops'] = stops_response.data
+        
+        return jsonify({
+            'success': True,
+            'trip': trip
+        })
+        
+    except Exception as e:
+        print(f"Error fetching trip: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips', methods=['POST'])
+@login_required
+def create_trip():
+    """Create a new trip with optimized route"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        if not optimize_trip_route:
+            return jsonify({'error': 'Route optimizer not available'}), 500
+        
+        data = request.json
+        
+        # Validate required fields
+        required_fields = ['name', 'trip_date', 'start_location', 'start_time', 'destinations']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        start_location = data['start_location']
+        destinations = data['destinations']
+        
+        if not destinations or len(destinations) == 0:
+            return jsonify({'error': 'At least one destination is required'}), 400
+        
+        # Optimize the route
+        optimization_result = optimize_trip_route(
+            start_location=start_location,
+            destinations=destinations,
+            google_maps_api_key=GOOGLE_MAPS_API_KEY
+        )
+        
+        if not optimization_result.get('success'):
+            return jsonify({
+                'error': 'Failed to optimize route',
+                'details': optimization_result.get('error')
+            }), 400
+        
+        # Create trip record
+        trip_data = {
+            'name': data['name'],
+            'trip_date': data['trip_date'],
+            'start_location': start_location.get('name', 'Start'),
+            'start_time': data['start_time'],
+            'start_lat': start_location['lat'],
+            'start_lng': start_location['lng'],
+            'status': 'planned',
+            'total_distance_km': optimization_result['total_distance_km'],
+            'estimated_duration_minutes': optimization_result['estimated_duration_minutes'],
+            'notes': data.get('notes', '')
+        }
+        
+        trip_response = supabase_client.table('trips').insert(trip_data).execute()
+        
+        if not trip_response.data:
+            return jsonify({'error': 'Failed to create trip'}), 500
+        
+        trip_id = trip_response.data[0]['id']
+        
+        # Create trip stops in optimized order
+        stops_data = []
+        for idx, stop in enumerate(optimization_result['ordered_stops']):
+            stop_data = {
+                'trip_id': trip_id,
+                'company_id': stop.get('company_id', ''),
+                'company_name': stop['name'],
+                'address': stop.get('address', ''),
+                'latitude': stop['latitude'],
+                'longitude': stop['longitude'],
+                'stop_order': idx + 1,
+                'duration_minutes': 30  # Default duration
+            }
+            stops_data.append(stop_data)
+        
+        # Insert all stops
+        if stops_data:
+            supabase_client.table('trip_stops').insert(stops_data).execute()
+        
+        # Fetch the complete trip with stops
+        complete_trip = supabase_client.table('trips').select('*').eq('id', trip_id).execute()
+        stops = supabase_client.table('trip_stops').select('*').eq('trip_id', trip_id).order('stop_order').execute()
+        
+        result = complete_trip.data[0]
+        result['stops'] = stops.data
+        
+        return jsonify({
+            'success': True,
+            'trip': result,
+            'message': 'Trip created successfully with optimized route'
+        })
+        
+    except Exception as e:
+        print(f"Error creating trip: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/<trip_id>', methods=['PUT'])
+@login_required
+def update_trip(trip_id):
+    """Update trip details"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        data = request.json
+        
+        # Update trip
+        update_data = {}
+        allowed_fields = ['name', 'trip_date', 'start_time', 'status', 'notes']
+        
+        for field in allowed_fields:
+            if field in data:
+                update_data[field] = data[field]
+        
+        if not update_data:
+            return jsonify({'error': 'No valid fields to update'}), 400
+        
+        response = supabase_client.table('trips').update(update_data).eq('id', trip_id).execute()
+        
+        if not response.data:
+            return jsonify({'error': 'Trip not found'}), 404
+        
+        return jsonify({
+            'success': True,
+            'trip': response.data[0],
+            'message': 'Trip updated successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error updating trip: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/<trip_id>', methods=['DELETE'])
+@login_required
+def delete_trip(trip_id):
+    """Delete a trip (and all its stops via CASCADE)"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        response = supabase_client.table('trips').delete().eq('id', trip_id).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Trip deleted successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error deleting trip: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/<trip_id>/stops/<stop_id>', methods=['DELETE'])
+@login_required
+def delete_trip_stop(trip_id, stop_id):
+    """Delete a stop from a trip and reorder remaining stops"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        # Get the stop to be deleted
+        stop_response = supabase_client.table('trip_stops').select('*').eq('id', stop_id).execute()
+        
+        if not stop_response.data:
+            return jsonify({'error': 'Stop not found'}), 404
+        
+        deleted_order = stop_response.data[0]['stop_order']
+        
+        # Delete the stop
+        supabase_client.table('trip_stops').delete().eq('id', stop_id).execute()
+        
+        # Reorder remaining stops
+        remaining_stops = supabase_client.table('trip_stops').select('*').eq('trip_id', trip_id).order('stop_order').execute()
+        
+        for idx, stop in enumerate(remaining_stops.data):
+            new_order = idx + 1
+            if stop['stop_order'] != new_order:
+                supabase_client.table('trip_stops').update({'stop_order': new_order}).eq('id', stop['id']).execute()
+        
+        # Recalculate trip distance (simplified - just update the count)
+        # In a production system, you'd want to recalculate the actual distance
+        
+        return jsonify({
+            'success': True,
+            'message': 'Stop deleted and route reordered'
+        })
+        
+    except Exception as e:
+        print(f"Error deleting trip stop: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/<trip_id>/optimize', methods=['POST'])
+@login_required
+def reoptimize_trip(trip_id):
+    """Re-optimize an existing trip's route"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        if not optimize_trip_route:
+            return jsonify({'error': 'Route optimizer not available'}), 500
+        
+        # Get trip and stops
+        trip_response = supabase_client.table('trips').select('*').eq('id', trip_id).execute()
+        
+        if not trip_response.data:
+            return jsonify({'error': 'Trip not found'}), 404
+        
+        trip = trip_response.data[0]
+        
+        stops_response = supabase_client.table('trip_stops').select('*').eq('trip_id', trip_id).execute()
+        stops = stops_response.data
+        
+        if not stops:
+            return jsonify({'error': 'No stops to optimize'}), 400
+        
+        # Prepare data for optimization
+        start_location = {
+            'lat': float(trip['start_lat']),
+            'lng': float(trip['start_lng']),
+            'name': trip['start_location']
+        }
+        
+        destinations = []
+        for stop in stops:
+            destinations.append({
+                'lat': float(stop['latitude']),
+                'lng': float(stop['longitude']),
+                'name': stop['company_name'],
+                'address': stop['address'],
+                'company_id': stop['company_id']
+            })
+        
+        # Optimize
+        optimization_result = optimize_trip_route(
+            start_location=start_location,
+            destinations=destinations,
+            google_maps_api_key=GOOGLE_MAPS_API_KEY
+        )
+        
+        if not optimization_result.get('success'):
+            return jsonify({
+                'error': 'Failed to optimize route',
+                'details': optimization_result.get('error')
+            }), 400
+        
+        # Update trip with new distance and duration
+        supabase_client.table('trips').update({
+            'total_distance_km': optimization_result['total_distance_km'],
+            'estimated_duration_minutes': optimization_result['estimated_duration_minutes']
+        }).eq('id', trip_id).execute()
+        
+        # Update stop orders based on optimization
+        for idx, optimized_stop in enumerate(optimization_result['ordered_stops']):
+            # Find the matching stop by coordinates
+            for stop in stops:
+                if (abs(float(stop['latitude']) - optimized_stop['latitude']) < 0.0001 and
+                    abs(float(stop['longitude']) - optimized_stop['longitude']) < 0.0001):
+                    supabase_client.table('trip_stops').update({
+                        'stop_order': idx + 1
+                    }).eq('id', stop['id']).execute()
+                    break
+        
+        return jsonify({
+            'success': True,
+            'message': 'Trip route re-optimized successfully',
+            'total_distance_km': optimization_result['total_distance_km'],
+            'estimated_duration_minutes': optimization_result['estimated_duration_minutes']
+        })
+        
+    except Exception as e:
+        print(f"Error re-optimizing trip: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 

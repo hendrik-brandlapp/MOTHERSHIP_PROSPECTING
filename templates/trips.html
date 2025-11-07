@@ -1,0 +1,924 @@
+{% extends "base.html" %}
+
+{% block title %}Trips - CRMinal{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Trips Page Layout */
+    .trips-container {
+        display: flex;
+        gap: var(--space-lg);
+        height: calc(100vh - 180px);
+    }
+
+    .trips-list-section {
+        width: 400px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-surface);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-subtle);
+        overflow: hidden;
+    }
+
+    .trips-list-header {
+        padding: var(--space-lg);
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .trips-list-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: var(--space-md);
+    }
+
+    .trip-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: var(--space-md);
+        margin-bottom: var(--space-sm);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .trip-card:hover {
+        border-color: var(--accent);
+        box-shadow: var(--shadow-sm);
+        transform: translateY(-2px);
+    }
+
+    .trip-card.active {
+        border-color: var(--accent);
+        background: var(--accent-subtle);
+    }
+
+    .trip-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: var(--space-sm);
+    }
+
+    .trip-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+
+    .trip-date {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .trip-status-badge {
+        padding: 0.25rem 0.625rem;
+        border-radius: var(--radius-full);
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .trip-status-badge.planned {
+        background: var(--info-bg);
+        color: var(--info);
+    }
+
+    .trip-status-badge.in_progress {
+        background: var(--warning-bg);
+        color: var(--warning);
+    }
+
+    .trip-status-badge.completed {
+        background: var(--success-bg);
+        color: var(--success);
+    }
+
+    .trip-meta {
+        display: flex;
+        gap: var(--space-md);
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-top: var(--space-sm);
+    }
+
+    .trip-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    /* Trip Details Section */
+    .trip-details-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-surface);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-subtle);
+        overflow: hidden;
+    }
+
+    .trip-details-header {
+        padding: var(--space-lg);
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .trip-details-body {
+        flex: 1;
+        display: flex;
+        overflow: hidden;
+    }
+
+    .trip-map-container {
+        flex: 1;
+        position: relative;
+    }
+
+    #tripMap {
+        width: 100%;
+        height: 100%;
+    }
+
+    .trip-stops-sidebar {
+        width: 350px;
+        border-left: 1px solid var(--border-subtle);
+        overflow-y: auto;
+        background: var(--bg-primary);
+    }
+
+    .trip-stops-header {
+        padding: var(--space-md);
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border-subtle);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .trip-stop-item {
+        padding: var(--space-md);
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        gap: var(--space-sm);
+        transition: all 0.2s ease;
+    }
+
+    .trip-stop-item:hover {
+        background: var(--bg-hover);
+    }
+
+    .stop-number {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.875rem;
+        flex-shrink: 0;
+    }
+
+    .stop-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .stop-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .stop-address {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .stop-actions {
+        display: flex;
+        gap: 0.25rem;
+        flex-shrink: 0;
+    }
+
+    .stop-action-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius-sm);
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .stop-action-btn:hover {
+        background: var(--bg-active);
+        color: var(--text-primary);
+    }
+
+    .stop-action-btn.delete:hover {
+        background: var(--danger-bg);
+        color: var(--danger);
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        padding: var(--space-2xl);
+        text-align: center;
+        color: var(--text-secondary);
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: var(--space-lg);
+        opacity: 0.3;
+    }
+
+    .trip-info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--space-md);
+        padding: var(--space-lg);
+        background: var(--bg-primary);
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .trip-info-item {
+        text-align: center;
+    }
+
+    .trip-info-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        font-family: 'Inter Tight', sans-serif;
+    }
+
+    .trip-info-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+        display: flex;
+        gap: var(--space-sm);
+        margin-bottom: var(--space-md);
+    }
+
+    .filter-bar select,
+    .filter-bar input {
+        flex: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="page-title">Trips</h1>
+            <p class="page-subtitle">Manage and visualize your optimized routes</p>
+        </div>
+        <div>
+            <a href="{{ url_for('planning') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Create New Trip
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="trips-container">
+    <!-- Trips List -->
+    <div class="trips-list-section">
+        <div class="trips-list-header">
+            <h5 class="mb-3">Your Trips</h5>
+            <div class="filter-bar">
+                <select class="form-select form-select-sm" id="statusFilter" onchange="filterTrips()">
+                    <option value="">All Statuses</option>
+                    <option value="planned">Planned</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                </select>
+            </div>
+        </div>
+        <div class="trips-list-body" id="tripsList">
+            <div class="empty-state">
+                <i class="fas fa-map-marked-alt"></i>
+                <h5>No trips yet</h5>
+                <p>Create your first trip from the Planning page</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trip Details -->
+    <div class="trip-details-section" id="tripDetailsSection">
+        <div class="empty-state">
+            <i class="fas fa-route"></i>
+            <h5>Select a trip</h5>
+            <p>Choose a trip from the list to view details and route</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Google Maps API -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry"></script>
+
+<script>
+let trips = [];
+let selectedTrip = null;
+let map = null;
+let directionsService = null;
+let directionsRenderer = null;
+let markers = [];
+
+// Load trips on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadTrips();
+});
+
+async function loadTrips() {
+    try {
+        const response = await fetch('/api/trips');
+        const data = await response.json();
+        
+        if (data.success) {
+            trips = data.trips;
+            renderTripsList();
+        } else {
+            showNotification('Failed to load trips', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading trips:', error);
+        showNotification('Error loading trips', 'error');
+    }
+}
+
+function renderTripsList() {
+    const tripsList = document.getElementById('tripsList');
+    
+    if (trips.length === 0) {
+        tripsList.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-map-marked-alt"></i>
+                <h5>No trips yet</h5>
+                <p>Create your first trip from the Planning page</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const statusFilter = document.getElementById('statusFilter').value;
+    const filteredTrips = statusFilter ? trips.filter(t => t.status === statusFilter) : trips;
+    
+    if (filteredTrips.length === 0) {
+        tripsList.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-filter"></i>
+                <h5>No matching trips</h5>
+                <p>Try adjusting your filters</p>
+            </div>
+        `;
+        return;
+    }
+    
+    tripsList.innerHTML = filteredTrips.map(trip => `
+        <div class="trip-card ${selectedTrip && selectedTrip.id === trip.id ? 'active' : ''}" onclick="selectTrip('${trip.id}')">
+            <div class="trip-card-header">
+                <div>
+                    <div class="trip-name">${escapeHtml(trip.name)}</div>
+                    <div class="trip-date">
+                        <i class="fas fa-calendar"></i>
+                        ${formatDate(trip.trip_date)} at ${trip.start_time}
+                    </div>
+                </div>
+                <span class="trip-status-badge ${trip.status}">${formatStatus(trip.status)}</span>
+            </div>
+            <div class="trip-meta">
+                <div class="trip-meta-item">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span id="stopCount-${trip.id}">Loading...</span>
+                </div>
+                <div class="trip-meta-item">
+                    <i class="fas fa-road"></i>
+                    ${trip.total_distance_km ? trip.total_distance_km + ' km' : 'N/A'}
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    // Load stop counts for each trip
+    filteredTrips.forEach(trip => {
+        loadTripStopCount(trip.id);
+    });
+}
+
+async function loadTripStopCount(tripId) {
+    try {
+        const response = await fetch(`/api/trips/${tripId}`);
+        const data = await response.json();
+        
+        if (data.success && data.trip.stops) {
+            const element = document.getElementById(`stopCount-${tripId}`);
+            if (element) {
+                element.textContent = `${data.trip.stops.length} stops`;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading trip stop count:', error);
+    }
+}
+
+function filterTrips() {
+    renderTripsList();
+}
+
+async function selectTrip(tripId) {
+    try {
+        const response = await fetch(`/api/trips/${tripId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            selectedTrip = data.trip;
+            renderTripsList(); // Re-render to update active state
+            renderTripDetails();
+        } else {
+            showNotification('Failed to load trip details', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading trip details:', error);
+        showNotification('Error loading trip details', 'error');
+    }
+}
+
+function renderTripDetails() {
+    if (!selectedTrip) return;
+    
+    const detailsSection = document.getElementById('tripDetailsSection');
+    
+    detailsSection.innerHTML = `
+        <div class="trip-details-header">
+            <div>
+                <h4>${escapeHtml(selectedTrip.name)}</h4>
+                <small class="text-muted">
+                    <i class="fas fa-calendar me-1"></i>${formatDate(selectedTrip.trip_date)}
+                    <i class="fas fa-clock ms-2 me-1"></i>${selectedTrip.start_time}
+                    <i class="fas fa-map-marker-alt ms-2 me-1"></i>Starting from: ${escapeHtml(selectedTrip.start_location)}
+                </small>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary" onclick="reoptimizeTrip('${selectedTrip.id}')">
+                    <i class="fas fa-sync-alt me-1"></i>Re-optimize
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteTrip('${selectedTrip.id}')">
+                    <i class="fas fa-trash me-1"></i>Delete
+                </button>
+            </div>
+        </div>
+        
+        <div class="trip-info-grid">
+            <div class="trip-info-item">
+                <div class="trip-info-value">${selectedTrip.stops ? selectedTrip.stops.length : 0}</div>
+                <div class="trip-info-label">Stops</div>
+            </div>
+            <div class="trip-info-item">
+                <div class="trip-info-value">${selectedTrip.total_distance_km || 'N/A'}</div>
+                <div class="trip-info-label">Total Distance (km)</div>
+            </div>
+            <div class="trip-info-item">
+                <div class="trip-info-value">${selectedTrip.estimated_duration_minutes ? Math.round(selectedTrip.estimated_duration_minutes / 60 * 10) / 10 + 'h' : 'N/A'}</div>
+                <div class="trip-info-label">Est. Duration</div>
+            </div>
+            <div class="trip-info-item">
+                <div class="trip-info-value">
+                    <span class="trip-status-badge ${selectedTrip.status}">${formatStatus(selectedTrip.status)}</span>
+                </div>
+                <div class="trip-info-label">Status</div>
+            </div>
+        </div>
+        
+        <div class="trip-details-body">
+            <div class="trip-map-container">
+                <div id="tripMap"></div>
+            </div>
+            <div class="trip-stops-sidebar">
+                <div class="trip-stops-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-list me-2"></i>Route Stops
+                    </h6>
+                </div>
+                <div id="tripStopsList">
+                    ${renderStopsList()}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Initialize the map
+    initializeTripMap();
+}
+
+function renderStopsList() {
+    if (!selectedTrip || !selectedTrip.stops || selectedTrip.stops.length === 0) {
+        return '<div class="empty-state"><p>No stops in this trip</p></div>';
+    }
+    
+    return selectedTrip.stops.map((stop, index) => `
+        <div class="trip-stop-item">
+            <div class="stop-number">${stop.stop_order}</div>
+            <div class="stop-content">
+                <div class="stop-name">${escapeHtml(stop.company_name)}</div>
+                <div class="stop-address">${escapeHtml(stop.address || 'No address')}</div>
+            </div>
+            <div class="stop-actions">
+                <button class="stop-action-btn delete" onclick="deleteStop('${selectedTrip.id}', '${stop.id}')" title="Remove stop">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function initializeTripMap() {
+    if (!selectedTrip || !selectedTrip.stops) return;
+    
+    const mapElement = document.getElementById('tripMap');
+    if (!mapElement) return;
+    
+    // Initialize Google Maps
+    const startLat = parseFloat(selectedTrip.start_lat);
+    const startLng = parseFloat(selectedTrip.start_lng);
+    
+    map = new google.maps.Map(mapElement, {
+        center: { lat: startLat, lng: startLng },
+        zoom: 12,
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: true,
+        styles: [
+            {
+                featureType: 'poi',
+                elementType: 'labels',
+                stylers: [{ visibility: 'off' }]
+            }
+        ]
+    });
+    
+    // Clear existing markers
+    markers.forEach(marker => marker.setMap(null));
+    markers = [];
+    
+    // Add start location marker
+    const startMarker = new google.maps.Marker({
+        position: { lat: startLat, lng: startLng },
+        map: map,
+        title: selectedTrip.start_location,
+        label: {
+            text: 'S',
+            color: 'white',
+            fontWeight: 'bold'
+        },
+        icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 12,
+            fillColor: '#10B981',
+            fillOpacity: 1,
+            strokeColor: 'white',
+            strokeWeight: 2
+        }
+    });
+    markers.push(startMarker);
+    
+    // Add stop markers
+    selectedTrip.stops.forEach((stop, index) => {
+        const marker = new google.maps.Marker({
+            position: {
+                lat: parseFloat(stop.latitude),
+                lng: parseFloat(stop.longitude)
+            },
+            map: map,
+            title: stop.company_name,
+            label: {
+                text: stop.stop_order.toString(),
+                color: 'white',
+                fontWeight: 'bold'
+            },
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: '#5B5FEF',
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 2
+            }
+        });
+        
+        // Add info window
+        const infoWindow = new google.maps.InfoWindow({
+            content: `
+                <div style="padding: 8px;">
+                    <strong>${escapeHtml(stop.company_name)}</strong><br>
+                    <small>${escapeHtml(stop.address || '')}</small>
+                </div>
+            `
+        });
+        
+        marker.addListener('click', () => {
+            infoWindow.open(map, marker);
+        });
+        
+        markers.push(marker);
+    });
+    
+    // Draw route using DirectionsService
+    drawRoute();
+}
+
+function drawRoute() {
+    if (!map || !selectedTrip || !selectedTrip.stops || selectedTrip.stops.length === 0) return;
+    
+    // Initialize directions service
+    if (!directionsService) {
+        directionsService = new google.maps.DirectionsService();
+    }
+    
+    if (directionsRenderer) {
+        directionsRenderer.setMap(null);
+    }
+    
+    directionsRenderer = new google.maps.DirectionsRenderer({
+        map: map,
+        suppressMarkers: true, // We're using custom markers
+        polylineOptions: {
+            strokeColor: '#5B5FEF',
+            strokeWeight: 4,
+            strokeOpacity: 0.7
+        }
+    });
+    
+    // Build waypoints
+    const waypoints = selectedTrip.stops.map(stop => ({
+        location: {
+            lat: parseFloat(stop.latitude),
+            lng: parseFloat(stop.longitude)
+        },
+        stopover: true
+    }));
+    
+    // If we have waypoints, request directions
+    if (waypoints.length > 0) {
+        const startLocation = {
+            lat: parseFloat(selectedTrip.start_lat),
+            lng: parseFloat(selectedTrip.start_lng)
+        };
+        
+        // Google Maps Directions API allows max 25 waypoints (23 + origin + destination)
+        // If more waypoints, we need to split the request or use alternative approach
+        const maxWaypoints = Math.min(waypoints.length, 23);
+        const waypointsToUse = waypoints.slice(0, maxWaypoints);
+        
+        directionsService.route({
+            origin: startLocation,
+            destination: waypoints[waypoints.length - 1].location, // End at last stop
+            waypoints: waypointsToUse.slice(0, -1), // All stops except the last
+            travelMode: google.maps.TravelMode.DRIVING,
+            optimizeWaypoints: false // Already optimized by our TSP algorithm
+        }, (result, status) => {
+            if (status === 'OK') {
+                directionsRenderer.setDirections(result);
+            } else {
+                console.error('Directions request failed:', status);
+                // Fall back to drawing straight lines
+                drawStraightLines();
+            }
+        });
+    }
+}
+
+function drawStraightLines() {
+    // Fallback: draw straight lines between points
+    if (!selectedTrip || !selectedTrip.stops) return;
+    
+    const pathCoordinates = [
+        { lat: parseFloat(selectedTrip.start_lat), lng: parseFloat(selectedTrip.start_lng) }
+    ];
+    
+    selectedTrip.stops.forEach(stop => {
+        pathCoordinates.push({
+            lat: parseFloat(stop.latitude),
+            lng: parseFloat(stop.longitude)
+        });
+    });
+    
+    const path = new google.maps.Polyline({
+        path: pathCoordinates,
+        geodesic: true,
+        strokeColor: '#5B5FEF',
+        strokeOpacity: 0.7,
+        strokeWeight: 3,
+        map: map
+    });
+}
+
+async function deleteStop(tripId, stopId) {
+    if (!confirm('Are you sure you want to remove this stop from the trip?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/trips/${tripId}/stops/${stopId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Stop removed successfully', 'success');
+            // Reload trip details
+            await selectTrip(tripId);
+        } else {
+            showNotification(data.error || 'Failed to remove stop', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting stop:', error);
+        showNotification('Error removing stop', 'error');
+    }
+}
+
+async function deleteTrip(tripId) {
+    if (!confirm('Are you sure you want to delete this entire trip? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/trips/${tripId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Trip deleted successfully', 'success');
+            selectedTrip = null;
+            await loadTrips();
+            
+            // Show empty state
+            document.getElementById('tripDetailsSection').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-route"></i>
+                    <h5>Select a trip</h5>
+                    <p>Choose a trip from the list to view details and route</p>
+                </div>
+            `;
+        } else {
+            showNotification(data.error || 'Failed to delete trip', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting trip:', error);
+        showNotification('Error deleting trip', 'error');
+    }
+}
+
+async function reoptimizeTrip(tripId) {
+    if (!confirm('Re-optimize this trip? The route will be recalculated to minimize distance.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/trips/${tripId}/optimize`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Trip re-optimized successfully!', 'success');
+            // Reload trip details
+            await selectTrip(tripId);
+        } else {
+            showNotification(data.error || 'Failed to re-optimize trip', 'error');
+        }
+    } catch (error) {
+        console.error('Error re-optimizing trip:', error);
+        showNotification('Error re-optimizing trip', 'error');
+    }
+}
+
+// Utility functions
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+    });
+}
+
+function formatStatus(status) {
+    const statusMap = {
+        'planned': 'Planned',
+        'in_progress': 'In Progress',
+        'completed': 'Completed'
+    };
+    return statusMap[status] || status;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showNotification(message, type = 'info') {
+    const colors = {
+        success: '#10B981',
+        error: '#EF4444',
+        warning: '#F59E0B',
+        info: '#3B82F6'
+    };
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: white;
+        padding: 16px 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border-left: 4px solid ${colors[type]};
+        z-index: 9999;
+        min-width: 300px;
+        animation: slideIn 0.3s ease;
+    `;
+    
+    toast.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="color: ${colors[type]}; font-size: 20px;">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+            </div>
+            <div style="flex: 1; color: #1F2937; font-weight: 500;">${message}</div>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+</script>
+
+<style>
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+}
+</style>
+{% endblock %}
+
