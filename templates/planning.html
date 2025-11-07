@@ -360,7 +360,6 @@ function initializeMap() {
 async function loadCompaniesData() {
     try {
         console.log('📡 Loading companies for planning...');
-        showToast('Loading companies...', 'info');
         
         // Check cache first
         const cachedData = sessionStorage.getItem(COMPANIES_CACHE_KEY);
@@ -372,7 +371,7 @@ async function loadCompaniesData() {
             console.log('📦 Using cached companies data for planning');
             companies = JSON.parse(cachedData);
             console.log(`📦 Cache contains ${companies.length} companies`);
-            showToast(`Loaded ${companies.length} companies from cache`, 'success');
+            console.log(`✅ Loaded ${companies.length} companies from cache`);
         } else {
             console.log('📡 Fetching companies from Supabase (same as Companies page)');
             
@@ -402,7 +401,7 @@ async function loadCompaniesData() {
             sessionStorage.setItem(COMPANIES_CACHE_KEY, JSON.stringify(companies));
             sessionStorage.setItem(COMPANIES_CACHE_TIME_KEY, String(now));
             
-            showToast(`Loaded ${companies.length} companies`, 'success');
+            // showToast(`Loaded ${companies.length} companies`, 'success');
         }
         
         console.log(`✅ Loaded ${companies.length} companies for planning`);
@@ -421,7 +420,7 @@ async function loadCompaniesData() {
         
     } catch (error) {
         console.error('Error loading companies:', error);
-        showToast('Failed to load companies: ' + error.message, 'error');
+        // showToast('Failed to load companies: ' + error.message, 'error');
         
         // Show error in UI
         const container = document.getElementById('companies-list');
@@ -732,19 +731,19 @@ async function visualizeSelectedCompanies() {
     const totalSelected = selectedCompanies.size + selectedProspects.size;
     
     if (totalSelected === 0) {
-        showToast('Please select at least one company or prospect to visualize', 'warning');
+        // showToast('Please select at least one company or prospect to visualize', 'warning');
         return;
     }
     
     // Validate data is loaded
     if (!Array.isArray(companies) || !Array.isArray(prospects)) {
-        showToast('Please load data first before visualizing', 'warning');
+        // showToast('Please load data first before visualizing', 'warning');
         return;
     }
     
     try {
         console.log(`🗺️ Visualizing ${selectedCompanies.size} companies and ${selectedProspects.size} prospects...`);
-        showToast(`Adding ${totalSelected} items to map...`, 'info');
+        // showToast(`Adding ${totalSelected} items to map...`, 'info');
         
         // Get selected companies and prospects with null checks
         const companiesToVisualize = companies.filter(company => company && company.id && selectedCompanies.has(company.id));
@@ -769,11 +768,11 @@ async function visualizeSelectedCompanies() {
         displayProspectsList();
         updateSelectionCounts();
         
-        showToast(`${markers.length} items added to map`, 'success');
+        // showToast(`${markers.length} items added to map`, 'success');
         
     } catch (error) {
         console.error('Error visualizing items:', error);
-        showToast('Failed to visualize items: ' + error.message, 'error');
+        // showToast('Failed to visualize items: ' + error.message, 'error');
     }
 }
 
@@ -783,7 +782,7 @@ function clearMap() {
     displayCompaniesList();
     displayProspectsList();
     updateSelectionCounts();
-    showToast('Map cleared', 'info');
+    // showToast('Map cleared', 'info');
 }
 
 // Geocode address using Mapbox Geocoding API
@@ -1320,7 +1319,7 @@ function displayCompanyDetails(company) {
 async function refreshCompaniesCache() {
     try {
         console.log('🔄 Refreshing companies cache...');
-        showToast('Refreshing companies data...', 'info');
+        // showToast('Refreshing companies data...', 'info');
         
         // Clear cache
         sessionStorage.removeItem(COMPANIES_CACHE_KEY);
@@ -1329,11 +1328,11 @@ async function refreshCompaniesCache() {
         // Force reload companies
         await loadCompaniesData();
         
-        showToast('Companies cache refreshed successfully', 'success');
+        // showToast('Companies cache refreshed successfully', 'success');
         
     } catch (error) {
         console.error('Error refreshing cache:', error);
-        showToast('Failed to refresh cache: ' + error.message, 'error');
+        // showToast('Failed to refresh cache: ' + error.message, 'error');
     }
 }
 
@@ -1351,7 +1350,7 @@ function debounce(func, wait) {
 }
 
 // Toast notification function
-function showToast(message, type = 'info') {
+function // showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'primary'} border-0 position-fixed`;
     toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999;';
