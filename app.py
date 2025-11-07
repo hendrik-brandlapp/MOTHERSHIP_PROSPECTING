@@ -7055,7 +7055,7 @@ def api_companies_from_db():
             if invoice_count == 0 and year_filter != 'combined':
                 continue
             
-            # Build company data with all enhanced fields
+            # Build company data with all enhanced fields INCLUDING GEOCODING
             company_data = {
                 'id': company['id'],
                 'company_id': company['company_id'],
@@ -7079,6 +7079,13 @@ def api_companies_from_db():
                 'bank_accounts': company.get('bank_accounts'),
                 'default_document_notes': company.get('default_document_notes'),
                 'raw_company_data': company.get('raw_company_data'),
+                # Geocoding fields - CRITICAL for Planning/Trips
+                'latitude': company.get('latitude'),
+                'longitude': company.get('longitude'),
+                'geocoded_address': company.get('geocoded_address'),
+                'geocoding_quality': company.get('geocoding_quality'),
+                'geocoded_at': company.get('geocoded_at'),
+                # Financial metrics
                 'total_revenue': revenue,
                 'invoice_count': invoice_count,
                 'average_invoice_value': float(company.get('average_invoice_value', 0)) if company.get('average_invoice_value') is not None else 0.0,
