@@ -199,16 +199,16 @@
         <div class="planning-sidebar-header">
             <h2 class="page-title mb-2">Planning</h2>
             <p class="page-subtitle mb-0">Select locations to visualize</p>
-        </div>
-
+                        </div>
+                        
         <!-- Content -->
         <div class="planning-sidebar-content">
-            <!-- Search -->
+                            <!-- Search -->
             <div class="search-box-modern">
                 <i class="fas fa-search"></i>
                 <input type="text" id="sidebar-search" placeholder="Search locations...">
-            </div>
-
+                            </div>
+                            
             <!-- Tab Switcher -->
             <div class="tab-pills">
                 <button class="tab-pill active" id="tab-companies" onclick="switchTab('companies')">
@@ -221,25 +221,25 @@
                     Prospects
                     <span class="stat-badge ms-auto" id="prospects-count">0</span>
                 </button>
-            </div>
-
+                            </div>
+                            
             <!-- Companies List -->
             <div id="companies-list">
                 <div class="text-center py-5 text-muted">
                     <i class="fas fa-building fa-3x mb-3 opacity-25"></i>
                     <p>Loading companies...</p>
-                </div>
-            </div>
+                                </div>
+                            </div>
 
             <!-- Prospects List (Hidden by default) -->
             <div id="prospects-list" style="display: none;">
                 <div class="text-center py-5 text-muted">
                     <i class="fas fa-map-marker-alt fa-3x mb-3 opacity-25"></i>
                     <p>Loading prospects...</p>
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
 
     <!-- Map Container - Full Width -->
     <div class="planning-map-container">
@@ -544,12 +544,12 @@ async function addCompaniesToMap(companiesToAdd = companies) {
 // Get company address from invoice_address field
 function getCompanyAddress(company) {
     // Direct fields from Supabase companies table
-    const addressParts = [
+        const addressParts = [
         company.address_line1 || company.address,
         company.city,
         company.post_code,
         company.country_name
-    ].filter(part => part && part.trim());
+    ].filter(part => part && typeof part === 'string' && part.trim() !== '');
     
     if (addressParts.length > 0) {
         return addressParts.join(', ');
@@ -563,7 +563,7 @@ function getCompanyAddress(company) {
             addr.city,
             addr.post_code,
             addr.country?.name || addr.country_name
-        ].filter(Boolean);
+        ].filter(part => part && typeof part === 'string' && part.trim() !== '');
         if (parts.length > 0) return parts.join(', ');
     }
     
@@ -999,11 +999,11 @@ function displayCompaniesList() {
                 <div class="list-item-title">${escapeHtml(company.name || 'Unnamed')}</div>
                 <div class="list-item-meta">
                     <i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(address)}
-                </div>
+                    </div>
                 ${revenue > 0 ? `
                     <div class="list-item-meta mt-1">
                         <i class="fas fa-euro-sign me-1"></i>€${parseFloat(revenue).toLocaleString('nl-BE')}
-                    </div>
+                            </div>
                 ` : ''}
             </div>
         `;
@@ -1117,11 +1117,11 @@ function displayProspectsList() {
                 <div class="list-item-title">${escapeHtml(prospect.name || 'Unnamed Prospect')}</div>
                 <div class="list-item-meta">
                     <i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(address)}
-                </div>
+                    </div>
                 ${prospect.status ? `
                     <div class="list-item-meta mt-1">
                         <i class="fas fa-flag me-1"></i>${escapeHtml(prospect.status)}
-                    </div>
+                            </div>
                 ` : ''}
             </div>
         `;
