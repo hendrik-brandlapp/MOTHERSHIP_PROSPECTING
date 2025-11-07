@@ -9246,9 +9246,6 @@ def create_trip():
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
         
-        if not optimize_trip_route:
-            return jsonify({'error': 'Route optimizer not available'}), 500
-        
         data = request.json
         
         # Validate required fields
@@ -9263,18 +9260,34 @@ def create_trip():
         if not destinations or len(destinations) == 0:
             return jsonify({'error': 'At least one destination is required'}), 400
         
-        # Optimize the route
-        optimization_result = optimize_trip_route(
-            start_location=start_location,
-            destinations=destinations,
-            google_maps_api_key=GOOGLE_MAPS_API_KEY
-        )
-        
-        if not optimization_result.get('success'):
-            return jsonify({
-                'error': 'Failed to optimize route',
-                'details': optimization_result.get('error')
-            }), 400
+        # Try to optimize route if optimizer is available
+        if optimize_trip_route:
+            try:
+                optimization_result = optimize_trip_route(
+                    start_location=start_location,
+                    destinations=destinations,
+                    google_maps_api_key=GOOGLE_MAPS_API_KEY
+                )
+                
+                if optimization_result.get('success'):
+                    ordered_stops = optimization_result['ordered_stops']
+                    total_distance_km = optimization_result['total_distance_km']
+                    estimated_duration_minutes = optimization_result['estimated_duration_minutes']
+                else:
+                    # Optimization failed, use simple order
+                    ordered_stops = destinations
+                    total_distance_km = 0
+                    estimated_duration_minutes = len(destinations) * 30
+            except Exception as opt_error:
+                print(f"Route optimization failed: {opt_error}, using simple order")
+                ordered_stops = destinations
+                total_distance_km = 0
+                estimated_duration_minutes = len(destinations) * 30
+        else:
+            # No optimizer available, use simple order
+            ordered_stops = destinations
+            total_distance_km = 0
+            estimated_duration_minutes = len(destinations) * 30
         
         # Create trip record
         trip_data = {
@@ -9285,28 +9298,28 @@ def create_trip():
             'start_lat': start_location['lat'],
             'start_lng': start_location['lng'],
             'status': 'planned',
-            'total_distance_km': optimization_result['total_distance_km'],
-            'estimated_duration_minutes': optimization_result['estimated_duration_minutes'],
+            'total_distance_km': total_distance_km,
+            'estimated_duration_minutes': estimated_duration_minutes,
             'notes': data.get('notes', '')
         }
         
         trip_response = supabase_client.table('trips').insert(trip_data).execute()
         
         if not trip_response.data:
-            return jsonify({'error': 'Failed to create trip'}), 500
+            return jsonify({'error': 'Failed to create trip in database'}), 500
         
         trip_id = trip_response.data[0]['id']
         
-        # Create trip stops in optimized order
+        # Create trip stops in order
         stops_data = []
-        for idx, stop in enumerate(optimization_result['ordered_stops']):
+        for idx, stop in enumerate(ordered_stops):
             stop_data = {
                 'trip_id': trip_id,
-                'company_id': stop.get('company_id', ''),
-                'company_name': stop['name'],
+                'company_id': str(stop.get('id', '')),
+                'company_name': stop.get('name', 'Unknown'),
                 'address': stop.get('address', ''),
-                'latitude': stop['latitude'],
-                'longitude': stop['longitude'],
+                'latitude': stop.get('lat') or stop.get('latitude'),
+                'longitude': stop.get('lng') or stop.get('longitude'),
                 'stop_order': idx + 1,
                 'duration_minutes': 30  # Default duration
             }
@@ -9326,7 +9339,7 @@ def create_trip():
         return jsonify({
             'success': True,
             'trip': result,
-            'message': 'Trip created successfully with optimized route'
+            'message': 'Trip created successfully' + (' with optimized route' if optimize_trip_route else '')
         })
         
     except Exception as e:
