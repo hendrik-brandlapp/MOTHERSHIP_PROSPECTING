@@ -748,22 +748,20 @@ function filterCompanies() {
     filteredCompanies = allCompanies.filter(company => {
         // Category filtering
         const companyCategories = getCompanyCategories(company);
-        const activeCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] !== null);
+        const excludedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'excluded');
+        const includedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'included');
         
-        if (activeCategories.length > 0) {
-            // Check excluded categories first
-            const excludedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'excluded');
-            if (excludedCategories.length > 0) {
-                const hasExcludedCategory = companyCategories.some(cat => excludedCategories.includes(cat));
-                if (hasExcludedCategory) return false; // Exclude this company
-            }
-            
-            // Check included categories
-            const includedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'included');
-            if (includedCategories.length > 0) {
-                const hasIncludedCategory = companyCategories.some(cat => includedCategories.includes(cat));
-                if (!hasIncludedCategory) return false; // Company doesn't have any included category
-            }
+        // First, check if company has any excluded categories - if so, filter it out
+        if (excludedCategories.length > 0) {
+            const hasExcludedCategory = companyCategories.some(cat => excludedCategories.includes(cat));
+            if (hasExcludedCategory) return false; // Exclude this company
+        }
+        
+        // If there are included categories specified, company must have at least one
+        if (includedCategories.length > 0 && includedCategories.length < Object.keys(categoryStates).length) {
+            // Not all categories are included, so filter
+            const hasIncludedCategory = companyCategories.some(cat => includedCategories.includes(cat));
+            if (!hasIncludedCategory) return false;
         }
         
         // Search term filtering

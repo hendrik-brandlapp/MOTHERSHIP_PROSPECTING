@@ -846,21 +846,19 @@ function filterAlerts() {
     filteredAlerts = allAlerts.filter(alert => {
         // Category filtering
         const alertCategories = getAlertCategories(alert);
+        const excludedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'excluded');
+        const includedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'included');
         
-        if (activeCategories.length > 0) {
-            // Check excluded categories first
-            const excludedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'excluded');
-            if (excludedCategories.length > 0) {
-                const hasExcludedCategory = alertCategories.some(cat => excludedCategories.includes(cat));
-                if (hasExcludedCategory) return false;
-            }
-            
-            // Check included categories
-            const includedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'included');
-            if (includedCategories.length > 0) {
-                const hasIncludedCategory = alertCategories.some(cat => includedCategories.includes(cat));
-                if (!hasIncludedCategory) return false;
-            }
+        // First, check if alert company has any excluded categories
+        if (excludedCategories.length > 0) {
+            const hasExcludedCategory = alertCategories.some(cat => excludedCategories.includes(cat));
+            if (hasExcludedCategory) return false;
+        }
+        
+        // If some (but not all) categories are included, filter
+        if (includedCategories.length > 0 && includedCategories.length < Object.keys(categoryStates).length) {
+            const hasIncludedCategory = alertCategories.some(cat => includedCategories.includes(cat));
+            if (!hasIncludedCategory) return false;
         }
         
         const matchesSearch = !searchTerm || 

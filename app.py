@@ -7201,8 +7201,8 @@ def api_get_alerts():
         priority = request.args.get('priority')
         alert_type = request.args.get('type')
         
-        # Build query - join with companies to get raw_company_data
-        query = supabase_client.table('customer_alerts').select('*, companies!inner(raw_company_data)')
+        # Build query
+        query = supabase_client.table('customer_alerts').select('*')
         
         # Apply filters
         if status:
@@ -7217,15 +7217,19 @@ def api_get_alerts():
         
         # Execute query
         result = query.execute()
+        alerts = result.data
         
-        # Flatten the joined data
-        alerts = []
-        for alert in result.data:
-            # Extract raw_company_data from joined companies table
-            if 'companies' in alert and alert['companies']:
-                alert['raw_company_data'] = alert['companies'].get('raw_company_data')
-                del alert['companies']  # Remove nested object
-            alerts.append(alert)
+        # Fetch raw_company_data for each alert's company
+        for alert in alerts:
+            company_id = alert.get('company_id')
+            if company_id:
+                try:
+                    company_result = supabase_client.table('companies').select('raw_company_data').eq('company_id', company_id).limit(1).execute()
+                    if company_result.data and len(company_result.data) > 0:
+                        alert['raw_company_data'] = company_result.data[0].get('raw_company_data')
+                except Exception as e:
+                    print(f"Could not fetch company data for {company_id}: {e}")
+                    alert['raw_company_data'] = None
         summary = {
             'total_alerts': len(alerts),
             'high_priority': len([a for a in alerts if a['priority'] == 'HIGH']),
