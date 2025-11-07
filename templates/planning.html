@@ -1225,6 +1225,8 @@ async function createTrip() {
     const tripStartTime = document.getElementById('tripStartTime').value;
     const tripNotes = document.getElementById('tripNotes').value.trim();
     
+    console.log('Creating trip with:', { tripName, tripDate, tripStartTime, tripNotes });
+    
     if (!tripName || !tripDate || !tripStartTime) {
         showToast('Please fill in all required fields', 'error');
         return;
@@ -1275,24 +1277,49 @@ async function createTrip() {
             }
         });
         
-        // Create trip
+        // Prepare start location (use first selected location or default to Brussels)
+        const startLocation = locations.length > 0 && locations[0].latitude && locations[0].longitude 
+            ? { lat: locations[0].latitude, lng: locations[0].longitude }
+            : { lat: 50.8503, lng: 4.3517 }; // Default to Brussels
+        
+        // Prepare destinations
+        const destinations = locations.map(loc => ({
+            name: loc.name,
+            address: loc.address,
+            lat: loc.latitude,
+            lng: loc.longitude,
+            type: loc.type,
+            id: loc.id
+        }));
+        
+        // Prepare request payload
+        const payload = {
+            name: tripName,
+            trip_date: tripDate,
+            start_time: tripStartTime,
+            notes: tripNotes,
+            start_location: startLocation,
+            destinations: destinations
+        };
+        
+        console.log('Sending trip creation request:', payload);
+        
+        // Create trip with correct API field names
         const response = await fetch('/api/trips', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                name: tripName,
-                date: tripDate,
-                start_time: tripStartTime,
-                notes: tripNotes,
-                locations: locations
-            })
+            body: JSON.stringify(payload)
         });
         
         const result = await response.json();
         
-        if (result.success) {
+        // Log the full response for debugging
+        console.log('Trip creation response:', result);
+        console.log('Response status:', response.status);
+        
+        if (response.ok && result.success) {
             showToast('Trip created successfully!', 'success');
             
             // Close modal
@@ -1307,7 +1334,10 @@ async function createTrip() {
                 window.location.href = '/trips';
             }, 1500);
         } else {
-            showToast(result.error || 'Failed to create trip', 'error');
+            // Show detailed error from API
+            const errorMsg = result.error || result.message || 'Failed to create trip';
+            console.error('API Error:', errorMsg);
+            showToast(errorMsg, 'error');
             createBtn.disabled = false;
             createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
         }
