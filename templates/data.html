@@ -137,12 +137,11 @@
                             <label class="form-label">Search Companies</label>
                             <input type="text" class="form-control" id="searchInput" placeholder="Search by name, VAT, email..." onkeyup="filterCompanies()">
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label"><i class="fas fa-tags me-1"></i>Category Filter</label>
-                            <select class="form-select" id="categoryFilter" onchange="filterCompanies()" multiple size="1">
-                                <option value="">All Categories</option>
-                            </select>
-                            <small class="text-muted">Hold Ctrl/Cmd for multiple</small>
+                        <div class="col-md-5">
+                            <label class="form-label"><i class="fas fa-tags me-1"></i>Category Filters</label>
+                            <div class="category-tags-filter" id="category-tags-filter">
+                                <span class="text-muted small">Loading categories...</span>
+                            </div>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label">Min Revenue</label>
@@ -165,13 +164,6 @@
                                 <option value="cards">Card View</option>
                                 <option value="table">Table View</option>
                             </select>
-                        </div>
-                    </div>
-                    <div class="row g-2 mt-2">
-                        <div class="col-12">
-                            <div class="d-flex gap-2 flex-wrap" id="category-tags-container">
-                                <!-- Category tags will appear here -->
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -342,12 +334,69 @@
     color: #0056b3 !important;
     text-decoration: underline;
 }
+
+/* Category Tag Filtering */
+.category-tags-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    min-height: 48px;
+    align-items: center;
+}
+
+.category-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.category-tag.included {
+    background: #d1f5d3;
+    border: 2px solid #10b981;
+    color: #065f46;
+}
+
+.category-tag.excluded {
+    background: #fee2e2;
+    border: 2px solid #ef4444;
+    color: #991b1b;
+    opacity: 0.6;
+}
+
+.category-tag:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.category-tag i {
+    font-size: 0.75rem;
+}
+
+.category-tag.included i {
+    color: #10b981;
+}
+
+.category-tag.excluded i {
+    color: #ef4444;
+}
 </style>
 <script>
 let allCompanies = [];
 let filteredCompanies = [];
 let currentViewMode = 'cards';
 let currentYear = '2025';
+let categoryStates = {}; // Track category filter states: 'included', 'excluded', or null (removed)
 
 document.addEventListener('DOMContentLoaded', function() {
     // Check if we need to filter by company (coming from alerts page)
@@ -695,34 +744,25 @@ function filterCompanies() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const minRevenue = parseFloat(document.getElementById('minRevenue').value) || 0;
     const minInvoices = parseInt(document.getElementById('minInvoices').value) || 0;
-    const categoryFilter = document.getElementById('categoryFilter');
-    const selectedCategories = Array.from(categoryFilter.selectedOptions).map(opt => opt.value).filter(v => v !== '');
     
     filteredCompanies = allCompanies.filter(company => {
         // Category filtering
-        if (selectedCategories.length > 0) {
-            const companyCategories = getCompanyCategories(company);
-            const hasMatchingCategory = selectedCategories.some(selectedCat => {
-                // Check if it's a negative filter (starts with !)
-                if (selectedCat.startsWith('!')) {
-                    const categoryToExclude = selectedCat.substring(1);
-                    // Exclude companies with this category
-                    return !companyCategories.includes(categoryToExclude);
-                } else {
-                    // Include companies with this category
-                    return companyCategories.includes(selectedCat);
-                }
-            });
+        const companyCategories = getCompanyCategories(company);
+        const activeCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] !== null);
+        
+        if (activeCategories.length > 0) {
+            // Check excluded categories first
+            const excludedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'excluded');
+            if (excludedCategories.length > 0) {
+                const hasExcludedCategory = companyCategories.some(cat => excludedCategories.includes(cat));
+                if (hasExcludedCategory) return false; // Exclude this company
+            }
             
-            // If using negative filters, invert the logic
-            const hasNegativeFilter = selectedCategories.some(c => c.startsWith('!'));
-            if (hasNegativeFilter && selectedCategories.every(c => c.startsWith('!'))) {
-                // All filters are negative - exclude companies matching ANY negative filter
-                const categoriesToExclude = selectedCategories.map(c => c.substring(1));
-                const hasExcludedCategory = companyCategories.some(cat => categoriesToExclude.includes(cat));
-                if (hasExcludedCategory) return false;
-            } else if (!hasMatchingCategory) {
-                return false;
+            // Check included categories
+            const includedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'included');
+            if (includedCategories.length > 0) {
+                const hasIncludedCategory = companyCategories.some(cat => includedCategories.includes(cat));
+                if (!hasIncludedCategory) return false; // Company doesn't have any included category
             }
         }
         
@@ -777,34 +817,65 @@ function populateCategories() {
         categories.forEach(cat => categorySet.add(cat));
     });
     
-    const categoryFilter = document.getElementById('categoryFilter');
     const sortedCategories = Array.from(categorySet).sort();
     
-    // Clear existing options except "All Categories"
-    categoryFilter.innerHTML = '<option value="">All Categories</option>';
-    
-    // Add positive filters (include these categories)
-    const includeGroup = document.createElement('optgroup');
-    includeGroup.label = '✓ Include Categories';
-    sortedCategories.forEach(category => {
-        const option = document.createElement('option');
-        option.value = category;
-        option.textContent = `✓ ${category}`;
-        includeGroup.appendChild(option);
+    // Initialize all categories as included by default
+    categoryStates = {};
+    sortedCategories.forEach(cat => {
+        categoryStates[cat] = 'included';
     });
-    categoryFilter.appendChild(includeGroup);
     
-    // Add negative filters (exclude these categories)
-    const excludeGroup = document.createElement('optgroup');
-    excludeGroup.label = '✗ Exclude Categories';
-    sortedCategories.forEach(category => {
-        const option = document.createElement('option');
-        option.value = `!${category}`;
-        option.textContent = `✗ ${category}`;
-        option.style.color = '#dc3545';
-        excludeGroup.appendChild(option);
-    });
-    categoryFilter.appendChild(excludeGroup);
+    renderCategoryTags();
+}
+
+function renderCategoryTags() {
+    const container = document.getElementById('category-tags-filter');
+    if (!container) return;
+    
+    const categories = Object.keys(categoryStates).sort();
+    
+    if (categories.length === 0) {
+        container.innerHTML = '<span class="text-muted small">No categories found</span>';
+        return;
+    }
+    
+    container.innerHTML = categories.map(category => {
+        const state = categoryStates[category];
+        
+        if (state === null) return ''; // Hidden/removed
+        
+        const stateClass = state === 'included' ? 'included' : 'excluded';
+        const icon = state === 'included' ? 'check-circle' : 'times-circle';
+        
+        return `
+            <span class="category-tag ${stateClass}" onclick="toggleCategory('${escapeHtml(category)}')">
+                <i class="fas fa-${icon}"></i>
+                ${escapeHtml(category)}
+            </span>
+        `;
+    }).join('');
+}
+
+function toggleCategory(category) {
+    const currentState = categoryStates[category];
+    
+    // Cycle through states: included → excluded → removed (null) → included
+    if (currentState === 'included') {
+        categoryStates[category] = 'excluded';
+    } else if (currentState === 'excluded') {
+        categoryStates[category] = null; // Remove from view
+    } else {
+        categoryStates[category] = 'included'; // Add back
+    }
+    
+    renderCategoryTags();
+    filterCompanies();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function sortCompanies() {
