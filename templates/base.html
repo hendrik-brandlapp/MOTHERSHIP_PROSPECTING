@@ -776,6 +776,100 @@
             color: var(--text-tertiary);
         }
 
+        /* Custom Select Dropdowns - Premium Style */
+        .select-modern {
+            position: relative;
+            width: 100%;
+        }
+
+        .select-modern-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.625rem 1rem;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            font-weight: 500;
+            min-height: 42px;
+        }
+
+        .select-modern-trigger:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .select-modern-trigger i {
+            color: var(--text-tertiary);
+            font-size: 0.75rem;
+            transition: transform 0.2s ease;
+        }
+
+        .select-modern.open .select-modern-trigger i {
+            transform: rotate(180deg);
+        }
+
+        .select-modern-menu {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            left: 0;
+            right: 0;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            z-index: 1000;
+            overflow: hidden;
+            display: none;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .select-modern.open .select-modern-menu {
+            display: block;
+            animation: dropdownFadeIn 0.2s ease;
+        }
+
+        .select-modern-option {
+            padding: 0.625rem 1rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+        }
+
+        .select-modern-option:hover {
+            background: var(--bg-hover);
+        }
+
+        .select-modern-option.selected {
+            background: var(--accent-subtle);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .select-modern-option i {
+            width: 20px;
+            text-align: center;
+            color: var(--text-tertiary);
+        }
+
+        .select-modern-option.selected i {
+            color: var(--accent);
+        }
+
+        /* Hide native select */
+        select.replaced-with-custom {
+            display: none;
+        }
+
         /* Modern Tabs */
         .nav-tabs-modern {
             border: none;
@@ -846,7 +940,7 @@
             50% { box-shadow: 0 0 0 8px var(--accent-glow); }
         }
     </style>
-    
+
     {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -856,14 +950,14 @@
             <div class="sidebar-header">
                 <a href="{{ url_for('index') }}" class="sidebar-brand">
                     <div class="sidebar-brand-icon">
-                        <i class="fas fa-chart-line"></i>
+                <i class="fas fa-chart-line"></i>
                     </div>
                     <span>DOUANO</span>
                 </a>
             </div>
             
             <nav class="sidebar-nav">
-                {% if session.access_token %}
+                    {% if session.access_token %}
                 <div class="nav-section">
                     <div class="nav-section-title">Main</div>
                     <a href="{{ url_for('data') }}" class="nav-item">
@@ -896,10 +990,10 @@
                         <span>Prospecting</span>
                     </a>
                 </div>
-                {% endif %}
+                    {% endif %}
             </nav>
-
-            {% if session.access_token %}
+                
+                    {% if session.access_token %}
             <div style="padding: var(--space-md); border-top: 1px solid var(--border-subtle);">
                 <a href="{{ url_for('logout') }}" class="nav-item">
                     <i class="fas fa-sign-out-alt"></i>
@@ -911,23 +1005,23 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Flash Messages -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+                {% for category, message in messages %}
                     <div class="alert alert-{{ category }} alert-dismissible fade show m-3" role="alert">
                         {{ message }}
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+                {% endfor %}
+        {% endif %}
+    {% endwith %}
 
             <!-- Page Content -->
             <div class="page-content">
-                {% block content %}{% endblock %}
+        {% block content %}{% endblock %}
             </div>
-        </main>
+    </main>
     </div>
 
     <!-- Bootstrap JS -->
@@ -945,7 +1039,118 @@
                     item.classList.add('active');
                 }
             });
+            
+            // Convert all select elements to custom dropdowns
+            initializeCustomSelects();
         });
+
+        function initializeCustomSelects() {
+            const selects = document.querySelectorAll('select:not(.no-custom):not(.replaced-with-custom)');
+            
+            selects.forEach(select => {
+                createCustomSelect(select);
+            });
+        }
+
+        function createCustomSelect(selectElement) {
+            // Mark as replaced
+            selectElement.classList.add('replaced-with-custom');
+            
+            // Get current value and options
+            const options = Array.from(selectElement.options);
+            const currentValue = selectElement.value;
+            const currentText = selectElement.options[selectElement.selectedIndex]?.text || 'Select...';
+            
+            // Create custom dropdown wrapper
+            const wrapper = document.createElement('div');
+            wrapper.className = 'select-modern';
+            
+            // Create trigger
+            const trigger = document.createElement('div');
+            trigger.className = 'select-modern-trigger';
+            trigger.innerHTML = `
+                <span class="select-value">${currentText}</span>
+                <i class="fas fa-chevron-down"></i>
+            `;
+            
+            // Create menu
+            const menu = document.createElement('div');
+            menu.className = 'select-modern-menu';
+            
+            options.forEach(option => {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'select-modern-option';
+                if (option.value === currentValue) {
+                    optionDiv.classList.add('selected');
+                }
+                
+                // Add icon if option has emoji or special char
+                let iconHtml = '';
+                if (option.text.includes('✓')) {
+                    iconHtml = '<i class="fas fa-check"></i>';
+                } else if (option.text.includes('High')) {
+                    iconHtml = '<i class="fas fa-arrow-up text-danger"></i>';
+                } else if (option.text.includes('Medium')) {
+                    iconHtml = '<i class="fas fa-minus text-warning"></i>';
+                } else if (option.text.includes('Low')) {
+                    iconHtml = '<i class="fas fa-arrow-down text-success"></i>';
+                }
+                
+                optionDiv.innerHTML = iconHtml + '<span>' + option.text + '</span>';
+                optionDiv.dataset.value = option.value;
+                
+                optionDiv.addEventListener('click', () => {
+                    // Update native select
+                    selectElement.value = option.value;
+                    
+                    // Trigger change event
+                    const event = new Event('change', { bubbles: true });
+                    selectElement.dispatchEvent(event);
+                    
+                    // Update display
+                    trigger.querySelector('.select-value').textContent = option.text;
+                    
+                    // Update selected state
+                    menu.querySelectorAll('.select-modern-option').forEach(opt => {
+                        opt.classList.remove('selected');
+                    });
+                    optionDiv.classList.add('selected');
+                    
+                    // Close menu
+                    wrapper.classList.remove('open');
+                });
+                
+                menu.appendChild(optionDiv);
+            });
+            
+            // Toggle dropdown
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                // Close other open dropdowns
+                document.querySelectorAll('.select-modern.open').forEach(other => {
+                    if (other !== wrapper) other.classList.remove('open');
+                });
+                
+                wrapper.classList.toggle('open');
+            });
+            
+            // Close on outside click
+            document.addEventListener('click', () => {
+                wrapper.classList.remove('open');
+            });
+            
+            menu.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+            
+            // Build structure
+            wrapper.appendChild(trigger);
+            wrapper.appendChild(menu);
+            
+            // Insert after original select
+            selectElement.parentNode.insertBefore(wrapper, selectElement.nextSibling);
+        }
     </script>
     
     {% block extra_scripts %}{% endblock %}
