@@ -6682,6 +6682,143 @@ def retailer_details(company_id):
     return render_template('retailer_details.html', company_id=company_id, year=year)
 
 
+@app.route('/api/ai-query-retailer', methods=['POST'])
+def api_ai_query_retailer():
+    """AI-powered natural language queries for retailer data using Gemini."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        data = request.json
+        question = data.get('question', '').strip()
+        company_id = data.get('company_id')
+        current_filters = data.get('current_filters', {})
+        filtered_data = data.get('filtered_data', [])
+        
+        if not question:
+            return jsonify({'success': False, 'error': 'Question is required'})
+        
+        if not gemini_client:
+            return jsonify({'success': False, 'error': 'Gemini AI is not configured. Please set GEMINI_API_KEY.'})
+        
+        # Prepare data summary for AI context
+        if len(filtered_data) > 0:
+            # Calculate aggregated statistics
+            total_units = sum(int(row.get('aantal', 0) or 0) for row in filtered_data)
+            unique_customers = len(set(row.get('naam_klant') for row in filtered_data if row.get('naam_klant')))
+            unique_products = len(set(row.get('product') for row in filtered_data if row.get('product')))
+            unique_flavors = len(set(row.get('smaak') for row in filtered_data if row.get('smaak')))
+            
+            # Product breakdown
+            product_stats = {}
+            for row in filtered_data:
+                product = row.get('product', 'Unknown')
+                product_stats[product] = product_stats.get(product, 0) + int(row.get('aantal', 0) or 0)
+            
+            # Flavor breakdown
+            flavor_stats = {}
+            for row in filtered_data:
+                flavor = row.get('smaak', 'Unknown')
+                flavor_stats[flavor] = flavor_stats.get(flavor, 0) + int(row.get('aantal', 0) or 0)
+            
+            # Location breakdown
+            location_stats = {}
+            for row in filtered_data:
+                location = row.get('naam_klant', 'Unknown')
+                if location and location != 'Unknown':
+                    if location not in location_stats:
+                        location_stats[location] = {
+                            'units': 0,
+                            'city': row.get('stad', ''),
+                            'province': row.get('provincie', ''),
+                            'chain': row.get('keten', '')
+                        }
+                    location_stats[location]['units'] += int(row.get('aantal', 0) or 0)
+            
+            # Province breakdown
+            province_stats = {}
+            for row in filtered_data:
+                prov = row.get('provincie', 'Unknown')
+                province_stats[prov] = province_stats.get(prov, 0) + int(row.get('aantal', 0) or 0)
+            
+            # Chain breakdown
+            chain_stats = {}
+            for row in filtered_data:
+                chain = row.get('keten', 'Unknown')
+                chain_stats[chain] = chain_stats.get(chain, 0) + int(row.get('aantal', 0) or 0)
+            
+            # Month breakdown
+            month_stats = {}
+            for row in filtered_data:
+                month = row.get('maand', 'Unknown')
+                month_stats[month] = month_stats.get(month, 0) + int(row.get('aantal', 0) or 0)
+            
+            # Create context for AI
+            context = f"""
+You are analyzing sales data for a major retailer. Here is the current dataset summary:
+
+CURRENT FILTERS APPLIED:
+- Year: {current_filters.get('year', 'all')}
+- Month: {current_filters.get('month', 'all')}
+- Product: {current_filters.get('product', 'all')}
+- Flavor: {current_filters.get('flavor', 'all')}
+- Chain: {current_filters.get('chain', 'all')}
+- Province: {current_filters.get('province', 'all')}
+
+OVERALL STATISTICS:
+- Total records: {len(filtered_data)}
+- Total units sold: {total_units:,}
+- Unique locations/customers: {unique_customers}
+- Unique products: {unique_products}
+- Unique flavors: {unique_flavors}
+
+TOP 10 PRODUCTS (by units):
+{chr(10).join(f"  - {prod}: {units:,} units" for prod, units in sorted(product_stats.items(), key=lambda x: x[1], reverse=True)[:10])}
+
+TOP 10 FLAVORS (by units):
+{chr(10).join(f"  - {flav}: {units:,} units" for flav, units in sorted(flavor_stats.items(), key=lambda x: x[1], reverse=True)[:10])}
+
+TOP 10 LOCATIONS (by units):
+{chr(10).join(f"  - {loc} ({stats['city']}, {stats['province']}): {stats['units']:,} units" for loc, stats in sorted(location_stats.items(), key=lambda x: x[1]['units'], reverse=True)[:10])}
+
+BY PROVINCE:
+{chr(10).join(f"  - {prov}: {units:,} units" for prov, units in sorted(province_stats.items(), key=lambda x: x[1], reverse=True))}
+
+BY CHAIN:
+{chr(10).join(f"  - {chain}: {units:,} units" for chain, units in sorted(chain_stats.items(), key=lambda x: x[1], reverse=True))}
+
+BY MONTH:
+{chr(10).join(f"  - {month}: {units:,} units" for month, units in sorted(month_stats.items(), key=lambda x: x[1], reverse=True))}
+
+USER QUESTION: {question}
+
+Please provide a clear, concise answer based on the data above. Include specific numbers and insights. Format your response in a conversational way.
+"""
+        
+            # Use Gemini to analyze and answer
+            response = gemini_client.models.generate_content(
+                model='gemini-2.0-flash-exp',
+                contents=context
+            )
+            
+            answer = response.text if hasattr(response, 'text') else str(response)
+            
+            return jsonify({
+                'success': True,
+                'answer': answer,
+                'data_points': len(filtered_data)
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No data available to analyze'
+            })
+            
+    except Exception as e:
+        print(f"Error in AI query: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
 @app.route('/alerts')
 def alerts():
     """Pattern disruption alerts for sales team."""

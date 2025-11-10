@@ -455,6 +455,51 @@
         </div>
     </div>
 </div>
+
+<!-- AI Assistant FAB -->
+<button class="ai-fab" onclick="toggleAIAssistant()" title="Ask AI about this data">
+    <i class="fas fa-robot"></i>
+</button>
+
+<!-- AI Assistant Panel -->
+<div class="ai-assistant-panel" id="aiAssistantPanel">
+    <div class="ai-assistant-header">
+        <h5 class="mb-0">
+            <i class="fas fa-robot me-2 text-primary"></i>
+            AI Data Assistant
+        </h5>
+        <button class="btn-close" onclick="toggleAIAssistant()"></button>
+    </div>
+    <div class="ai-assistant-body" id="aiChatBody">
+        <div class="ai-welcome-message">
+            <i class="fas fa-sparkles fa-2x text-primary mb-3"></i>
+            <h6>Ask me anything about this data!</h6>
+            <p class="text-muted small mb-3">I can help you analyze trends, find insights, and answer questions about products, locations, flavors, and more.</p>
+            <div class="ai-suggestions">
+                <div class="ai-suggestion" onclick="askAI('What are the top 5 products?')">
+                    What are the top 5 products?
+                </div>
+                <div class="ai-suggestion" onclick="askAI('Which provinces have the highest sales?')">
+                    Which provinces have the highest sales?
+                </div>
+                <div class="ai-suggestion" onclick="askAI('Show me the most popular flavors')">
+                    Show me the most popular flavors
+                </div>
+                <div class="ai-suggestion" onclick="askAI('Compare sales by year')">
+                    Compare sales by year
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="ai-assistant-footer">
+        <div class="input-group">
+            <input type="text" class="form-control" id="aiQueryInput" placeholder="Ask a question..." onkeypress="if(event.key==='Enter') askAI()">
+            <button class="btn btn-primary" onclick="askAI()">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -1112,5 +1157,227 @@ function showError(message) {
     document.getElementById('error-message').style.display = 'block';
     document.getElementById('error-text').textContent = message;
 }
+
+// AI Assistant functions
+function toggleAIAssistant() {
+    const panel = document.getElementById('aiAssistantPanel');
+    panel.classList.toggle('show');
+}
+
+async function askAI(question) {
+    const input = document.getElementById('aiQueryInput');
+    const query = question || input.value.trim();
+    
+    if (!query) return;
+    
+    // Clear input
+    if (!question) input.value = '';
+    
+    // Add user message to chat
+    addMessageToChat('user', query);
+    
+    // Show thinking indicator
+    const thinkingId = addMessageToChat('assistant', '<div class="thinking-indicator"><div class="spinner-border spinner-border-sm me-2"></div>Analyzing data...</div>');
+    
+    try {
+        // Send query to AI endpoint
+        const response = await fetch('/api/ai-query-retailer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                company_id: companyId,
+                question: query,
+                current_filters: {
+                    year: document.getElementById('year-filter').value,
+                    month: document.getElementById('month-filter').value,
+                    product: document.getElementById('product-filter').value,
+                    flavor: document.getElementById('flavor-filter').value,
+                    chain: document.getElementById('chain-filter').value,
+                    province: document.getElementById('province-filter').value
+                },
+                filtered_data: filteredData
+            })
+        });
+        
+        const result = await response.json();
+        
+        // Remove thinking indicator
+        document.getElementById(thinkingId).remove();
+        
+        if (result.success) {
+            addMessageToChat('assistant', result.answer);
+        } else {
+            addMessageToChat('assistant', `Error: ${result.error}`);
+        }
+        
+    } catch (error) {
+        document.getElementById(thinkingId).remove();
+        addMessageToChat('assistant', `Error: ${error.message}`);
+    }
+}
+
+function addMessageToChat(role, content) {
+    const chatBody = document.getElementById('aiChatBody');
+    const messageId = 'msg-' + Date.now();
+    
+    // Remove welcome message if it exists
+    const welcome = chatBody.querySelector('.ai-welcome-message');
+    if (welcome) {
+        welcome.remove();
+    }
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.id = messageId;
+    messageDiv.className = `ai-message ${role}`;
+    messageDiv.innerHTML = `
+        <div class="ai-message-content">
+            ${role === 'user' ? '<i class="fas fa-user me-2"></i>' : '<i class="fas fa-robot me-2"></i>'}
+            <div class="ai-message-text">${content}</div>
+        </div>
+    `;
+    
+    chatBody.appendChild(messageDiv);
+    chatBody.scrollTop = chatBody.scrollHeight;
+    
+    return messageId;
+}
 </script>
+
+<style>
+/* AI Assistant Styles */
+.ai-fab {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    font-size: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 1000;
+}
+
+.ai-fab:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.ai-assistant-panel {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 400px;
+    max-width: 90vw;
+    height: 600px;
+    max-height: 80vh;
+    background: white;
+    border-radius: 1rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    display: none;
+    flex-direction: column;
+    z-index: 1001;
+    overflow: hidden;
+}
+
+.ai-assistant-panel.show {
+    display: flex;
+}
+
+.ai-assistant-header {
+    padding: 1.25rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ai-assistant-header .btn-close {
+    filter: brightness(0) invert(1);
+}
+
+.ai-assistant-body {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    background: #f8f9fa;
+}
+
+.ai-assistant-footer {
+    padding: 1rem;
+    border-top: 1px solid #dee2e6;
+    background: white;
+}
+
+.ai-welcome-message {
+    text-align: center;
+    padding: 2rem 1rem;
+}
+
+.ai-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.ai-suggestion {
+    padding: 0.75rem;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+}
+
+.ai-suggestion:hover {
+    border-color: #667eea;
+    background: #f0f4ff;
+    transform: translateX(4px);
+}
+
+.ai-message {
+    margin-bottom: 1rem;
+}
+
+.ai-message-content {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.ai-message.user .ai-message-content {
+    flex-direction: row-reverse;
+}
+
+.ai-message.user .ai-message-text {
+    background: #667eea;
+    color: white;
+    border-radius: 1rem 1rem 0 1rem;
+}
+
+.ai-message.assistant .ai-message-text {
+    background: white;
+    color: #333;
+    border-radius: 1rem 1rem 1rem 0;
+}
+
+.ai-message-text {
+    padding: 0.75rem 1rem;
+    max-width: 80%;
+    word-wrap: break-word;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.thinking-indicator {
+    display: flex;
+    align-items: center;
+    color: #667eea;
+}
+</style>
 {% endblock %}
