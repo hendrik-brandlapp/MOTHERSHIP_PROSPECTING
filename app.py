@@ -6670,6 +6670,18 @@ def data():
     return render_template('data.html')
 
 
+@app.route('/retailer-details/<int:company_id>')
+def retailer_details(company_id):
+    """Detailed analytics page for major retailers"""
+    if not is_token_valid():
+        return redirect(url_for('login'))
+    
+    # Get year parameter
+    year = request.args.get('year', '2025')
+    
+    return render_template('retailer_details.html', company_id=company_id, year=year)
+
+
 @app.route('/alerts')
 def alerts():
     """Pattern disruption alerts for sales team."""

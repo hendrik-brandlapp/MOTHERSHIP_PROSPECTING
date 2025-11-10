@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block title %}Major Retailer Details - DOUANO{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-star text-warning me-2"></i><span id="retailer-name">Major Retailer</span></h2>
+                    <p class="text-muted mb-0">Detailed analytics and distribution data</p>
+                </div>
+                <div>
+                    <a href="/data" class="btn btn-outline-secondary me-2">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Companies
+                    </a>
+                    <button class="btn btn-primary" onclick="loadRetailerData()">
+                        <i class="fas fa-sync-alt me-2"></i>Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-3 text-muted">Loading retailer data...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="error-message" class="alert alert-danger" style="display: none;">
+        <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+        <p class="mb-0" id="error-text">Failed to load retailer data</p>
+    </div>
+
+    <!-- Main Content -->
+    <div id="main-content" style="display: none;">
+        <!-- Year Filter -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">Select Time Period</h5>
+                            <div class="btn-group" id="year-filter">
+                                <!-- Year buttons will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body text-center">
+                        <i class="fas fa-boxes fa-2x text-success mb-3"></i>
+                        <h3 class="mb-1" id="total-units">-</h3>
+                        <p class="text-muted mb-0">Total Units Sold</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body text-center">
+                        <i class="fas fa-box fa-2x text-info mb-3"></i>
+                        <h3 class="mb-1" id="total-products">-</h3>
+                        <p class="text-muted mb-0">Unique Products</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body text-center">
+                        <i class="fas fa-store fa-2x text-warning mb-3"></i>
+                        <h3 class="mb-1" id="total-customers">-</h3>
+                        <p class="text-muted mb-0">End Customers</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body text-center">
+                        <i class="fas fa-file-invoice fa-2x text-primary mb-3"></i>
+                        <h3 class="mb-1" id="total-records">-</h3>
+                        <p class="text-muted mb-0">Total Records</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Year Breakdown -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3"><i class="fas fa-calendar-alt me-2 text-primary"></i>Performance by Year</h5>
+                        <div id="year-breakdown" class="row">
+                            <!-- Year cards will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3"><i class="fas fa-chart-bar me-2 text-primary"></i>Top Products</h5>
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-hover">
+                                <thead class="sticky-top bg-white">
+                                    <tr>
+                                        <th>Product</th>
+                                        <th class="text-end">Total Units</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="products-table">
+                                    <!-- Products will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3"><i class="fas fa-store me-2 text-primary"></i>Top End Customers</h5>
+                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                            <table class="table table-hover">
+                                <thead class="sticky-top bg-white">
+                                    <tr>
+                                        <th>Customer</th>
+                                        <th>Location</th>
+                                        <th class="text-end">Units</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="customers-table">
+                                    <!-- Customers will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const companyId = {{ company_id }};
+const initialYear = '{{ year }}';
+let retailerData = null;
+let selectedYear = 'all';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadRetailerData();
+});
+
+async function loadRetailerData() {
+    try {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('error-message').style.display = 'none';
+        document.getElementById('main-content').style.display = 'none';
+        
+        const response = await fetch(`/api/major-retailer/${companyId}`);
+        const data = await response.json();
+        
+        if (!data.is_major_retailer) {
+            throw new Error('This company is not a major retailer');
+        }
+        
+        retailerData = data;
+        
+        // Update page title
+        document.getElementById('retailer-name').textContent = data.retailer_name;
+        document.title = `${data.retailer_name} - Details`;
+        
+        // Render year filter buttons
+        renderYearFilters();
+        
+        // Display data
+        displayData('all');
+        
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('main-content').style.display = 'block';
+        
+    } catch (error) {
+        console.error('Error loading retailer data:', error);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error-message').style.display = 'block';
+        document.getElementById('error-text').textContent = error.message;
+    }
+}
+
+function renderYearFilters() {
+    const container = document.getElementById('year-filter');
+    const years = retailerData.available_years;
+    
+    let html = '';
+    years.forEach(year => {
+        html += `<button class="btn btn-outline-primary year-btn" data-year="${year}" onclick="filterByYear('${year}')">${year}</button>`;
+    });
+    html += `<button class="btn btn-primary active year-btn" data-year="all" onclick="filterByYear('all')">All Years</button>`;
+    
+    container.innerHTML = html;
+}
+
+function filterByYear(year) {
+    selectedYear = year;
+    
+    // Update active button
+    document.querySelectorAll('.year-btn').forEach(btn => {
+        btn.classList.remove('active', 'btn-primary');
+        btn.classList.add('btn-outline-primary');
+        if (btn.dataset.year === year) {
+            btn.classList.add('active', 'btn-primary');
+            btn.classList.remove('btn-outline-primary');
+        }
+    });
+    
+    displayData(year);
+}
+
+function displayData(year) {
+    if (year === 'all') {
+        // Display all data
+        document.getElementById('total-units').textContent = retailerData.total_quantity.toLocaleString();
+        document.getElementById('total-products').textContent = Object.keys(retailerData.product_stats).length;
+        document.getElementById('total-customers').textContent = retailerData.top_customers.length + '+';
+        document.getElementById('total-records').textContent = retailerData.total_records.toLocaleString();
+        
+        displayProducts(retailerData.product_stats);
+        displayCustomers(retailerData.top_customers);
+    } else {
+        // Filter by specific year
+        const yearStats = retailerData.stats_by_year[year];
+        document.getElementById('total-units').textContent = yearStats.total_quantity.toLocaleString();
+        document.getElementById('total-products').textContent = yearStats.unique_products.toLocaleString();
+        document.getElementById('total-customers').textContent = yearStats.unique_customers.toLocaleString();
+        document.getElementById('total-records').textContent = yearStats.total_records.toLocaleString();
+        
+        // Filter products by year
+        const yearProducts = {};
+        Object.entries(retailerData.product_stats).forEach(([product, stats]) => {
+            if (stats.by_year[year]) {
+                yearProducts[product] = { total: stats.by_year[year] };
+            }
+        });
+        displayProducts(yearProducts);
+        
+        // Note: Customer filtering by year would require more data from the backend
+        displayCustomers(retailerData.top_customers);
+    }
+    
+    // Display year breakdown
+    displayYearBreakdown();
+}
+
+function displayYearBreakdown() {
+    const container = document.getElementById('year-breakdown');
+    let html = '';
+    
+    Object.entries(retailerData.stats_by_year).forEach(([year, stats]) => {
+        html += `
+            <div class="col-md-3 mb-3">
+                <div class="card bg-light border-0">
+                    <div class="card-body text-center">
+                        <h4 class="text-primary mb-2">${year}</h4>
+                        <div class="mb-2">
+                            <strong>${stats.total_quantity.toLocaleString()}</strong>
+                            <br><small class="text-muted">units</small>
+                        </div>
+                        <div class="mb-2">
+                            <strong>${stats.unique_customers}</strong>
+                            <br><small class="text-muted">customers</small>
+                        </div>
+                        <div>
+                            <strong>${stats.unique_products}</strong>
+                            <br><small class="text-muted">products</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function displayProducts(products) {
+    const tbody = document.getElementById('products-table');
+    const sorted = Object.entries(products).sort((a, b) => b[1].total - a[1].total);
+    
+    let html = '';
+    sorted.forEach(([product, stats]) => {
+        html += `
+            <tr>
+                <td><strong>${escapeHtml(product)}</strong></td>
+                <td class="text-end">
+                    <span class="badge bg-success">${stats.total.toLocaleString()}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
+
+function displayCustomers(customers) {
+    const tbody = document.getElementById('customers-table');
+    
+    let html = '';
+    customers.forEach(customer => {
+        html += `
+            <tr>
+                <td>
+                    <strong>${escapeHtml(customer.name)}</strong>
+                    ${customer.type ? `<br><small class="text-muted">${escapeHtml(customer.type)}</small>` : ''}
+                </td>
+                <td>
+                    ${customer.city ? escapeHtml(customer.city) : ''}
+                    ${customer.province ? `<br><small class="text-muted">${escapeHtml(customer.province)}</small>` : ''}
+                </td>
+                <td class="text-end">
+                    <span class="badge bg-info">${customer.total.toLocaleString()}</span>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+}
+</script>
+{% endblock %}
+
