@@ -117,6 +117,31 @@
         padding: var(--space-sm) var(--space-md);
         background: var(--bg-surface);
         border: 1px solid var(--border-subtle);
+    }
+    
+    /* Alert card styling */
+    .list-item.alert-critical {
+        border-left: 4px solid #dc3545;
+        background: #fff5f5;
+    }
+    
+    .list-item.alert-high {
+        border-left: 4px solid #ffc107;
+        background: #fffef5;
+    }
+    
+    .list-item.alert-medium {
+        border-left: 4px solid #17a2b8;
+        background: #f5feff;
+    }
+    
+    .list-item.alert-critical:hover,
+    .list-item.alert-high:hover,
+    .list-item.alert-medium:hover {
+        border-left-width: 6px;
+    }
+    
+    .list-item {
         border-radius: var(--radius-md);
         margin-bottom: var(--space-xs);
         cursor: pointer;
@@ -238,6 +263,28 @@
                 </button>
             </div>
 
+            <!-- Alert Filters -->
+            <div class="alert-filters mb-3" style="padding: 0 1rem;">
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-sm btn-outline-danger" id="filter-critical" onclick="toggleAlertFilter('critical')" title="Show critical alerts">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span class="ms-1" id="critical-count">0</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning" id="filter-high" onclick="toggleAlertFilter('high')" title="Show high priority">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span class="ms-1" id="high-count">0</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline-info" id="filter-medium" onclick="toggleAlertFilter('medium')" title="Show medium priority">
+                        <i class="fas fa-info-circle"></i>
+                        <span class="ms-1" id="medium-count">0</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="filter-all-alerts" onclick="toggleAlertFilter('all')" title="Show all companies with alerts">
+                        <i class="fas fa-bell"></i> All Alerts
+                        <span class="ms-1" id="all-alerts-count">0</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Companies List -->
             <div id="companies-list">
                 <div class="text-center py-5 text-muted">
@@ -344,6 +391,7 @@ let selectedCompanies = new Set();
 let selectedProspects = new Set();
 let markers = [];
 const mapboxToken = '{{ mapbox_api_key }}';
+let activeAlertFilter = null; // null, 'all', 'critical', 'high', 'medium'
 
 // Cache configuration
 const COMPANIES_CACHE_KEY = 'duano_companies_cache_v1';
@@ -414,10 +462,10 @@ async function loadCompaniesData() {
             console.log(`📦 Cache contains ${companies.length} companies`);
             showToast(`Loaded ${companies.length} companies from cache`, 'success');
         } else {
-            console.log('📡 Fetching companies from Supabase (same as Companies page)');
+            console.log('📡 Fetching companies with alerts from Supabase');
             
-            // Use the EXACT same endpoint as Companies page
-            const response = await fetch('/api/companies-from-db?year=2025');
+            // Use the new endpoint with alerts
+            const response = await fetch('/api/companies-with-alerts');
             console.log('📡 Response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -430,6 +478,7 @@ async function loadCompaniesData() {
             }
             
             companies = data.companies || [];
+            console.log(`✅ Loaded ${data.total_companies} companies, ${data.companies_with_alerts} have alerts`);
             
             // Debug: Log first company structure to understand available fields
             if (companies.length > 0) {
@@ -456,6 +505,7 @@ async function loadCompaniesData() {
         // Initialize filtered companies and populate UI
         filteredCompanies = [...companies];
         displayCompaniesList();
+        updateAlertCounts();
         
         // Also load prospects
         await loadProspectsData();
@@ -648,14 +698,8 @@ function handleSidebarSearch() {
     const companiesListVisible = document.getElementById('companies-list').style.display !== 'none';
     
     if (companiesListVisible) {
-        // Filter companies
-        filteredCompanies = companies.filter(company => {
-            return !searchTerm || 
-                company.name?.toLowerCase().includes(searchTerm) ||
-                company.vat_number?.toLowerCase().includes(searchTerm) ||
-                getCompanyAddress(company).toLowerCase().includes(searchTerm);
-        });
-        displayCompaniesList();
+        // Filter companies - use applyAlertFilter which also handles search
+        applyAlertFilter();
     } else {
         // Filter prospects
         filteredProspects = prospects.filter(prospect => {
@@ -1057,18 +1101,46 @@ function displayCompaniesList() {
         const isSelected = selectedCompanies.has(company.id);
         const isOnMap = markers.some(item => item.company && item.company.id === company.id);
         const hasCoordinates = company.latitude && company.longitude;
+        const hasAlerts = company.has_alerts;
+        const alertCount = company.alert_count || 0;
+        const priority = company.highest_priority;
+        
+        // Alert badge based on priority
+        let alertBadge = '';
+        if (hasAlerts) {
+            let badgeClass = 'bg-secondary';
+            let icon = 'fa-bell';
+            if (priority === 'critical') {
+                badgeClass = 'bg-danger';
+                icon = 'fa-exclamation-circle';
+            } else if (priority === 'high') {
+                badgeClass = 'bg-warning';
+                icon = 'fa-exclamation-triangle';
+            } else if (priority === 'medium') {
+                badgeClass = 'bg-info';
+                icon = 'fa-info-circle';
+            }
+            alertBadge = `<span class="badge ${badgeClass} ms-2" title="${alertCount} alert(s)"><i class="fas ${icon} me-1"></i>${alertCount}</span>`;
+        }
+        
+        // Add alert highlight to card
+        const alertClass = hasAlerts ? `alert-${priority}` : '';
         
         return `
-            <div class="list-item ${isSelected ? 'selected' : ''} ${!hasCoordinates ? 'no-coordinates' : ''}" onclick="toggleCompanySelection(${company.id}); event.stopPropagation();">
+            <div class="list-item ${isSelected ? 'selected' : ''} ${!hasCoordinates ? 'no-coordinates' : ''} ${alertClass}" onclick="toggleCompanySelection(${company.id}); event.stopPropagation();">
                 <div class="list-item-title">
                     ${company.name || 'Unnamed Company'}
                     ${hasCoordinates ? '<i class="fas fa-map-marker-alt text-success ms-1" title="Has GPS coordinates"></i>' : '<i class="fas fa-map-marker-alt text-muted ms-1" title="No GPS coordinates"></i>'}
+                    ${alertBadge}
                 </div>
                 <div class="list-item-meta">
                     <i class="fas fa-map-marker-alt me-1"></i>${address}
                 </div>
                 ${company.vat_number ? `<div class="list-item-meta mt-1">
                     <i class="fas fa-file-invoice me-1"></i>${company.vat_number}
+                </div>` : ''}
+                ${hasAlerts ? `<div class="list-item-meta mt-1 text-${priority === 'critical' ? 'danger' : priority === 'high' ? 'warning' : 'info'}">
+                    <i class="fas fa-bell me-1"></i>${company.alerts[0]?.description || 'Alert'}
                 </div>` : ''}
             </div>
         `;
@@ -1416,6 +1488,81 @@ async function createTrip() {
         createBtn.disabled = false;
         createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
     }
+}
+
+// Alert filtering functions
+function updateAlertCounts() {
+    const critical = companies.filter(c => c.highest_priority === 'critical').length;
+    const high = companies.filter(c => c.highest_priority === 'high').length;
+    const medium = companies.filter(c => c.highest_priority === 'medium').length;
+    const allAlerts = companies.filter(c => c.has_alerts).length;
+    
+    document.getElementById('critical-count').textContent = critical;
+    document.getElementById('high-count').textContent = high;
+    document.getElementById('medium-count').textContent = medium;
+    document.getElementById('all-alerts-count').textContent = allAlerts;
+}
+
+function toggleAlertFilter(priority) {
+    // Toggle the filter
+    if (activeAlertFilter === priority) {
+        activeAlertFilter = null;
+    } else {
+        activeAlertFilter = priority;
+    }
+    
+    // Update button states
+    ['critical', 'high', 'medium', 'all-alerts'].forEach(p => {
+        const btn = document.getElementById(`filter-${p}`);
+        if (btn) {
+            if (p === priority.replace('all', 'all-alerts') && activeAlertFilter) {
+                btn.classList.remove('btn-outline-danger', 'btn-outline-warning', 'btn-outline-info', 'btn-outline-secondary');
+                if (p === 'critical') btn.classList.add('btn-danger');
+                else if (p === 'high') btn.classList.add('btn-warning');
+                else if (p === 'medium') btn.classList.add('btn-info');
+                else btn.classList.add('btn-secondary');
+            } else {
+                btn.classList.remove('btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
+                if (p === 'critical') btn.classList.add('btn-outline-danger');
+                else if (p === 'high') btn.classList.add('btn-outline-warning');
+                else if (p === 'medium') btn.classList.add('btn-outline-info');
+                else btn.classList.add('btn-outline-secondary');
+            }
+        }
+    });
+    
+    // Apply filter
+    applyAlertFilter();
+}
+
+function applyAlertFilter() {
+    const searchInput = document.getElementById('sidebar-search');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    
+    filteredCompanies = companies.filter(company => {
+        // Apply alert filter
+        if (activeAlertFilter) {
+            if (activeAlertFilter === 'all') {
+                if (!company.has_alerts) return false;
+            } else {
+                if (company.highest_priority !== activeAlertFilter) return false;
+            }
+        }
+        
+        // Apply search filter
+        if (searchTerm) {
+            const searchText = [
+                company.name || '',
+                company.vat_number || '',
+                getCompanyAddress(company)
+            ].join(' ').toLowerCase();
+            if (!searchText.includes(searchTerm)) return false;
+        }
+        
+        return true;
+    });
+    
+    displayCompaniesList();
 }
 </script>
 

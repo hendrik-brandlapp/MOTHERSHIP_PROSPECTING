@@ -7016,6 +7016,78 @@ def api_2025_companies_analysis():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/companies-with-alerts', methods=['GET'])
+def api_companies_with_alerts():
+    """Get companies with their active alerts for planning."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Get all companies
+        companies_result = supabase_client.table('companies').select('*').execute()
+        companies = companies_result.data if companies_result.data else []
+        
+        # Get all active alerts
+        alerts_result = supabase_client.table('customer_alerts').select('*').eq('status', 'active').execute()
+        alerts = alerts_result.data if alerts_result.data else []
+        
+        # Create a map of company_id to alerts
+        company_alerts_map = {}
+        for alert in alerts:
+            company_id = alert.get('company_id')
+            if company_id not in company_alerts_map:
+                company_alerts_map[company_id] = []
+            company_alerts_map[company_id].append({
+                'id': alert.get('id'),
+                'alert_type': alert.get('alert_type'),
+                'priority': alert.get('priority'),
+                'description': alert.get('description'),
+                'recommendation': alert.get('recommendation'),
+                'created_at': alert.get('created_at')
+            })
+        
+        # Enrich companies with alert data
+        for company in companies:
+            company_id = company.get('company_id')
+            if company_id in company_alerts_map:
+                company['alerts'] = company_alerts_map[company_id]
+                company['has_alerts'] = True
+                company['alert_count'] = len(company_alerts_map[company_id])
+                # Get highest priority
+                priorities = [a['priority'] for a in company_alerts_map[company_id]]
+                if 'critical' in priorities:
+                    company['highest_priority'] = 'critical'
+                elif 'high' in priorities:
+                    company['highest_priority'] = 'high'
+                elif 'medium' in priorities:
+                    company['highest_priority'] = 'medium'
+                else:
+                    company['highest_priority'] = 'low'
+            else:
+                company['alerts'] = []
+                company['has_alerts'] = False
+                company['alert_count'] = 0
+                company['highest_priority'] = None
+        
+        # Filter only companies with valid geocoding
+        valid_companies = [c for c in companies if c.get('latitude') and c.get('longitude')]
+        
+        return jsonify({
+            'success': True,
+            'companies': valid_companies,
+            'total_companies': len(valid_companies),
+            'companies_with_alerts': len([c for c in valid_companies if c.get('has_alerts')]),
+            'total_alerts': len(alerts)
+        })
+        
+    except Exception as e:
+        print(f"Error getting companies with alerts: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/companies-from-db', methods=['GET'])
 def api_companies_from_db():
     """Get companies data directly from the enhanced companies table."""
