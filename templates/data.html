@@ -241,18 +241,15 @@
     </div>
 </div>
 
-<!-- Company Detail Modal -->
-<div class="modal fade" id="companyModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="companyModalTitle">Company Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="companyModalBody">
-                <!-- Company details will be loaded here -->
-            </div>
-        </div>
+<!-- Company Detail Sidepanel -->
+<div class="sidepanel-overlay" id="companyPanelOverlay" onclick="closeCompanyPanel()"></div>
+<div class="sidepanel" id="companyPanel">
+    <div class="sidepanel-header">
+        <h5 class="sidepanel-title" id="companyModalTitle">Company Details</h5>
+        <button type="button" class="btn-close" onclick="closeCompanyPanel()"></button>
+    </div>
+    <div class="sidepanel-body" id="companyModalBody">
+        <!-- Company details will be loaded here -->
     </div>
 </div>
 
@@ -282,6 +279,115 @@
 
 {% block extra_scripts %}
 <style>
+/* Sidepanel Styles */
+.sidepanel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    z-index: 1040;
+}
+
+.sidepanel-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.sidepanel {
+    position: fixed;
+    top: 0;
+    right: -600px;
+    width: 600px;
+    max-width: 90vw;
+    height: 100%;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.2);
+    transition: right 0.3s ease;
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidepanel.show {
+    right: 0;
+}
+
+.sidepanel-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8f9fa;
+}
+
+.sidepanel-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.sidepanel-body {
+    flex: 1;
+    padding: 1.5rem;
+    overflow-y: auto;
+}
+
+.sidepanel-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidepanel-body::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.sidepanel-body::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.sidepanel-body::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Excluded Categories - Horizontal Layout */
+.selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.selected-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    background: #fee2e2;
+    border: 1px solid #ef4444;
+    border-radius: 16px;
+    font-size: 0.8rem;
+    color: #991b1b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.selected-tag:hover {
+    background: #fecaca;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.selected-tag i {
+    font-size: 0.7rem;
+}
+
 .year-tag {
     transition: all 0.2s ease;
     border-width: 2px !important;
@@ -794,7 +900,61 @@ function filterCompanies() {
         return true;
     });
     
+    // Update statistics based on filtered companies
+    updateFilteredStats();
+    
     sortCompanies();
+}
+
+function updateFilteredStats() {
+    // Calculate statistics based on filtered companies
+    const totalCompanies = filteredCompanies.length;
+    const totalRevenue = filteredCompanies.reduce((sum, company) => sum + (company.total_revenue || 0), 0);
+    const totalInvoices = filteredCompanies.reduce((sum, company) => sum + (company.invoice_count || 0), 0);
+    const avgRevenue = totalCompanies > 0 ? (totalRevenue / totalCompanies) : 0;
+    
+    // Update the stats display
+    document.getElementById('stat-total-companies').textContent = totalCompanies;
+    document.getElementById('stat-total-revenue').textContent = '€' + totalRevenue.toLocaleString('nl-BE', {minimumFractionDigits: 2});
+    document.getElementById('stat-total-invoices').textContent = totalInvoices;
+    document.getElementById('stat-avg-revenue').textContent = '€' + avgRevenue.toLocaleString('nl-BE', {minimumFractionDigits: 2});
+    
+    // Update year breakdown if in combined view
+    if (currentYear === 'combined') {
+        const year2024Companies = filteredCompanies.filter(c => c.years_data && c.years_data['2024']);
+        const year2025Companies = filteredCompanies.filter(c => c.years_data && c.years_data['2025']);
+        
+        const revenue2024 = filteredCompanies.reduce((sum, c) => {
+            return sum + (c.years_data && c.years_data['2024'] ? c.years_data['2024'].total_revenue || 0 : 0);
+        }, 0);
+        
+        const revenue2025 = filteredCompanies.reduce((sum, c) => {
+            return sum + (c.years_data && c.years_data['2025'] ? c.years_data['2025'].total_revenue || 0 : 0);
+        }, 0);
+        
+        const invoices2024 = filteredCompanies.reduce((sum, c) => {
+            return sum + (c.years_data && c.years_data['2024'] ? c.years_data['2024'].invoice_count || 0 : 0);
+        }, 0);
+        
+        const invoices2025 = filteredCompanies.reduce((sum, c) => {
+            return sum + (c.years_data && c.years_data['2025'] ? c.years_data['2025'].invoice_count || 0 : 0);
+        }, 0);
+        
+        const breakdown2024Element = document.getElementById('breakdown-2024');
+        const breakdown2025Element = document.getElementById('breakdown-2025');
+        
+        if (breakdown2024Element) {
+            breakdown2024Element.innerHTML = `
+                ${year2024Companies.length} companies, ${invoices2024} invoices, €${revenue2024.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
+            `;
+        }
+        
+        if (breakdown2025Element) {
+            breakdown2025Element.innerHTML = `
+                ${year2025Companies.length} companies, ${invoices2025} invoices, €${revenue2025.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
+            `;
+        }
+    }
 }
 
 function getCompanyCategories(company) {
@@ -871,7 +1031,7 @@ function renderCategoryTags() {
         optionsContainer.appendChild(option);
     });
     
-    // Render selected tags (only show excluded ones to save space)
+    // Render selected tags (only show excluded ones to save space) - horizontal layout
     const excludedCategories = categories.filter(cat => categoryStates[cat] === 'excluded');
     
     selectedContainer.innerHTML = '';
@@ -880,7 +1040,7 @@ function renderCategoryTags() {
             const tag = document.createElement('span');
             tag.className = 'selected-tag excluded';
             tag.innerHTML = `
-                <span>Excluding: ${escapeHtml(category)}</span>
+                <span>${escapeHtml(category)}</span>
                 <i class="fas fa-times"></i>
             `;
             tag.onclick = () => toggleCategory(category);
@@ -1342,11 +1502,23 @@ function showCompanyDetails(companyId) {
         </div>
     `;
     
-    // Show modal first
-    new bootstrap.Modal(document.getElementById('companyModal')).show();
+    // Show sidepanel first
+    openCompanyPanel();
     
     // Then load invoices
     loadCompanyInvoices(company.company_id);
+}
+
+function openCompanyPanel() {
+    document.getElementById('companyPanel').classList.add('show');
+    document.getElementById('companyPanelOverlay').classList.add('show');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCompanyPanel() {
+    document.getElementById('companyPanel').classList.remove('show');
+    document.getElementById('companyPanelOverlay').classList.remove('show');
+    document.body.style.overflow = '';
 }
 
 async function loadCompanyInvoices(companyId) {
