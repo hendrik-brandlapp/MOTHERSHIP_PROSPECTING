@@ -461,32 +461,35 @@
     <i class="fas fa-robot"></i>
 </button>
 
-<!-- AI Assistant Panel -->
-<div class="ai-assistant-panel" id="aiAssistantPanel">
+<!-- AI Assistant Sidepanel Overlay -->
+<div class="ai-panel-overlay" id="aiPanelOverlay" onclick="toggleAIAssistant()"></div>
+
+<!-- AI Assistant Sidepanel -->
+<div class="ai-assistant-sidepanel" id="aiAssistantPanel">
     <div class="ai-assistant-header">
         <h5 class="mb-0">
-            <i class="fas fa-robot me-2 text-primary"></i>
+            <i class="fas fa-robot me-2"></i>
             AI Data Assistant
         </h5>
-        <button class="btn-close" onclick="toggleAIAssistant()"></button>
+        <button class="btn-close btn-close-white" onclick="toggleAIAssistant()"></button>
     </div>
     <div class="ai-assistant-body" id="aiChatBody">
         <div class="ai-welcome-message">
-            <i class="fas fa-sparkles fa-2x text-primary mb-3"></i>
+            <i class="fas fa-sparkles fa-2x mb-3" style="color: #667eea;"></i>
             <h6>Ask me anything about this data!</h6>
             <p class="text-muted small mb-3">I can help you analyze trends, find insights, and answer questions about products, locations, flavors, and more.</p>
             <div class="ai-suggestions">
                 <div class="ai-suggestion" onclick="askAI('What are the top 5 products?')">
-                    What are the top 5 products?
+                    <i class="fas fa-box me-2"></i>What are the top 5 products?
                 </div>
                 <div class="ai-suggestion" onclick="askAI('Which provinces have the highest sales?')">
-                    Which provinces have the highest sales?
+                    <i class="fas fa-map me-2"></i>Which provinces have the highest sales?
                 </div>
                 <div class="ai-suggestion" onclick="askAI('Show me the most popular flavors')">
-                    Show me the most popular flavors
+                    <i class="fas fa-ice-cream me-2"></i>Show me the most popular flavors
                 </div>
                 <div class="ai-suggestion" onclick="askAI('Compare sales by year')">
-                    Compare sales by year
+                    <i class="fas fa-chart-line me-2"></i>Compare sales by year
                 </div>
             </div>
         </div>
@@ -1161,7 +1164,15 @@ function showError(message) {
 // AI Assistant functions
 function toggleAIAssistant() {
     const panel = document.getElementById('aiAssistantPanel');
+    const overlay = document.getElementById('aiPanelOverlay');
     panel.classList.toggle('show');
+    overlay.classList.toggle('show');
+    
+    if (panel.classList.contains('show')) {
+        document.body.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = '';
+    }
 }
 
 async function askAI(question) {
@@ -1267,49 +1278,62 @@ function addMessageToChat(role, content) {
     box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
-.ai-assistant-panel {
+.ai-panel-overlay {
     position: fixed;
-    bottom: 2rem;
-    right: 2rem;
-    width: 400px;
-    max-width: 90vw;
-    height: 600px;
-    max-height: 80vh;
-    background: white;
-    border-radius: 1rem;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-    display: none;
-    flex-direction: column;
-    z-index: 1001;
-    overflow: hidden;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    z-index: 1040;
 }
 
-.ai-assistant-panel.show {
+.ai-panel-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.ai-assistant-sidepanel {
+    position: fixed;
+    top: 0;
+    right: -500px;
+    width: 500px;
+    max-width: 90vw;
+    height: 100%;
+    background: white;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.2);
+    transition: right 0.3s ease;
+    z-index: 1050;
     display: flex;
+    flex-direction: column;
+}
+
+.ai-assistant-sidepanel.show {
+    right: 0;
 }
 
 .ai-assistant-header {
-    padding: 1.25rem;
+    padding: 1.5rem;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     display: flex;
     justify-content: space-between;
     align-items: center;
-}
-
-.ai-assistant-header .btn-close {
-    filter: brightness(0) invert(1);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
 .ai-assistant-body {
     flex: 1;
-    padding: 1rem;
+    padding: 1.5rem;
     overflow-y: auto;
     background: #f8f9fa;
 }
 
 .ai-assistant-footer {
-    padding: 1rem;
+    padding: 1.5rem;
     border-top: 1px solid #dee2e6;
     background: white;
 }

@@ -6795,10 +6795,14 @@ USER QUESTION: {question}
 Please provide a clear, concise answer based on the data above. Include specific numbers and insights. Format your response in a conversational way.
 """
         
-            # Use Gemini to analyze and answer
+            # Use Gemini with more efficient model
             response = gemini_client.models.generate_content(
-                model='gemini-2.0-flash-exp',
-                contents=context
+                model='gemini-1.5-flash',
+                contents=context,
+                config={
+                    'temperature': 0.7,
+                    'max_output_tokens': 500
+                }
             )
             
             answer = response.text if hasattr(response, 'text') else str(response)

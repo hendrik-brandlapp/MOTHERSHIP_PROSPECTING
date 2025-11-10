@@ -265,7 +265,8 @@
 
             <!-- Alert Filters -->
             <div class="alert-filters mb-3" style="padding: 0 1rem;">
-                <div class="d-flex gap-2 flex-wrap">
+                <label class="form-label small fw-bold mb-2"><i class="fas fa-bell me-1"></i>Filter by Alerts</label>
+                <div class="d-flex gap-2 flex-wrap mb-2">
                     <button class="btn btn-sm btn-outline-danger" id="filter-critical" onclick="toggleAlertFilter('critical')" title="Show critical alerts">
                         <i class="fas fa-exclamation-circle"></i>
                         <span class="ms-1" id="critical-count">0</span>
@@ -279,10 +280,20 @@
                         <span class="ms-1" id="medium-count">0</span>
                     </button>
                     <button class="btn btn-sm btn-outline-secondary" id="filter-all-alerts" onclick="toggleAlertFilter('all')" title="Show all companies with alerts">
-                        <i class="fas fa-bell"></i> All Alerts
+                        <i class="fas fa-bell"></i> All
                         <span class="ms-1" id="all-alerts-count">0</span>
                     </button>
                 </div>
+                <select class="form-select form-select-sm" id="alert-type-filter" onchange="applyAlertFilter()">
+                    <option value="">All Alert Types</option>
+                    <option value="pattern_break">📉 Pattern Break</option>
+                    <option value="high_value_risk">💎 High Value Risk</option>
+                    <option value="dormant">🛏️ Dormant Customer</option>
+                    <option value="declining">📊 Declining Sales</option>
+                    <option value="less_frequent">⏰ Less Frequent Orders</option>
+                    <option value="one_timer">🔵 One-Time Customer</option>
+                    <option value="payment_issues">💳 Payment Issues</option>
+                </select>
             </div>
 
             <!-- Companies List -->
@@ -1538,15 +1549,24 @@ function toggleAlertFilter(priority) {
 function applyAlertFilter() {
     const searchInput = document.getElementById('sidebar-search');
     const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const alertTypeFilter = document.getElementById('alert-type-filter');
+    const selectedAlertType = alertTypeFilter ? alertTypeFilter.value : '';
     
     filteredCompanies = companies.filter(company => {
-        // Apply alert filter
+        // Apply alert priority filter
         if (activeAlertFilter) {
             if (activeAlertFilter === 'all') {
                 if (!company.has_alerts) return false;
             } else {
                 if (company.highest_priority !== activeAlertFilter) return false;
             }
+        }
+        
+        // Apply alert type filter
+        if (selectedAlertType) {
+            if (!company.alerts || company.alerts.length === 0) return false;
+            const hasMatchingType = company.alerts.some(alert => alert.alert_type === selectedAlertType);
+            if (!hasMatchingType) return false;
         }
         
         // Apply search filter
