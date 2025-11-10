@@ -301,8 +301,8 @@
 .sidepanel {
     position: fixed;
     top: 0;
-    right: -600px;
-    width: 600px;
+    right: -50vw;
+    width: 50vw;
     max-width: 90vw;
     height: 100%;
     background: white;
@@ -1505,8 +1505,187 @@ function showCompanyDetails(companyId) {
     // Show sidepanel first
     openCompanyPanel();
     
+    // Check if this is a major retailer and load specialized data
+    loadMajorRetailerData(company.company_id);
+    
     // Then load invoices
     loadCompanyInvoices(company.company_id);
+}
+
+async function loadMajorRetailerData(companyId) {
+    try {
+        const response = await fetch(`/api/major-retailer/${companyId}`);
+        const data = await response.json();
+        
+        if (data.is_major_retailer) {
+            // Insert major retailer section before invoices
+            const existingSection = document.getElementById('major-retailer-section');
+            if (existingSection) {
+                existingSection.remove();
+            }
+            
+            const modalBody = document.getElementById('companyModalBody');
+            const retailerSection = document.createElement('div');
+            retailerSection.id = 'major-retailer-section';
+            retailerSection.className = 'mb-4';
+            
+            // Build year tabs
+            const yearTabs = data.available_years.map(year => 
+                `<button class="btn btn-sm btn-outline-primary me-1 year-tab-btn" data-year="${year}" onclick="filterRetailerByYear('${year}')">${year}</button>`
+            ).join('');
+            
+            retailerSection.innerHTML = `
+                <div class="alert alert-info mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-star me-2"></i>
+                            <strong>Major Retailer Data</strong>
+                            <span class="badge bg-primary ms-2">${data.retailer_name}</span>
+                        </div>
+                        <div class="btn-group">
+                            ${yearTabs}
+                            <button class="btn btn-sm btn-primary active year-tab-btn" data-year="all" onclick="filterRetailerByYear('all')">All Years</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="fas fa-chart-bar me-2 text-primary"></i>Summary Statistics</h6>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <div class="text-center p-2 bg-white rounded">
+                                            <h4 class="text-success mb-0">${data.total_quantity.toLocaleString()}</h4>
+                                            <small class="text-muted">Total Units</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="text-center p-2 bg-white rounded">
+                                            <h4 class="text-info mb-0">${Object.keys(data.product_stats).length}</h4>
+                                            <small class="text-muted">Products</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="text-center p-2 bg-white rounded">
+                                            <h4 class="text-warning mb-0">${data.top_customers.length}+</h4>
+                                            <small class="text-muted">End Customers</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card border-0 bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title"><i class="fas fa-calendar me-2 text-primary"></i>By Year</h6>
+                                <div class="year-stats-container">
+                                    ${Object.entries(data.stats_by_year).map(([year, stats]) => `
+                                        <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-white rounded">
+                                            <span class="fw-bold">${year}</span>
+                                            <div class="text-end">
+                                                <small class="text-muted d-block">${stats.total_quantity.toLocaleString()} units</small>
+                                                <small class="text-muted">${stats.unique_customers} customers</small>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card border-0 bg-light mb-3">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3"><i class="fas fa-box me-2 text-primary"></i>Top Products</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Product</th>
+                                        <th class="text-end">Total Units</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${Object.entries(data.product_stats).slice(0, 8).map(([product, stats]) => `
+                                        <tr>
+                                            <td><strong>${escapeHtml(product)}</strong></td>
+                                            <td class="text-end">
+                                                <span class="badge bg-success">${stats.total.toLocaleString()}</span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card border-0 bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3"><i class="fas fa-store me-2 text-primary"></i>Top End Customers</h6>
+                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="sticky-top bg-light">
+                                    <tr>
+                                        <th>Customer</th>
+                                        <th>Location</th>
+                                        <th class="text-end">Units</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.top_customers.map(customer => `
+                                        <tr>
+                                            <td>
+                                                <strong>${escapeHtml(customer.name)}</strong>
+                                                ${customer.type ? `<br><small class="text-muted">${escapeHtml(customer.type)}</small>` : ''}
+                                            </td>
+                                            <td>
+                                                <small>${escapeHtml(customer.city || '')}</small>
+                                                ${customer.province ? `<br><small class="text-muted">${escapeHtml(customer.province)}</small>` : ''}
+                                            </td>
+                                            <td class="text-end">
+                                                <span class="badge bg-info">${customer.total.toLocaleString()}</span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr class="my-4">
+            `;
+            
+            // Insert at the beginning of modal body, before existing content
+            modalBody.insertBefore(retailerSection, modalBody.firstChild);
+            
+            // Store data for filtering
+            window.currentRetailerData = data;
+        }
+    } catch (error) {
+        console.error('Error loading major retailer data:', error);
+    }
+}
+
+function filterRetailerByYear(year) {
+    // Update active button
+    document.querySelectorAll('.year-tab-btn').forEach(btn => {
+        btn.classList.remove('active', 'btn-primary');
+        btn.classList.add('btn-outline-primary');
+        if (btn.dataset.year === year) {
+            btn.classList.add('active', 'btn-primary');
+            btn.classList.remove('btn-outline-primary');
+        }
+    });
+    
+    // This would filter the displayed data by year
+    // For now, it just updates the UI - you could extend this to filter the tables
+    console.log('Filtering by year:', year);
 }
 
 function openCompanyPanel() {

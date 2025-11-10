@@ -7201,6 +7201,150 @@ def api_company_invoices(company_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/major-retailer/<int:company_id>', methods=['GET'])
+def api_major_retailer_data(company_id):
+    """Get detailed data for major retailers from their specialized databases."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Map company IDs to their database tables
+        # These are the major retailers with specialized databases
+        MAJOR_RETAILERS = {
+            # Delhaize Le Lion/De Leeuw
+            'Delhaize': {
+                'company_ids': [790, 791],  # Add actual Duano company IDs here
+                'tables': ['Delhaize 2025', 'Delhaize 2024', 'Delhaize 2023', 'Delhaize 2022'],
+                'company_name': 'Delhaize Le Lion/De Leeuw'
+            },
+            # Dranken Geers NV
+            'Geers': {
+                'company_ids': [792],  # Add actual Duano company ID here
+                'tables': ['Geers 2025', 'Geers 2024', 'Geers 2023', 'Geers 2022'],
+                'company_name': 'Dranken Geers NV'
+            },
+            # SPRL Inter - Drinks
+            'InterDrinks': {
+                'company_ids': [790],  # Add actual Duano company ID here
+                'tables': ['Inter Drinks 2025', 'Inter Drinks 2024', 'Inter Drinks 2023'],
+                'company_name': 'SPRL Inter - Drinks'
+            },
+            # Biofresh Belgium NV
+            'Biofresh': {
+                'company_ids': [438],  # Based on the screenshot showing BE0438873629
+                'tables': ['Biofresh 2025', 'Biofresh 2024', 'Biofresh 2023', 'Biofresh 2022'],
+                'company_name': 'Biofresh Belgium NV'
+            },
+            # TERROIRIST CVBA
+            'Terroirist': {
+                'company_ids': [793],  # Add actual Duano company ID here
+                'tables': ['Terroirist 2025', 'Terroirist 2024'],
+                'company_name': 'TERROIRIST CVBA'
+            }
+        }
+        
+        # Find which retailer this company belongs to
+        retailer_key = None
+        for key, config in MAJOR_RETAILERS.items():
+            if company_id in config['company_ids']:
+                retailer_key = key
+                break
+        
+        if not retailer_key:
+            return jsonify({'is_major_retailer': False})
+        
+        retailer_config = MAJOR_RETAILERS[retailer_key]
+        
+        # Fetch data from all years for this retailer
+        all_data = []
+        stats_by_year = {}
+        
+        for table_name in retailer_config['tables']:
+            try:
+                result = supabase_client.table(table_name).select('*').execute()
+                
+                if result.data:
+                    year = table_name.split()[-1]  # Extract year from table name
+                    
+                    # Calculate stats for this year
+                    total_quantity = sum(int(row.get('aantal', 0) or 0) for row in result.data)
+                    unique_customers = len(set(row.get('naam_klant') for row in result.data if row.get('naam_klant')))
+                    unique_products = len(set(row.get('product') for row in result.data if row.get('product')))
+                    
+                    stats_by_year[year] = {
+                        'total_quantity': total_quantity,
+                        'unique_customers': unique_customers,
+                        'unique_products': unique_products,
+                        'total_records': len(result.data)
+                    }
+                    
+                    # Add year to each row
+                    for row in result.data:
+                        row['_year'] = year
+                        all_data.append(row)
+                        
+            except Exception as e:
+                print(f"Error fetching {table_name}: {e}")
+                continue
+        
+        # Aggregate statistics
+        total_quantity = sum(stats.get('total_quantity', 0) for stats in stats_by_year.values())
+        
+        # Product breakdown
+        product_stats = {}
+        for row in all_data:
+            product = row.get('product', 'Unknown')
+            if product not in product_stats:
+                product_stats[product] = {'total': 0, 'by_year': {}}
+            
+            quantity = int(row.get('aantal', 0) or 0)
+            product_stats[product]['total'] += quantity
+            
+            year = row.get('_year', 'Unknown')
+            if year not in product_stats[product]['by_year']:
+                product_stats[product]['by_year'][year] = 0
+            product_stats[product]['by_year'][year] += quantity
+        
+        # Top products
+        top_products = sorted(product_stats.items(), key=lambda x: x[1]['total'], reverse=True)[:10]
+        
+        # Customer breakdown (end customers)
+        customer_stats = {}
+        for row in all_data:
+            customer = row.get('naam_klant', 'Unknown')
+            if customer and customer != 'Unknown':
+                if customer not in customer_stats:
+                    customer_stats[customer] = {
+                        'total': 0,
+                        'city': row.get('stad', ''),
+                        'province': row.get('provincie', ''),
+                        'type': row.get('type_zaak', '')
+                    }
+                quantity = int(row.get('aantal', 0) or 0)
+                customer_stats[customer]['total'] += quantity
+        
+        top_customers = sorted(customer_stats.items(), key=lambda x: x[1]['total'], reverse=True)[:15]
+        
+        return jsonify({
+            'is_major_retailer': True,
+            'retailer_name': retailer_config['company_name'],
+            'retailer_key': retailer_key,
+            'stats_by_year': stats_by_year,
+            'total_quantity': total_quantity,
+            'total_records': len(all_data),
+            'product_stats': dict(top_products),
+            'top_customers': [{'name': name, **stats} for name, stats in top_customers],
+            'available_years': list(stats_by_year.keys())
+        })
+        
+    except Exception as e:
+        print(f"Error getting major retailer data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/alerts', methods=['GET'])
 def api_get_alerts():
     """
