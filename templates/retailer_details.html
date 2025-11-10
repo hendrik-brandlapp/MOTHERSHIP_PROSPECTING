@@ -1,21 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}Major Retailer Details - DOUANO{% endblock %}
+{% block title %}Major Retailer Analytics - DOUANO{% endblock %}
 
 {% block content %}
 <div class="container-fluid px-4">
-    <div class="row">
+    <!-- Header -->
+    <div class="row mb-4">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h2><i class="fas fa-star text-warning me-2"></i><span id="retailer-name">Major Retailer</span></h2>
-                    <p class="text-muted mb-0">Detailed analytics and distribution data</p>
+                    <h2>
+                        <i class="fas fa-star text-warning me-2"></i>
+                        <span id="retailer-name">Major Retailer</span>
+                        <span class="badge bg-warning text-dark ms-2" id="retailer-type">Retailer</span>
+                    </h2>
+                    <p class="text-muted mb-0">Comprehensive distribution analytics and insights</p>
                 </div>
                 <div>
                     <a href="/data" class="btn btn-outline-secondary me-2">
-                        <i class="fas fa-arrow-left me-2"></i>Back to Companies
+                        <i class="fas fa-arrow-left me-2"></i>Back
                     </a>
-                    <button class="btn btn-primary" onclick="loadRetailerData()">
+                    <button class="btn btn-primary" onclick="loadDetailedData()">
                         <i class="fas fa-sync-alt me-2"></i>Refresh
                     </button>
                 </div>
@@ -25,29 +30,72 @@
 
     <!-- Loading State -->
     <div id="loading" class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-        <p class="mt-3 text-muted">Loading retailer data...</p>
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-3 text-muted">Loading detailed analytics...</p>
     </div>
 
     <!-- Error State -->
     <div id="error-message" class="alert alert-danger" style="display: none;">
         <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
-        <p class="mb-0" id="error-text">Failed to load retailer data</p>
+        <p class="mb-0" id="error-text"></p>
     </div>
 
     <!-- Main Content -->
     <div id="main-content" style="display: none;">
-        <!-- Year Filter -->
+        <!-- Filters Section -->
         <div class="row mb-4">
             <div class="col-12">
                 <div class="card border-0 shadow-sm">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Select Time Period</h5>
-                            <div class="btn-group" id="year-filter">
-                                <!-- Year buttons will be inserted here -->
+                        <div class="row g-3">
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold">Year</label>
+                                <select class="form-select" id="year-filter" onchange="applyFilters()">
+                                    <option value="all">All Years</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold">Month</label>
+                                <select class="form-select" id="month-filter" onchange="applyFilters()">
+                                    <option value="all">All Months</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold">Product</label>
+                                <select class="form-select" id="product-filter" onchange="applyFilters()">
+                                    <option value="all">All Products</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold">Flavor</label>
+                                <select class="form-select" id="flavor-filter" onchange="applyFilters()">
+                                    <option value="all">All Flavors</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold">Chain</label>
+                                <select class="form-select" id="chain-filter" onchange="applyFilters()">
+                                    <option value="all">All Chains</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label fw-bold">Province</label>
+                                <select class="form-select" id="province-filter" onchange="applyFilters()">
+                                    <option value="all">All Provinces</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="search-filter" placeholder="Search customers, cities, codes..." onkeyup="applyFilters()">
+                            </div>
+                            <div class="col-md-8 text-end">
+                                <button class="btn btn-outline-secondary" onclick="resetFilters()">
+                                    <i class="fas fa-redo me-2"></i>Reset Filters
+                                </button>
+                                <button class="btn btn-outline-success" onclick="exportData()">
+                                    <i class="fas fa-download me-2"></i>Export CSV
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -55,98 +103,350 @@
             </div>
         </div>
 
-        <!-- Summary Cards -->
+        <!-- KPI Cards -->
         <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body text-center">
-                        <i class="fas fa-boxes fa-2x text-success mb-3"></i>
-                        <h3 class="mb-1" id="total-units">-</h3>
-                        <p class="text-muted mb-0">Total Units Sold</p>
+            <div class="col-md-2">
+                <div class="card border-0 shadow-sm text-center">
+                    <div class="card-body">
+                        <i class="fas fa-boxes fa-2x text-success mb-2"></i>
+                        <h3 class="mb-0" id="kpi-total-units">-</h3>
+                        <small class="text-muted">Total Units</small>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body text-center">
-                        <i class="fas fa-box fa-2x text-info mb-3"></i>
-                        <h3 class="mb-1" id="total-products">-</h3>
-                        <p class="text-muted mb-0">Unique Products</p>
+            <div class="col-md-2">
+                <div class="card border-0 shadow-sm text-center">
+                    <div class="card-body">
+                        <i class="fas fa-store fa-2x text-info mb-2"></i>
+                        <h3 class="mb-0" id="kpi-customers">-</h3>
+                        <small class="text-muted">Locations</small>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body text-center">
-                        <i class="fas fa-store fa-2x text-warning mb-3"></i>
-                        <h3 class="mb-1" id="total-customers">-</h3>
-                        <p class="text-muted mb-0">End Customers</p>
+            <div class="col-md-2">
+                <div class="card border-0 shadow-sm text-center">
+                    <div class="card-body">
+                        <i class="fas fa-box fa-2x text-warning mb-2"></i>
+                        <h3 class="mb-0" id="kpi-products">-</h3>
+                        <small class="text-muted">Products</small>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body text-center">
-                        <i class="fas fa-file-invoice fa-2x text-primary mb-3"></i>
-                        <h3 class="mb-1" id="total-records">-</h3>
-                        <p class="text-muted mb-0">Total Records</p>
+            <div class="col-md-2">
+                <div class="card border-0 shadow-sm text-center">
+                    <div class="card-body">
+                        <i class="fas fa-ice-cream fa-2x text-primary mb-2"></i>
+                        <h3 class="mb-0" id="kpi-flavors">-</h3>
+                        <small class="text-muted">Flavors</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card border-0 shadow-sm text-center">
+                    <div class="card-body">
+                        <i class="fas fa-link fa-2x text-danger mb-2"></i>
+                        <h3 class="mb-0" id="kpi-chains">-</h3>
+                        <small class="text-muted">Chains</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card border-0 shadow-sm text-center">
+                    <div class="card-body">
+                        <i class="fas fa-map-marked-alt fa-2x text-secondary mb-2"></i>
+                        <h3 class="mb-0" id="kpi-regions">-</h3>
+                        <small class="text-muted">Regions</small>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Year Breakdown -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title mb-3"><i class="fas fa-calendar-alt me-2 text-primary"></i>Performance by Year</h5>
-                        <div id="year-breakdown" class="row">
-                            <!-- Year cards will be inserted here -->
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-tabs mb-4" id="analyticsTabs" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button">
+                    <i class="fas fa-chart-line me-2"></i>Overview
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="products-tab" data-bs-toggle="tab" data-bs-target="#products" type="button">
+                    <i class="fas fa-box me-2"></i>Products
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="locations-tab" data-bs-toggle="tab" data-bs-target="#locations" type="button">
+                    <i class="fas fa-map-marker-alt me-2"></i>Locations
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="timeline-tab" data-bs-toggle="tab" data-bs-target="#timeline" type="button">
+                    <i class="fas fa-calendar me-2"></i>Timeline
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="chains-tab" data-bs-toggle="tab" data-bs-target="#chains" type="button">
+                    <i class="fas fa-link me-2"></i>Chains
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="detailed-tab" data-bs-toggle="tab" data-bs-target="#detailed" type="button">
+                    <i class="fas fa-table me-2"></i>Detailed Data
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="analyticsTabContent">
+            <!-- Overview Tab -->
+            <div class="tab-pane fade show active" id="overview" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-chart-area me-2"></i>Units Over Time</h5>
+                                <canvas id="timeline-chart" height="80"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm mb-4">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-chart-pie me-2"></i>Product Mix</h5>
+                                <canvas id="product-pie-chart" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-trophy me-2"></i>Top 10 Locations</h5>
+                                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                    <table class="table table-hover">
+                                        <thead class="sticky-top bg-white">
+                                            <tr>
+                                                <th>Rank</th>
+                                                <th>Location</th>
+                                                <th>City</th>
+                                                <th class="text-end">Units</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="top-locations-table"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-ice-cream me-2"></i>Top 10 Flavors</h5>
+                                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                                    <table class="table table-hover">
+                                        <thead class="sticky-top bg-white">
+                                            <tr>
+                                                <th>Rank</th>
+                                                <th>Flavor</th>
+                                                <th>Product</th>
+                                                <th class="text-end">Units</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="top-flavors-table"></tbody>
+                                    </table>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Charts Row -->
-        <div class="row mb-4">
-            <div class="col-md-6">
+            <!-- Products Tab -->
+            <div class="tab-pane fade" id="products" role="tabpanel">
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-chart-bar me-2"></i>Product Performance</h5>
+                                <canvas id="product-bar-chart" height="80"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-box-open me-2"></i>Package Types</h5>
+                                <canvas id="packaging-chart" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="card border-0 shadow-sm">
                     <div class="card-body">
-                        <h5 class="card-title mb-3"><i class="fas fa-chart-bar me-2 text-primary"></i>Top Products</h5>
-                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <h5 class="card-title mb-3"><i class="fas fa-th-list me-2"></i>Product Details</h5>
+                        <div class="table-responsive">
                             <table class="table table-hover">
-                                <thead class="sticky-top bg-white">
+                                <thead>
                                     <tr>
                                         <th>Product</th>
+                                        <th>Flavor</th>
+                                        <th>Packaging</th>
                                         <th class="text-end">Total Units</th>
+                                        <th class="text-end">Locations</th>
+                                        <th class="text-end">Avg per Location</th>
                                     </tr>
                                 </thead>
-                                <tbody id="products-table">
-                                    <!-- Products will be inserted here -->
-                                </tbody>
+                                <tbody id="product-details-table"></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
+
+            <!-- Locations Tab -->
+            <div class="tab-pane fade" id="locations" role="tabpanel">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-map me-2"></i>By Province</h5>
+                                <canvas id="province-chart" height="150"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-city me-2"></i>Top Cities</h5>
+                                <canvas id="city-chart" height="150"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="card border-0 shadow-sm">
                     <div class="card-body">
-                        <h5 class="card-title mb-3"><i class="fas fa-store me-2 text-primary"></i>Top End Customers</h5>
-                        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                            <table class="table table-hover">
+                        <h5 class="card-title mb-3"><i class="fas fa-store-alt me-2"></i>All Locations</h5>
+                        <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                            <table class="table table-hover table-sm">
                                 <thead class="sticky-top bg-white">
                                     <tr>
+                                        <th>Code</th>
+                                        <th>Location Name</th>
+                                        <th>Address</th>
+                                        <th>City</th>
+                                        <th>Province</th>
+                                        <th>Chain</th>
+                                        <th>Type</th>
+                                        <th class="text-end">Total Units</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="locations-details-table"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline Tab -->
+            <div class="tab-pane fade" id="timeline" role="tabpanel">
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-chart-line me-2"></i>Monthly Trend</h5>
+                                <canvas id="monthly-trend-chart" height="70"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-calendar-week me-2"></i>Weekly Performance</h5>
+                                <canvas id="weekly-chart" height="120"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-calendar-alt me-2"></i>Year Comparison</h5>
+                                <canvas id="year-comparison-chart" height="120"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chains Tab -->
+            <div class="tab-pane fade" id="chains" role="tabpanel">
+                <div class="row mb-4">
+                    <div class="col-md-8">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-network-wired me-2"></i>Chain Performance</h5>
+                                <canvas id="chain-performance-chart" height="80"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3"><i class="fas fa-chart-pie me-2"></i>Chain Distribution</h5>
+                                <canvas id="chain-pie-chart" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3"><i class="fas fa-th me-2"></i>Chain Details</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Chain</th>
+                                        <th class="text-end">Total Units</th>
+                                        <th class="text-end">Locations</th>
+                                        <th class="text-end">Products</th>
+                                        <th class="text-end">Avg per Location</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="chain-details-table"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Data Tab -->
+            <div class="tab-pane fade" id="detailed" role="tabpanel">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="card-title mb-0"><i class="fas fa-table me-2"></i>Complete Dataset</h5>
+                            <span class="badge bg-primary" id="total-records-badge">0 records</span>
+                        </div>
+                        <div class="table-responsive" style="max-height: 700px; overflow-y: auto;">
+                            <table class="table table-sm table-hover">
+                                <thead class="sticky-top bg-white">
+                                    <tr>
+                                        <th>Code</th>
                                         <th>Customer</th>
-                                        <th>Location</th>
+                                        <th>City</th>
+                                        <th>Province</th>
+                                        <th>Product</th>
+                                        <th>Flavor</th>
+                                        <th>Package</th>
+                                        <th>Chain</th>
+                                        <th>Type</th>
+                                        <th>Month</th>
+                                        <th>Year</th>
                                         <th class="text-end">Units</th>
                                     </tr>
                                 </thead>
-                                <tbody id="customers-table">
-                                    <!-- Customers will be inserted here -->
-                                </tbody>
+                                <tbody id="detailed-data-table"></tbody>
                             </table>
                         </div>
                     </div>
@@ -158,202 +458,659 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 const companyId = {{ company_id }};
-const initialYear = '{{ year }}';
-let retailerData = null;
-let selectedYear = 'all';
+let allData = [];
+let filteredData = [];
+let charts = {};
 
 document.addEventListener('DOMContentLoaded', function() {
-    loadRetailerData();
+    loadDetailedData();
 });
 
-async function loadRetailerData() {
+async function loadDetailedData() {
     try {
-        document.getElementById('loading').style.display = 'block';
-        document.getElementById('error-message').style.display = 'none';
-        document.getElementById('main-content').style.display = 'none';
+        showLoading();
         
-        const response = await fetch(`/api/major-retailer/${companyId}`);
-        const data = await response.json();
+        const response = await fetch(`/api/major-retailer-detailed/${companyId}`);
+        const result = await response.json();
         
-        if (!data.is_major_retailer) {
-            throw new Error('This company is not a major retailer');
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to load data');
         }
         
-        retailerData = data;
+        allData = result.data;
+        filteredData = [...allData];
         
-        // Update page title
-        document.getElementById('retailer-name').textContent = data.retailer_name;
-        document.title = `${data.retailer_name} - Details`;
+        document.getElementById('retailer-name').textContent = result.retailer_name;
         
-        // Render year filter buttons
-        renderYearFilters();
+        populateFilters();
+        applyFilters();
         
-        // Display data
-        displayData('all');
-        
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('main-content').style.display = 'block';
+        hideLoading();
         
     } catch (error) {
-        console.error('Error loading retailer data:', error);
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('error-message').style.display = 'block';
-        document.getElementById('error-text').textContent = error.message;
+        console.error('Error:', error);
+        showError(error.message);
     }
 }
 
-function renderYearFilters() {
-    const container = document.getElementById('year-filter');
-    const years = retailerData.available_years;
+function populateFilters() {
+    const years = [...new Set(allData.map(d => d.jaar))].sort().reverse();
+    const months = [...new Set(allData.map(d => d.maand))].filter(m => m);
+    const products = [...new Set(allData.map(d => d.product))].filter(p => p);
+    const flavors = [...new Set(allData.map(d => d.smaak))].filter(f => f);
+    const chains = [...new Set(allData.map(d => d.keten))].filter(c => c);
+    const provinces = [...new Set(allData.map(d => d.provincie))].filter(p => p);
     
-    let html = '';
-    years.forEach(year => {
-        html += `<button class="btn btn-outline-primary year-btn" data-year="${year}" onclick="filterByYear('${year}')">${year}</button>`;
-    });
-    html += `<button class="btn btn-primary active year-btn" data-year="all" onclick="filterByYear('all')">All Years</button>`;
-    
-    container.innerHTML = html;
+    populateSelect('year-filter', years);
+    populateSelect('month-filter', months);
+    populateSelect('product-filter', products);
+    populateSelect('flavor-filter', flavors);
+    populateSelect('chain-filter', chains);
+    populateSelect('province-filter', provinces);
 }
 
-function filterByYear(year) {
-    selectedYear = year;
+function populateSelect(id, options) {
+    const select = document.getElementById(id);
+    const currentValue = select.value;
     
-    // Update active button
-    document.querySelectorAll('.year-btn').forEach(btn => {
-        btn.classList.remove('active', 'btn-primary');
-        btn.classList.add('btn-outline-primary');
-        if (btn.dataset.year === year) {
-            btn.classList.add('active', 'btn-primary');
-            btn.classList.remove('btn-outline-primary');
+    options.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt;
+        option.textContent = opt;
+        select.appendChild(option);
+    });
+    
+    if (currentValue) select.value = currentValue;
+}
+
+function applyFilters() {
+    const year = document.getElementById('year-filter').value;
+    const month = document.getElementById('month-filter').value;
+    const product = document.getElementById('product-filter').value;
+    const flavor = document.getElementById('flavor-filter').value;
+    const chain = document.getElementById('chain-filter').value;
+    const province = document.getElementById('province-filter').value;
+    const search = document.getElementById('search-filter').value.toLowerCase();
+    
+    filteredData = allData.filter(d => {
+        if (year !== 'all' && d.jaar != year) return false;
+        if (month !== 'all' && d.maand !== month) return false;
+        if (product !== 'all' && d.product !== product) return false;
+        if (flavor !== 'all' && d.smaak !== flavor) return false;
+        if (chain !== 'all' && d.keten !== chain) return false;
+        if (province !== 'all' && d.provincie !== province) return false;
+        
+        if (search) {
+            const searchText = [
+                d.naam_klant, d.stad, d.code_klant, d.product, d.smaak
+            ].join(' ').toLowerCase();
+            if (!searchText.includes(search)) return false;
+        }
+        
+        return true;
+    });
+    
+    updateUI();
+}
+
+function updateUI() {
+    updateKPIs();
+    updateAllTables();
+    updateAllCharts();
+}
+
+function updateKPIs() {
+    const totalUnits = filteredData.reduce((sum, d) => sum + (parseInt(d.aantal) || 0), 0);
+    const uniqueCustomers = new Set(filteredData.map(d => d.naam_klant)).size;
+    const uniqueProducts = new Set(filteredData.map(d => d.product)).size;
+    const uniqueFlavors = new Set(filteredData.map(d => d.smaak)).size;
+    const uniqueChains = new Set(filteredData.map(d => d.keten)).size;
+    const uniqueProvinces = new Set(filteredData.map(d => d.provincie)).size;
+    
+    document.getElementById('kpi-total-units').textContent = totalUnits.toLocaleString();
+    document.getElementById('kpi-customers').textContent = uniqueCustomers;
+    document.getElementById('kpi-products').textContent = uniqueProducts;
+    document.getElementById('kpi-flavors').textContent = uniqueFlavors;
+    document.getElementById('kpi-chains').textContent = uniqueChains;
+    document.getElementById('kpi-regions').textContent = uniqueProvinces;
+    document.getElementById('total-records-badge').textContent = `${filteredData.length} records`;
+}
+
+function updateAllTables() {
+    updateTopLocationsTable();
+    updateTopFlavorsTable();
+    updateProductDetailsTable();
+    updateLocationsDetailsTable();
+    updateChainDetailsTable();
+    updateDetailedDataTable();
+}
+
+function updateTopLocationsTable() {
+    const locationStats = {};
+    filteredData.forEach(d => {
+        const key = d.naam_klant;
+        if (!locationStats[key]) {
+            locationStats[key] = { name: d.naam_klant, city: d.stad, units: 0 };
+        }
+        locationStats[key].units += parseInt(d.aantal) || 0;
+    });
+    
+    const sorted = Object.values(locationStats).sort((a, b) => b.units - a.units).slice(0, 10);
+    const tbody = document.getElementById('top-locations-table');
+    tbody.innerHTML = sorted.map((loc, i) => `
+        <tr>
+            <td><span class="badge bg-${i < 3 ? 'warning' : 'secondary'}">#${i + 1}</span></td>
+            <td><strong>${esc(loc.name)}</strong></td>
+            <td>${esc(loc.city)}</td>
+            <td class="text-end"><span class="badge bg-success">${loc.units.toLocaleString()}</span></td>
+        </tr>
+    `).join('');
+}
+
+function updateTopFlavorsTable() {
+    const flavorStats = {};
+    filteredData.forEach(d => {
+        const key = d.smaak;
+        if (!flavorStats[key]) {
+            flavorStats[key] = { flavor: d.smaak, product: d.product, units: 0 };
+        }
+        flavorStats[key].units += parseInt(d.aantal) || 0;
+    });
+    
+    const sorted = Object.values(flavorStats).sort((a, b) => b.units - a.units).slice(0, 10);
+    const tbody = document.getElementById('top-flavors-table');
+    tbody.innerHTML = sorted.map((f, i) => `
+        <tr>
+            <td><span class="badge bg-${i < 3 ? 'warning' : 'secondary'}">#${i + 1}</span></td>
+            <td><strong>${esc(f.flavor)}</strong></td>
+            <td><small class="text-muted">${esc(f.product)}</small></td>
+            <td class="text-end"><span class="badge bg-info">${f.units.toLocaleString()}</span></td>
+        </tr>
+    `).join('');
+}
+
+function updateProductDetailsTable() {
+    const productStats = {};
+    filteredData.forEach(d => {
+        const key = `${d.product}-${d.smaak}-${d.verpakking}`;
+        if (!productStats[key]) {
+            productStats[key] = {
+                product: d.product,
+                flavor: d.smaak,
+                packaging: d.verpakking,
+                units: 0,
+                locations: new Set()
+            };
+        }
+        productStats[key].units += parseInt(d.aantal) || 0;
+        productStats[key].locations.add(d.naam_klant);
+    });
+    
+    const tbody = document.getElementById('product-details-table');
+    tbody.innerHTML = Object.values(productStats)
+        .sort((a, b) => b.units - a.units)
+        .map(p => `
+            <tr>
+                <td><strong>${esc(p.product)}</strong></td>
+                <td>${esc(p.flavor)}</td>
+                <td><span class="badge bg-secondary">${esc(p.packaging)}</span></td>
+                <td class="text-end">${p.units.toLocaleString()}</td>
+                <td class="text-end">${p.locations.size}</td>
+                <td class="text-end">${Math.round(p.units / p.locations.size)}</td>
+            </tr>
+        `).join('');
+}
+
+function updateLocationsDetailsTable() {
+    const locationStats = {};
+    filteredData.forEach(d => {
+        const key = d.code_klant;
+        if (!locationStats[key]) {
+            locationStats[key] = {
+                code: d.code_klant,
+                name: d.naam_klant,
+                address: d.adres_straat_huisnr,
+                city: d.stad,
+                province: d.provincie,
+                chain: d.keten,
+                type: d.type_zaak,
+                units: 0
+            };
+        }
+        locationStats[key].units += parseInt(d.aantal) || 0;
+    });
+    
+    const tbody = document.getElementById('locations-details-table');
+    tbody.innerHTML = Object.values(locationStats)
+        .sort((a, b) => b.units - a.units)
+        .map(l => `
+            <tr>
+                <td><code>${esc(l.code)}</code></td>
+                <td><strong>${esc(l.name)}</strong></td>
+                <td><small>${esc(l.address)}</small></td>
+                <td>${esc(l.city)}</td>
+                <td>${esc(l.province)}</td>
+                <td><span class="badge bg-primary">${esc(l.chain)}</span></td>
+                <td><small>${esc(l.type)}</small></td>
+                <td class="text-end"><strong>${l.units.toLocaleString()}</strong></td>
+            </tr>
+        `).join('');
+}
+
+function updateChainDetailsTable() {
+    const chainStats = {};
+    filteredData.forEach(d => {
+        if (!chainStats[d.keten]) {
+            chainStats[d.keten] = {
+                chain: d.keten,
+                units: 0,
+                locations: new Set(),
+                products: new Set()
+            };
+        }
+        chainStats[d.keten].units += parseInt(d.aantal) || 0;
+        chainStats[d.keten].locations.add(d.naam_klant);
+        chainStats[d.keten].products.add(d.product);
+    });
+    
+    const tbody = document.getElementById('chain-details-table');
+    tbody.innerHTML = Object.values(chainStats)
+        .sort((a, b) => b.units - a.units)
+        .map(c => `
+            <tr>
+                <td><strong>${esc(c.chain)}</strong></td>
+                <td class="text-end">${c.units.toLocaleString()}</td>
+                <td class="text-end">${c.locations.size}</td>
+                <td class="text-end">${c.products.size}</td>
+                <td class="text-end">${Math.round(c.units / c.locations.size)}</td>
+            </tr>
+        `).join('');
+}
+
+function updateDetailedDataTable() {
+    const tbody = document.getElementById('detailed-data-table');
+    tbody.innerHTML = filteredData.slice(0, 500).map(d => `
+        <tr>
+            <td><code>${esc(d.code_klant)}</code></td>
+            <td>${esc(d.naam_klant)}</td>
+            <td>${esc(d.stad)}</td>
+            <td>${esc(d.provincie)}</td>
+            <td>${esc(d.product)}</td>
+            <td>${esc(d.smaak)}</td>
+            <td><span class="badge bg-secondary">${esc(d.verpakking)}</span></td>
+            <td><span class="badge bg-primary">${esc(d.keten)}</span></td>
+            <td><small>${esc(d.type_zaak)}</small></td>
+            <td>${esc(d.maand)}</td>
+            <td>${esc(d.jaar)}</td>
+            <td class="text-end"><strong>${parseInt(d.aantal).toLocaleString()}</strong></td>
+        </tr>
+    `).join('');
+    
+    if (filteredData.length > 500) {
+        tbody.innerHTML += `<tr><td colspan="12" class="text-center text-muted"><em>Showing first 500 of ${filteredData.length} records. Apply more filters to see all.</em></td></tr>`;
+    }
+}
+
+function updateAllCharts() {
+    createTimelineChart();
+    createProductPieChart();
+    createProductBarChart();
+    createPackagingChart();
+    createProvinceChart();
+    createCityChart();
+    createMonthlyTrendChart();
+    createWeeklyChart();
+    createYearComparisonChart();
+    createChainPerformanceChart();
+    createChainPieChart();
+}
+
+function createTimelineChart() {
+    const ctx = document.getElementById('timeline-chart');
+    if (!ctx) return;
+    
+    const monthlyData = {};
+    filteredData.forEach(d => {
+        const key = `${d.jaar}-${d.maand}`;
+        monthlyData[key] = (monthlyData[key] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    const labels = Object.keys(monthlyData).sort();
+    const data = labels.map(l => monthlyData[l]);
+    
+    destroyChart('timeline-chart');
+    charts['timeline-chart'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Units',
+                data: data,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1,
+                fill: true,
+                backgroundColor: 'rgba(75, 192, 192, 0.1)'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
+}
+
+function createProductPieChart() {
+    const ctx = document.getElementById('product-pie-chart');
+    if (!ctx) return;
+    
+    const productData = {};
+    filteredData.forEach(d => {
+        productData[d.product] = (productData[d.product] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    destroyChart('product-pie-chart');
+    charts['product-pie-chart'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(productData),
+            datasets: [{
+                data: Object.values(productData),
+                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
+}
+
+function createProductBarChart() {
+    const ctx = document.getElementById('product-bar-chart');
+    if (!ctx) return;
+    
+    const productData = {};
+    filteredData.forEach(d => {
+        productData[d.product] = (productData[d.product] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    destroyChart('product-bar-chart');
+    charts['product-bar-chart'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(productData),
+            datasets: [{
+                label: 'Units',
+                data: Object.values(productData),
+                backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
+}
+
+function createPackagingChart() {
+    const ctx = document.getElementById('packaging-chart');
+    if (!ctx) return;
+    
+    const packagingData = {};
+    filteredData.forEach(d => {
+        packagingData[d.verpakking] = (packagingData[d.verpakking] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    destroyChart('packaging-chart');
+    charts['packaging-chart'] = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: Object.keys(packagingData),
+            datasets: [{
+                data: Object.values(packagingData),
+                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
+}
+
+function createProvinceChart() {
+    const ctx = document.getElementById('province-chart');
+    if (!ctx) return;
+    
+    const provinceData = {};
+    filteredData.forEach(d => {
+        provinceData[d.provincie] = (provinceData[d.provincie] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    destroyChart('province-chart');
+    charts['province-chart'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(provinceData),
+            datasets: [{
+                label: 'Units by Province',
+                data: Object.values(provinceData),
+                backgroundColor: 'rgba(153, 102, 255, 0.8)'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true, indexAxis: 'y' }
+    });
+}
+
+function createCityChart() {
+    const ctx = document.getElementById('city-chart');
+    if (!ctx) return;
+    
+    const cityData = {};
+    filteredData.forEach(d => {
+        cityData[d.stad] = (cityData[d.stad] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    const sorted = Object.entries(cityData).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    
+    destroyChart('city-chart');
+    charts['city-chart'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: sorted.map(s => s[0]),
+            datasets: [{
+                label: 'Units by City',
+                data: sorted.map(s => s[1]),
+                backgroundColor: 'rgba(255, 159, 64, 0.8)'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true, indexAxis: 'y' }
+    });
+}
+
+function createMonthlyTrendChart() {
+    const ctx = document.getElementById('monthly-trend-chart');
+    if (!ctx) return;
+    
+    const monthOrder = ['januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december'];
+    const monthlyData = {};
+    
+    filteredData.forEach(d => {
+        const month = d.maand;
+        monthlyData[month] = (monthlyData[month] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    const labels = monthOrder.filter(m => monthlyData[m]);
+    const data = labels.map(l => monthlyData[l]);
+    
+    destroyChart('monthly-trend-chart');
+    charts['monthly-trend-chart'] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Units per Month',
+                data: data,
+                borderColor: 'rgb(255, 99, 132)',
+                tension: 0.4,
+                fill: true,
+                backgroundColor: 'rgba(255, 99, 132, 0.1)'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
+}
+
+function createWeeklyChart() {
+    const ctx = document.getElementById('weekly-chart');
+    if (!ctx) return;
+    
+    const weeklyData = {};
+    filteredData.forEach(d => {
+        if (d.week) {
+            weeklyData[d.week] = (weeklyData[d.week] || 0) + (parseInt(d.aantal) || 0);
         }
     });
     
-    displayData(year);
+    const sortedWeeks = Object.keys(weeklyData).sort((a, b) => parseInt(a) - parseInt(b));
+    
+    destroyChart('weekly-chart');
+    charts['weekly-chart'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: sortedWeeks.map(w => `Week ${w}`),
+            datasets: [{
+                label: 'Units per Week',
+                data: sortedWeeks.map(w => weeklyData[w]),
+                backgroundColor: 'rgba(54, 162, 235, 0.8)'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
 }
 
-function displayData(year) {
-    if (year === 'all') {
-        // Display all data
-        document.getElementById('total-units').textContent = retailerData.total_quantity.toLocaleString();
-        document.getElementById('total-products').textContent = Object.keys(retailerData.product_stats).length;
-        document.getElementById('total-customers').textContent = retailerData.top_customers.length + '+';
-        document.getElementById('total-records').textContent = retailerData.total_records.toLocaleString();
-        
-        displayProducts(retailerData.product_stats);
-        displayCustomers(retailerData.top_customers);
-    } else {
-        // Filter by specific year
-        const yearStats = retailerData.stats_by_year[year];
-        document.getElementById('total-units').textContent = yearStats.total_quantity.toLocaleString();
-        document.getElementById('total-products').textContent = yearStats.unique_products.toLocaleString();
-        document.getElementById('total-customers').textContent = yearStats.unique_customers.toLocaleString();
-        document.getElementById('total-records').textContent = yearStats.total_records.toLocaleString();
-        
-        // Filter products by year
-        const yearProducts = {};
-        Object.entries(retailerData.product_stats).forEach(([product, stats]) => {
-            if (stats.by_year[year]) {
-                yearProducts[product] = { total: stats.by_year[year] };
-            }
-        });
-        displayProducts(yearProducts);
-        
-        // Note: Customer filtering by year would require more data from the backend
-        displayCustomers(retailerData.top_customers);
+function createYearComparisonChart() {
+    const ctx = document.getElementById('year-comparison-chart');
+    if (!ctx) return;
+    
+    const yearData = {};
+    filteredData.forEach(d => {
+        yearData[d.jaar] = (yearData[d.jaar] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    destroyChart('year-comparison-chart');
+    charts['year-comparison-chart'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(yearData).sort(),
+            datasets: [{
+                label: 'Units by Year',
+                data: Object.values(yearData),
+                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
+}
+
+function createChainPerformanceChart() {
+    const ctx = document.getElementById('chain-performance-chart');
+    if (!ctx) return;
+    
+    const chainData = {};
+    filteredData.forEach(d => {
+        chainData[d.keten] = (chainData[d.keten] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    destroyChart('chain-performance-chart');
+    charts['chain-performance-chart'] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(chainData),
+            datasets: [{
+                label: 'Units by Chain',
+                data: Object.values(chainData),
+                backgroundColor: 'rgba(255, 206, 86, 0.8)'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
+}
+
+function createChainPieChart() {
+    const ctx = document.getElementById('chain-pie-chart');
+    if (!ctx) return;
+    
+    const chainData = {};
+    filteredData.forEach(d => {
+        chainData[d.keten] = (chainData[d.keten] || 0) + (parseInt(d.aantal) || 0);
+    });
+    
+    destroyChart('chain-pie-chart');
+    charts['chain-pie-chart'] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(chainData),
+            datasets: [{
+                data: Object.values(chainData),
+                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+    });
+}
+
+function destroyChart(id) {
+    if (charts[id]) {
+        charts[id].destroy();
     }
-    
-    // Display year breakdown
-    displayYearBreakdown();
 }
 
-function displayYearBreakdown() {
-    const container = document.getElementById('year-breakdown');
-    let html = '';
+function resetFilters() {
+    document.getElementById('year-filter').value = 'all';
+    document.getElementById('month-filter').value = 'all';
+    document.getElementById('product-filter').value = 'all';
+    document.getElementById('flavor-filter').value = 'all';
+    document.getElementById('chain-filter').value = 'all';
+    document.getElementById('province-filter').value = 'all';
+    document.getElementById('search-filter').value = '';
+    applyFilters();
+}
+
+function exportData() {
+    const headers = ['Code', 'Customer', 'Address', 'City', 'Province', 'Product', 'Flavor', 'Package', 'Chain', 'Type', 'Week', 'Month', 'Year', 'Units'];
+    const rows = filteredData.map(d => [
+        d.code_klant, d.naam_klant, d.adres_straat_huisnr, d.stad, d.provincie,
+        d.product, d.smaak, d.verpakking, d.keten, d.type_zaak,
+        d.week, d.maand, d.jaar, d.aantal
+    ]);
     
-    Object.entries(retailerData.stats_by_year).forEach(([year, stats]) => {
-        html += `
-            <div class="col-md-3 mb-3">
-                <div class="card bg-light border-0">
-                    <div class="card-body text-center">
-                        <h4 class="text-primary mb-2">${year}</h4>
-                        <div class="mb-2">
-                            <strong>${stats.total_quantity.toLocaleString()}</strong>
-                            <br><small class="text-muted">units</small>
-                        </div>
-                        <div class="mb-2">
-                            <strong>${stats.unique_customers}</strong>
-                            <br><small class="text-muted">customers</small>
-                        </div>
-                        <div>
-                            <strong>${stats.unique_products}</strong>
-                            <br><small class="text-muted">products</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
+    let csv = headers.join(',') + '\n';
+    rows.forEach(row => {
+        csv += row.map(cell => `"${cell || ''}"`).join(',') + '\n';
     });
     
-    container.innerHTML = html;
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `retailer-analytics-${companyId}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
 }
 
-function displayProducts(products) {
-    const tbody = document.getElementById('products-table');
-    const sorted = Object.entries(products).sort((a, b) => b[1].total - a[1].total);
-    
-    let html = '';
-    sorted.forEach(([product, stats]) => {
-        html += `
-            <tr>
-                <td><strong>${escapeHtml(product)}</strong></td>
-                <td class="text-end">
-                    <span class="badge bg-success">${stats.total.toLocaleString()}</span>
-                </td>
-            </tr>
-        `;
-    });
-    
-    tbody.innerHTML = html;
-}
-
-function displayCustomers(customers) {
-    const tbody = document.getElementById('customers-table');
-    
-    let html = '';
-    customers.forEach(customer => {
-        html += `
-            <tr>
-                <td>
-                    <strong>${escapeHtml(customer.name)}</strong>
-                    ${customer.type ? `<br><small class="text-muted">${escapeHtml(customer.type)}</small>` : ''}
-                </td>
-                <td>
-                    ${customer.city ? escapeHtml(customer.city) : ''}
-                    ${customer.province ? `<br><small class="text-muted">${escapeHtml(customer.province)}</small>` : ''}
-                </td>
-                <td class="text-end">
-                    <span class="badge bg-info">${customer.total.toLocaleString()}</span>
-                </td>
-            </tr>
-        `;
-    });
-    
-    tbody.innerHTML = html;
-}
-
-function escapeHtml(text) {
+function esc(text) {
     if (!text) return '';
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showLoading() {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('main-content').style.display = 'none';
+    document.getElementById('error-message').style.display = 'none';
+}
+
+function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+}
+
+function showError(message) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('error-message').style.display = 'block';
+    document.getElementById('error-text').textContent = message;
 }
 </script>
 {% endblock %}
-

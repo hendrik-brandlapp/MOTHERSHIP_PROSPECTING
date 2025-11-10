@@ -7213,6 +7213,85 @@ def api_company_invoices(company_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/major-retailer-detailed/<int:company_id>', methods=['GET'])
+def api_major_retailer_detailed(company_id):
+    """Get ALL detailed records for major retailers from their specialized databases."""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Map company IDs to their database tables
+        MAJOR_RETAILERS = {
+            'Delhaize': {
+                'company_ids': [1324],
+                'tables': ['Delhaize 2025', 'Delhaize 2024', 'Delhaize 2023', 'Delhaize 2022'],
+                'company_name': 'Delhaize Le Lion/De Leeuw'
+            },
+            'Geers': {
+                'company_ids': [1340],
+                'tables': ['Geers 2025', 'Geers 2024', 'Geers 2023', 'Geers 2022'],
+                'company_name': 'Dranken Geers NV'
+            },
+            'InterDrinks': {
+                'company_ids': [9986],
+                'tables': ['Inter Drinks 2025', 'Inter Drinks 2024', 'Inter Drinks 2023'],
+                'company_name': 'SPRL Inter - Drinks'
+            },
+            'Biofresh': {
+                'company_ids': [1213],
+                'tables': ['Biofresh 2025', 'Biofresh 2024', 'Biofresh 2023', 'Biofresh 2022'],
+                'company_name': 'Biofresh Belgium NV'
+            },
+            'Terroirist': {
+                'company_ids': [1712],
+                'tables': ['Terroirist 2025', 'Terroirist 2024'],
+                'company_name': 'TERROIRIST CVBA'
+            }
+        }
+        
+        # Find which retailer this company belongs to
+        retailer_key = None
+        for key, config in MAJOR_RETAILERS.items():
+            if company_id in config['company_ids']:
+                retailer_key = key
+                break
+        
+        if not retailer_key:
+            return jsonify({'success': False, 'error': 'Not a major retailer'})
+        
+        retailer_config = MAJOR_RETAILERS[retailer_key]
+        
+        # Fetch ALL data from all years for this retailer
+        all_records = []
+        
+        for table_name in retailer_config['tables']:
+            try:
+                result = supabase_client.table(table_name).select('*').execute()
+                
+                if result.data:
+                    # Add all records
+                    all_records.extend(result.data)
+                        
+            except Exception as e:
+                print(f"Error fetching {table_name}: {e}")
+                continue
+        
+        return jsonify({
+            'success': True,
+            'retailer_name': retailer_config['company_name'],
+            'retailer_key': retailer_key,
+            'total_records': len(all_records),
+            'data': all_records
+        })
+        
+    except Exception as e:
+        print(f"Error getting detailed retailer data: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/major-retailer/<int:company_id>', methods=['GET'])
 def api_major_retailer_data(company_id):
     """Get detailed data for major retailers from their specialized databases."""
