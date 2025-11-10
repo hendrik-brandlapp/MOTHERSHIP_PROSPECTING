@@ -7216,33 +7216,38 @@ def api_major_retailer_data(company_id):
         MAJOR_RETAILERS = {
             # Delhaize Le Lion/De Leeuw
             'Delhaize': {
-                'company_ids': [790, 791],  # Add actual Duano company IDs here
+                'company_ids': [1324],
                 'tables': ['Delhaize 2025', 'Delhaize 2024', 'Delhaize 2023', 'Delhaize 2022'],
-                'company_name': 'Delhaize Le Lion/De Leeuw'
+                'company_name': 'Delhaize Le Lion/De Leeuw',
+                'vat_number': 'BE0402206045'
             },
             # Dranken Geers NV
             'Geers': {
-                'company_ids': [792],  # Add actual Duano company ID here
+                'company_ids': [1340],
                 'tables': ['Geers 2025', 'Geers 2024', 'Geers 2023', 'Geers 2022'],
-                'company_name': 'Dranken Geers NV'
+                'company_name': 'Dranken Geers NV',
+                'vat_number': 'BE0433309292'
             },
             # SPRL Inter - Drinks
             'InterDrinks': {
-                'company_ids': [790],  # Add actual Duano company ID here
+                'company_ids': [9986],
                 'tables': ['Inter Drinks 2025', 'Inter Drinks 2024', 'Inter Drinks 2023'],
-                'company_name': 'SPRL Inter - Drinks'
+                'company_name': 'SPRL Inter - Drinks',
+                'vat_number': 'BE0433262574'
             },
             # Biofresh Belgium NV
             'Biofresh': {
-                'company_ids': [438],  # Based on the screenshot showing BE0438873629
+                'company_ids': [1213],
                 'tables': ['Biofresh 2025', 'Biofresh 2024', 'Biofresh 2023', 'Biofresh 2022'],
-                'company_name': 'Biofresh Belgium NV'
+                'company_name': 'Biofresh Belgium NV',
+                'vat_number': 'BE0438873629'
             },
             # TERROIRIST CVBA
             'Terroirist': {
-                'company_ids': [793],  # Add actual Duano company ID here
+                'company_ids': [1712],
                 'tables': ['Terroirist 2025', 'Terroirist 2024'],
-                'company_name': 'TERROIRIST CVBA'
+                'company_name': 'TERROIRIST CVBA',
+                'vat_number': 'BE0695559284'
             }
         }
         
