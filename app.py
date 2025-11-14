@@ -6682,6 +6682,16 @@ def retailer_details(company_id):
     return render_template('retailer_details.html', company_id=company_id, year=year)
 
 
+def safe_parse_aantal(value):
+    """Safely parse 'aantal' field, handling NULL strings and invalid values."""
+    if value is None or value == 'NULL' or value == '':
+        return 0
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
+
+
 @app.route('/api/ai-query-retailer', methods=['POST'])
 def api_ai_query_retailer():
     """AI-powered natural language queries for retailer data using Gemini."""
@@ -6704,7 +6714,7 @@ def api_ai_query_retailer():
         # Prepare data summary for AI context
         if len(filtered_data) > 0:
             # Calculate aggregated statistics
-            total_units = sum(int(row.get('aantal', 0) or 0) for row in filtered_data)
+            total_units = sum(safe_parse_aantal(row.get('aantal', 0)) for row in filtered_data)
             unique_customers = len(set(row.get('naam_klant') for row in filtered_data if row.get('naam_klant')))
             unique_products = len(set(row.get('product') for row in filtered_data if row.get('product')))
             unique_flavors = len(set(row.get('smaak') for row in filtered_data if row.get('smaak')))
@@ -6713,13 +6723,13 @@ def api_ai_query_retailer():
             product_stats = {}
             for row in filtered_data:
                 product = row.get('product', 'Unknown')
-                product_stats[product] = product_stats.get(product, 0) + int(row.get('aantal', 0) or 0)
+                product_stats[product] = product_stats.get(product, 0) + safe_parse_aantal(row.get('aantal', 0))
             
             # Flavor breakdown
             flavor_stats = {}
             for row in filtered_data:
                 flavor = row.get('smaak', 'Unknown')
-                flavor_stats[flavor] = flavor_stats.get(flavor, 0) + int(row.get('aantal', 0) or 0)
+                flavor_stats[flavor] = flavor_stats.get(flavor, 0) + safe_parse_aantal(row.get('aantal', 0))
             
             # Location breakdown
             location_stats = {}
@@ -6733,25 +6743,25 @@ def api_ai_query_retailer():
                             'province': row.get('provincie', ''),
                             'chain': row.get('keten', '')
                         }
-                    location_stats[location]['units'] += int(row.get('aantal', 0) or 0)
+                    location_stats[location]['units'] += safe_parse_aantal(row.get('aantal', 0))
             
             # Province breakdown
             province_stats = {}
             for row in filtered_data:
                 prov = row.get('provincie', 'Unknown')
-                province_stats[prov] = province_stats.get(prov, 0) + int(row.get('aantal', 0) or 0)
+                province_stats[prov] = province_stats.get(prov, 0) + safe_parse_aantal(row.get('aantal', 0))
             
             # Chain breakdown
             chain_stats = {}
             for row in filtered_data:
                 chain = row.get('keten', 'Unknown')
-                chain_stats[chain] = chain_stats.get(chain, 0) + int(row.get('aantal', 0) or 0)
+                chain_stats[chain] = chain_stats.get(chain, 0) + safe_parse_aantal(row.get('aantal', 0))
             
             # Month breakdown
             month_stats = {}
             for row in filtered_data:
                 month = row.get('maand', 'Unknown')
-                month_stats[month] = month_stats.get(month, 0) + int(row.get('aantal', 0) or 0)
+                month_stats[month] = month_stats.get(month, 0) + safe_parse_aantal(row.get('aantal', 0))
             
             # Create context for AI
             context = f"""
@@ -7482,15 +7492,34 @@ def api_major_retailer_detailed(company_id):
         
         for table_name in retailer_config['tables']:
             try:
-                result = supabase_client.table(table_name).select('*').execute()
+                # Fetch ALL data using pagination (Supabase default limit is 1000)
+                table_data = []
+                offset = 0
+                batch_size = 1000
                 
-                if result.data:
+                while True:
+                    result = supabase_client.table(table_name).select('*').range(offset, offset + batch_size - 1).execute()
+                    
+                    if not result.data:
+                        break
+                    
+                    table_data.extend(result.data)
+                    
+                    # If we got less than batch_size, we've reached the end
+                    if len(result.data) < batch_size:
+                        break
+                    
+                    offset += batch_size
+                
+                if table_data:
                     # Add all records
-                    all_records.extend(result.data)
+                    all_records.extend(table_data)
                         
             except Exception as e:
                 print(f"Error fetching {table_name}: {e}")
                 continue
+        
+        print(f"✅ Returning {len(all_records):,} records for {retailer_config['company_name']}")
         
         return jsonify({
             'success': True,
@@ -7573,25 +7602,42 @@ def api_major_retailer_data(company_id):
         
         for table_name in retailer_config['tables']:
             try:
-                result = supabase_client.table(table_name).select('*').execute()
+                # Fetch ALL data using pagination (Supabase default limit is 1000)
+                table_data = []
+                offset = 0
+                batch_size = 1000
                 
-                if result.data:
+                while True:
+                    result = supabase_client.table(table_name).select('*').range(offset, offset + batch_size - 1).execute()
+                    
+                    if not result.data:
+                        break
+                    
+                    table_data.extend(result.data)
+                    
+                    # If we got less than batch_size, we've reached the end
+                    if len(result.data) < batch_size:
+                        break
+                    
+                    offset += batch_size
+                
+                if table_data:
                     year = table_name.split()[-1]  # Extract year from table name
                     
-                    # Calculate stats for this year
-                    total_quantity = sum(int(row.get('aantal', 0) or 0) for row in result.data)
-                    unique_customers = len(set(row.get('naam_klant') for row in result.data if row.get('naam_klant')))
-                    unique_products = len(set(row.get('product') for row in result.data if row.get('product')))
+                    # Calculate stats for this year using helper function
+                    total_quantity = sum(safe_parse_aantal(row.get('aantal', 0)) for row in table_data)
+                    unique_customers = len(set(row.get('naam_klant') for row in table_data if row.get('naam_klant')))
+                    unique_products = len(set(row.get('product') for row in table_data if row.get('product')))
                     
                     stats_by_year[year] = {
                         'total_quantity': total_quantity,
                         'unique_customers': unique_customers,
                         'unique_products': unique_products,
-                        'total_records': len(result.data)
+                        'total_records': len(table_data)
                     }
                     
                     # Add year to each row
-                    for row in result.data:
+                    for row in table_data:
                         row['_year'] = year
                         all_data.append(row)
                         
@@ -7609,7 +7655,7 @@ def api_major_retailer_data(company_id):
             if product not in product_stats:
                 product_stats[product] = {'total': 0, 'by_year': {}}
             
-            quantity = int(row.get('aantal', 0) or 0)
+            quantity = safe_parse_aantal(row.get('aantal', 0))
             product_stats[product]['total'] += quantity
             
             year = row.get('_year', 'Unknown')
@@ -7632,7 +7678,7 @@ def api_major_retailer_data(company_id):
                         'province': row.get('provincie', ''),
                         'type': row.get('type_zaak', '')
                     }
-                quantity = int(row.get('aantal', 0) or 0)
+                quantity = safe_parse_aantal(row.get('aantal', 0))
                 customer_stats[customer]['total'] += quantity
         
         top_customers = sorted(customer_stats.items(), key=lambda x: x[1]['total'], reverse=True)[:15]

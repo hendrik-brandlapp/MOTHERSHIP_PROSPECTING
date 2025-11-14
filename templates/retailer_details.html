@@ -521,12 +521,16 @@ async function loadDetailedData() {
     try {
         showLoading();
         
+        console.log('🔄 Fetching retailer data...');
         const response = await fetch(`/api/major-retailer-detailed/${companyId}`);
         const result = await response.json();
         
         if (!result.success) {
             throw new Error(result.error || 'Failed to load data');
         }
+        
+        console.log(`✅ Received ${result.total_records} records from API`);
+        console.log(`📊 Data array length: ${result.data ? result.data.length : 0}`);
         
         allData = result.data;
         filteredData = [...allData];
@@ -539,7 +543,7 @@ async function loadDetailedData() {
         hideLoading();
         
     } catch (error) {
-        console.error('Error:', error);
+        console.error('❌ Error:', error);
         showError(error.message);
     }
 }
@@ -610,13 +614,24 @@ function updateUI() {
     updateAllCharts();
 }
 
+function safeParseAantal(value) {
+    // Handle NULL strings, empty values, and invalid numbers
+    if (value === null || value === 'NULL' || value === '' || value === undefined) {
+        return 0;
+    }
+    const num = parseInt(value);
+    return isNaN(num) ? 0 : num;
+}
+
 function updateKPIs() {
-    const totalUnits = filteredData.reduce((sum, d) => sum + (parseInt(d.aantal) || 0), 0);
+    const totalUnits = filteredData.reduce((sum, d) => sum + safeParseAantal(d.aantal), 0);
     const uniqueCustomers = new Set(filteredData.map(d => d.naam_klant)).size;
     const uniqueProducts = new Set(filteredData.map(d => d.product)).size;
     const uniqueFlavors = new Set(filteredData.map(d => d.smaak)).size;
     const uniqueChains = new Set(filteredData.map(d => d.keten)).size;
     const uniqueProvinces = new Set(filteredData.map(d => d.provincie)).size;
+    
+    console.log(`📊 Calculating KPIs from ${filteredData.length} records: ${totalUnits.toLocaleString()} units`);
     
     document.getElementById('kpi-total-units').textContent = totalUnits.toLocaleString();
     document.getElementById('kpi-customers').textContent = uniqueCustomers;
@@ -643,7 +658,7 @@ function updateTopLocationsTable() {
         if (!locationStats[key]) {
             locationStats[key] = { name: d.naam_klant, city: d.stad, units: 0 };
         }
-        locationStats[key].units += parseInt(d.aantal) || 0;
+        locationStats[key].units += safeParseAantal(d.aantal);
     });
     
     const sorted = Object.values(locationStats).sort((a, b) => b.units - a.units).slice(0, 10);
@@ -665,7 +680,7 @@ function updateTopFlavorsTable() {
         if (!flavorStats[key]) {
             flavorStats[key] = { flavor: d.smaak, product: d.product, units: 0 };
         }
-        flavorStats[key].units += parseInt(d.aantal) || 0;
+        flavorStats[key].units += safeParseAantal(d.aantal);
     });
     
     const sorted = Object.values(flavorStats).sort((a, b) => b.units - a.units).slice(0, 10);
@@ -693,7 +708,7 @@ function updateProductDetailsTable() {
                 locations: new Set()
             };
         }
-        productStats[key].units += parseInt(d.aantal) || 0;
+        productStats[key].units += safeParseAantal(d.aantal);
         productStats[key].locations.add(d.naam_klant);
     });
     
@@ -728,7 +743,7 @@ function updateLocationsDetailsTable() {
                 units: 0
             };
         }
-        locationStats[key].units += parseInt(d.aantal) || 0;
+        locationStats[key].units += safeParseAantal(d.aantal);
     });
     
     const tbody = document.getElementById('locations-details-table');
@@ -759,7 +774,7 @@ function updateChainDetailsTable() {
                 products: new Set()
             };
         }
-        chainStats[d.keten].units += parseInt(d.aantal) || 0;
+        chainStats[d.keten].units += safeParseAantal(d.aantal);
         chainStats[d.keten].locations.add(d.naam_klant);
         chainStats[d.keten].products.add(d.product);
     });
@@ -793,7 +808,7 @@ function updateDetailedDataTable() {
             <td><small>${esc(d.type_zaak)}</small></td>
             <td>${esc(d.maand)}</td>
             <td>${esc(d.jaar)}</td>
-            <td class="text-end"><strong>${parseInt(d.aantal).toLocaleString()}</strong></td>
+            <td class="text-end"><strong>${safeParseAantal(d.aantal).toLocaleString()}</strong></td>
         </tr>
     `).join('');
     
@@ -823,7 +838,7 @@ function createTimelineChart() {
     const monthlyData = {};
     filteredData.forEach(d => {
         const key = `${d.jaar}-${d.maand}`;
-        monthlyData[key] = (monthlyData[key] || 0) + (parseInt(d.aantal) || 0);
+        monthlyData[key] = (monthlyData[key] || 0) + (safeParseAantal(d.aantal));
     });
     
     const labels = Object.keys(monthlyData).sort();
@@ -853,7 +868,7 @@ function createProductPieChart() {
     
     const productData = {};
     filteredData.forEach(d => {
-        productData[d.product] = (productData[d.product] || 0) + (parseInt(d.aantal) || 0);
+        productData[d.product] = (productData[d.product] || 0) + (safeParseAantal(d.aantal));
     });
     
     destroyChart('product-pie-chart');
@@ -876,7 +891,7 @@ function createProductBarChart() {
     
     const productData = {};
     filteredData.forEach(d => {
-        productData[d.product] = (productData[d.product] || 0) + (parseInt(d.aantal) || 0);
+        productData[d.product] = (productData[d.product] || 0) + (safeParseAantal(d.aantal));
     });
     
     destroyChart('product-bar-chart');
@@ -900,7 +915,7 @@ function createPackagingChart() {
     
     const packagingData = {};
     filteredData.forEach(d => {
-        packagingData[d.verpakking] = (packagingData[d.verpakking] || 0) + (parseInt(d.aantal) || 0);
+        packagingData[d.verpakking] = (packagingData[d.verpakking] || 0) + (safeParseAantal(d.aantal));
     });
     
     destroyChart('packaging-chart');
@@ -923,7 +938,7 @@ function createProvinceChart() {
     
     const provinceData = {};
     filteredData.forEach(d => {
-        provinceData[d.provincie] = (provinceData[d.provincie] || 0) + (parseInt(d.aantal) || 0);
+        provinceData[d.provincie] = (provinceData[d.provincie] || 0) + (safeParseAantal(d.aantal));
     });
     
     destroyChart('province-chart');
@@ -947,7 +962,7 @@ function createCityChart() {
     
     const cityData = {};
     filteredData.forEach(d => {
-        cityData[d.stad] = (cityData[d.stad] || 0) + (parseInt(d.aantal) || 0);
+        cityData[d.stad] = (cityData[d.stad] || 0) + (safeParseAantal(d.aantal));
     });
     
     const sorted = Object.entries(cityData).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -976,7 +991,7 @@ function createMonthlyTrendChart() {
     
     filteredData.forEach(d => {
         const month = d.maand;
-        monthlyData[month] = (monthlyData[month] || 0) + (parseInt(d.aantal) || 0);
+        monthlyData[month] = (monthlyData[month] || 0) + (safeParseAantal(d.aantal));
     });
     
     const labels = monthOrder.filter(m => monthlyData[m]);
@@ -1007,7 +1022,7 @@ function createWeeklyChart() {
     const weeklyData = {};
     filteredData.forEach(d => {
         if (d.week) {
-            weeklyData[d.week] = (weeklyData[d.week] || 0) + (parseInt(d.aantal) || 0);
+            weeklyData[d.week] = (weeklyData[d.week] || 0) + (safeParseAantal(d.aantal));
         }
     });
     
@@ -1034,7 +1049,7 @@ function createYearComparisonChart() {
     
     const yearData = {};
     filteredData.forEach(d => {
-        yearData[d.jaar] = (yearData[d.jaar] || 0) + (parseInt(d.aantal) || 0);
+        yearData[d.jaar] = (yearData[d.jaar] || 0) + (safeParseAantal(d.aantal));
     });
     
     destroyChart('year-comparison-chart');
@@ -1058,7 +1073,7 @@ function createChainPerformanceChart() {
     
     const chainData = {};
     filteredData.forEach(d => {
-        chainData[d.keten] = (chainData[d.keten] || 0) + (parseInt(d.aantal) || 0);
+        chainData[d.keten] = (chainData[d.keten] || 0) + (safeParseAantal(d.aantal));
     });
     
     destroyChart('chain-performance-chart');
@@ -1082,7 +1097,7 @@ function createChainPieChart() {
     
     const chainData = {};
     filteredData.forEach(d => {
-        chainData[d.keten] = (chainData[d.keten] || 0) + (parseInt(d.aantal) || 0);
+        chainData[d.keten] = (chainData[d.keten] || 0) + (safeParseAantal(d.aantal));
     });
     
     destroyChart('chain-pie-chart');
