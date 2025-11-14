@@ -7492,14 +7492,36 @@ def api_major_retailer_detailed(company_id):
         
         for table_name in retailer_config['tables']:
             try:
-                # Fetch data with a reasonable limit to avoid timeout
-                # Limit to 5000 records per table to keep response time under 30 seconds
-                max_records = 5000
-                result = supabase_client.table(table_name).select('*').limit(max_records).execute()
+                print(f"📡 Fetching ALL data from {table_name}...")
                 
-                if result.data:
-                    print(f"📊 Fetched {len(result.data)} records from {table_name}")
-                    all_records.extend(result.data)
+                # Fetch ALL data efficiently with pagination
+                # Select only the fields we need (not SELECT *)
+                table_data = []
+                offset = 0
+                batch_size = 1000
+                
+                while True:
+                    result = supabase_client.table(table_name).select(
+                        'source,code_klant,naam_klant,adres_straat_huisnr,postcode,stad,land,provincie,'
+                        'tel_nr,email,verantwoordelijke,aantal,week,maand,jaar,product,smaak,verpakking,'
+                        'douane_klant_naam,douane_klant_nr,douane_bedrijfs_cat,keten,type_zaak'
+                    ).range(offset, offset + batch_size - 1).execute()
+                    
+                    if not result.data or len(result.data) == 0:
+                        break
+                    
+                    table_data.extend(result.data)
+                    print(f"  📦 Batch {offset//batch_size + 1}: {len(result.data)} records")
+                    
+                    # If we got less than batch_size, we've reached the end
+                    if len(result.data) < batch_size:
+                        break
+                    
+                    offset += batch_size
+                
+                if table_data:
+                    print(f"✅ Loaded {len(table_data)} total records from {table_name}")
+                    all_records.extend(table_data)
                         
             except Exception as e:
                 print(f"Error fetching {table_name}: {e}")
@@ -7588,29 +7610,52 @@ def api_major_retailer_data(company_id):
         
         for table_name in retailer_config['tables']:
             try:
-                # Fetch data with reasonable limit to avoid timeout
-                max_records = 5000
-                result = supabase_client.table(table_name).select('*').limit(max_records).execute()
+                print(f"📡 Fetching ALL data from {table_name}...")
                 
-                if result.data:
+                # Fetch ALL data efficiently with pagination
+                # Select only the fields we need (not SELECT *)
+                table_data = []
+                offset = 0
+                batch_size = 1000
+                
+                while True:
+                    result = supabase_client.table(table_name).select(
+                        'source,code_klant,naam_klant,adres_straat_huisnr,postcode,stad,land,provincie,'
+                        'tel_nr,email,verantwoordelijke,aantal,week,maand,jaar,product,smaak,verpakking,'
+                        'douane_klant_naam,douane_klant_nr,douane_bedrijfs_cat,keten,type_zaak'
+                    ).range(offset, offset + batch_size - 1).execute()
+                    
+                    if not result.data or len(result.data) == 0:
+                        break
+                    
+                    table_data.extend(result.data)
+                    print(f"  📦 Batch {offset//batch_size + 1}: {len(result.data)} records")
+                    
+                    # If we got less than batch_size, we've reached the end
+                    if len(result.data) < batch_size:
+                        break
+                    
+                    offset += batch_size
+                
+                if table_data:
                     year = table_name.split()[-1]  # Extract year from table name
                     
-                    print(f"📊 Fetched {len(result.data)} records from {table_name}")
+                    print(f"✅ Loaded {len(table_data)} total records from {table_name}")
                     
                     # Calculate stats for this year using helper function
-                    total_quantity = sum(safe_parse_aantal(row.get('aantal', 0)) for row in result.data)
-                    unique_customers = len(set(row.get('naam_klant') for row in result.data if row.get('naam_klant')))
-                    unique_products = len(set(row.get('product') for row in result.data if row.get('product')))
+                    total_quantity = sum(safe_parse_aantal(row.get('aantal', 0)) for row in table_data)
+                    unique_customers = len(set(row.get('naam_klant') for row in table_data if row.get('naam_klant')))
+                    unique_products = len(set(row.get('product') for row in table_data if row.get('product')))
                     
                     stats_by_year[year] = {
                         'total_quantity': total_quantity,
                         'unique_customers': unique_customers,
                         'unique_products': unique_products,
-                        'total_records': len(result.data)
+                        'total_records': len(table_data)
                     }
                     
                     # Add year to each row
-                    for row in result.data:
+                    for row in table_data:
                         row['_year'] = year
                         all_data.append(row)
                         
