@@ -137,8 +137,8 @@ def get_douano_client():
         return None
 
 
-def make_api_request(endpoint, method='GET', params=None, max_retries=3):
-    """Make authenticated API request to DOUANO with retry logic"""
+def make_api_request(endpoint, method='GET', params=None):
+    """Make authenticated API request to DOUANO"""
     if not is_token_valid():
         return None, "Token expired or invalid"
     
@@ -150,42 +150,21 @@ def make_api_request(endpoint, method='GET', params=None, max_retries=3):
     
     url = f"{DOUANO_CONFIG['base_url']}{endpoint}"
     
-    # Increased timeout for large data fetches (connect timeout, read timeout)
-    timeout_config = (10, 60)  # 10s to connect, 60s to read
-    
-    for attempt in range(max_retries):
-        try:
-            if method == 'GET':
-                response = requests.get(url, headers=headers, params=params, timeout=timeout_config)
-            elif method == 'POST':
-                response = requests.post(url, headers=headers, json=params, timeout=timeout_config)
-            else:
-                return None, f"Unsupported method: {method}"
+    try:
+        if method == 'GET':
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+        elif method == 'POST':
+            response = requests.post(url, headers=headers, json=params, timeout=15)
+        else:
+            return None, f"Unsupported method: {method}"
+        
+        if response.status_code == 200:
+            return response.json(), None
+        else:
+            return None, f"API Error: {response.status_code} - {response.text[:200]}"
             
-            if response.status_code == 200:
-                return response.json(), None
-            else:
-                error_msg = f"API Error: {response.status_code} - {response.text[:200]}"
-                if attempt < max_retries - 1:
-                    print(f"⚠️ Attempt {attempt + 1} failed: {error_msg}. Retrying...")
-                    time.sleep(2 ** attempt)  # Exponential backoff
-                    continue
-                return None, error_msg
-                
-        except requests.exceptions.Timeout as e:
-            if attempt < max_retries - 1:
-                print(f"⏱️ Timeout on attempt {attempt + 1}. Retrying...")
-                time.sleep(2 ** attempt)
-                continue
-            return None, f"Request timed out after {max_retries} attempts: {str(e)}"
-        except Exception as e:
-            if attempt < max_retries - 1:
-                print(f"❌ Error on attempt {attempt + 1}: {str(e)}. Retrying...")
-                time.sleep(2 ** attempt)
-                continue
-            return None, f"Request failed after {max_retries} attempts: {str(e)}"
-    
-    return None, "All retry attempts failed"
+    except Exception as e:
+        return None, f"Request failed: {str(e)}"
 
 
 def _extract_belgian_vat_numbers(text: str):
@@ -5577,76 +5556,40 @@ def api_sync_2025_invoices():
     Sync all 2025 sales invoices to Supabase.
     Fetches all invoices from 2025 and stores them in the sales_2025 table.
     """
-    print("=== SYNC 2025 ENDPOINT CALLED ===")
-    
     if not is_token_valid():
-        print("❌ Token validation failed")
-        print(f"Has access_token: {'access_token' in session}")
-        print(f"Has token_expires_at: {'token_expires_at' in session}")
-        return jsonify({
-            'error': 'Not authenticated',
-            'message': 'Your DUANO session has expired. Please log in again.',
-            'success': False
-        }), 401
-    
-    if not supabase_client:
-        print("❌ Supabase client not configured")
-        return jsonify({'error': 'Supabase not configured', 'success': False}), 500
+        return jsonify({'error': 'Not authenticated', 'success': False}), 401
     
     try:
         from datetime import datetime
         
         print("🚀 Starting 2025 invoice sync...")
-        print(f"Token valid: {is_token_valid()}")
-        print(f"Supabase client: {supabase_client is not None}")
         
-        # Fetch recent 2025 invoices with pagination (smaller batches to avoid timeout)
+        # Fetch all 2025 invoices with pagination
         all_invoices = []
         page = 1
-        per_page = 25  # Smaller batch size for faster response
-        
-        # Only sync last 30 days to avoid timeout (Render has 30s proxy limit)
-        from datetime import datetime, timedelta
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=30)
-        
-        print(f"📅 Syncing invoices from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+        per_page = 100
         
         while True:
             params = {
                 'per_page': per_page,
                 'page': page,
-                'filter_by_start_date': start_date.strftime('%Y-%m-%d'),
-                'filter_by_end_date': end_date.strftime('%Y-%m-%d'),
+                'filter_by_start_date': '2025-01-01',
+                'filter_by_end_date': '2025-12-31',
                 'order_by_date': 'desc'
             }
             
-            print(f"📡 Fetching page {page} with params: {params}")
-            page_start_time = time.time()
-            
-            # Use direct API call instead of paginated wrapper for better timeout control
-            data, error = make_api_request('/api/public/v1/trade/sales-invoices', params=params)
-            
-            page_duration = time.time() - page_start_time
+            data, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
             
             if error:
-                print(f"❌ API Error on page {page} (took {page_duration:.1f}s): {error}")
-                return jsonify({
-                    'error': f'Failed to fetch invoices on page {page}: {error}',
-                    'success': False,
-                    'details': str(error),
-                    'page': page,
-                    'duration': page_duration
-                }), 500
+                return jsonify({'error': f'Failed to fetch invoices: {error}', 'success': False}), 500
             
             invoices = data.get('result', {}).get('data', [])
             
             if not invoices:
-                print(f"✅ No more invoices on page {page}. Sync complete.")
                 break
             
             all_invoices.extend(invoices)
-            print(f"📄 Page {page}: {len(invoices)} invoices (Total: {len(all_invoices)}) - took {page_duration:.1f}s")
+            print(f"📄 Fetched page {page}: {len(invoices)} invoices (Total: {len(all_invoices)})")
             
             # Check pagination
             current_page = data.get('result', {}).get('current_page', page)
@@ -5734,7 +5677,7 @@ def api_sync_2025_invoices():
             'saved': saved_count,
             'updated': updated_count,
             'errors': error_count,
-            'message': f'Successfully synced {saved_count + updated_count} invoices from the last 30 days'
+            'message': f'Successfully synced {saved_count + updated_count} invoices'
         }
         
         print(f"✅ Sync complete: {result}")
@@ -5747,15 +5690,8 @@ def api_sync_2025_invoices():
         return jsonify(result)
         
     except Exception as e:
-        print(f"❌ FATAL ERROR in sync: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'error': str(e),
-            'success': False,
-            'error_type': type(e).__name__,
-            'details': traceback.format_exc()
-        }), 500
+        print(f"❌ Error in sync: {e}")
+        return jsonify({'error': str(e), 'success': False}), 500
 
 
 # =====================================================
@@ -6554,21 +6490,8 @@ def api_sync_2024_invoices():
     """
     Sync all 2024 invoices from Douano API to Supabase
     """
-    print("=== SYNC 2024 ENDPOINT CALLED ===")
-    
     if not is_token_valid():
-        print("❌ Token validation failed")
-        print(f"Has access_token: {'access_token' in session}")
-        print(f"Has token_expires_at: {'token_expires_at' in session}")
-        return jsonify({
-            'error': 'Not authenticated',
-            'message': 'Your DUANO session has expired. Please log in again.',
-            'success': False
-        }), 401
-    
-    if not supabase_client:
-        print("❌ Supabase client not configured")
-        return jsonify({'error': 'Supabase not configured', 'success': False}), 500
+        return jsonify({'error': 'Not authenticated', 'success': False}), 401
     
     try:
         # Fetch all 2024 invoices from Douano API
