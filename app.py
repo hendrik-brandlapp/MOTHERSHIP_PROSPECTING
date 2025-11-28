@@ -6437,9 +6437,9 @@ def api_sync_all_products():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/refresh-company-metrics', methods=['POST'])
 _background_task_running = False
 
+@app.route('/api/refresh-company-metrics', methods=['POST'])
 def api_refresh_company_metrics():
     """Manually trigger recalculation of company metrics from invoice data - runs in background."""
     global _background_task_running
