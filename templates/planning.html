@@ -220,6 +220,107 @@
         border-color: var(--accent);
         box-shadow: 0 0 0 3px var(--accent-glow);
     }
+
+    /* Category Dropdown Styles */
+    .searchable-dropdown-wrapper {
+        position: relative;
+    }
+
+    .dropdown-trigger-modern {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    .dropdown-trigger-modern:hover {
+        border-color: #adb5bd;
+    }
+
+    .dropdown-menu-modern {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 1000;
+        max-height: 300px;
+        overflow: hidden;
+    }
+
+    .dropdown-search-box {
+        padding: 0.5rem;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .dropdown-search-box input {
+        flex: 1;
+        border: none;
+        outline: none;
+        font-size: 0.875rem;
+    }
+
+    .dropdown-options-list {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .dropdown-option-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    .dropdown-option-item:hover {
+        background: #f8f9fa;
+    }
+
+    .dropdown-option-item.included .option-checkbox i {
+        color: #10b981;
+    }
+
+    .dropdown-option-item.excluded {
+        background: #fee2e2;
+    }
+
+    .dropdown-option-item.excluded .option-checkbox i {
+        color: #ef4444;
+    }
+
+    .selected-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+
+    .selected-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 12px;
+        font-size: 0.7rem;
+        cursor: pointer;
+    }
+
+    .selected-tag.excluded {
+        background: #fee2e2;
+        color: #991b1b;
+    }
 </style>
 {% endblock %}
 
@@ -283,26 +384,40 @@
                         <i class="fas fa-bell"></i> All
                         <span class="ms-1" id="all-alerts-count">0</span>
                     </button>
+                    <button class="btn btn-sm btn-outline-success" id="filter-no-alerts" onclick="toggleAlertFilter('none')" title="Show companies without alerts">
+                        <i class="fas fa-bell-slash"></i> None
+                        <span class="ms-1" id="no-alerts-count">0</span>
+                    </button>
                 </div>
                 <select class="form-select form-select-sm" id="alert-type-filter" onchange="applyAlertFilter()">
                     <option value="">All Alert Types</option>
-                    <option value="pattern_break">📉 Pattern Break</option>
-                    <option value="high_value_risk">💎 High Value Risk</option>
-                    <option value="dormant">🛏️ Dormant Customer</option>
-                    <option value="declining">📊 Declining Sales</option>
-                    <option value="less_frequent">⏰ Less Frequent Orders</option>
-                    <option value="one_timer">🔵 One-Time Customer</option>
-                    <option value="payment_issues">💳 Payment Issues</option>
+                    <option value="PATTERN_DISRUPTION">📈 Pattern Break</option>
+                    <option value="HIGH_VALUE_AT_RISK">💎 High Value Risk</option>
+                    <option value="DORMANT_CUSTOMER">🛏️ Dormant Customer</option>
+                    <option value="DECLINING_VALUE">📊 Declining Sales</option>
+                    <option value="INCREASING_GAP">⏰ Less Frequent Orders</option>
+                    <option value="ONE_TIME_CUSTOMER">🔵 One-Time Customer</option>
+                    <option value="PAYMENT_ISSUES">💳 Outstanding Balance</option>
                 </select>
             </div>
 
             <!-- Category Filter -->
             <div class="category-filters mb-3" style="padding: 0 1rem;">
                 <label class="form-label small fw-bold mb-2"><i class="fas fa-tags me-1"></i>Filter by Category</label>
-                <select class="form-select form-select-sm" id="category-filter" onchange="applyAlertFilter()">
-                    <option value="">All Categories</option>
-                </select>
-                <div class="mt-2 d-flex gap-1 flex-wrap" id="category-badges"></div>
+                <div class="searchable-dropdown-wrapper">
+                    <div class="dropdown-trigger-modern" id="planning-category-trigger">
+                        <span class="trigger-text text-muted">All categories</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="dropdown-menu-modern" id="planning-category-menu" style="display: none;">
+                        <div class="dropdown-search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="Search categories..." id="planning-category-search">
+                        </div>
+                        <div class="dropdown-options-list" id="planning-category-options"></div>
+                    </div>
+                </div>
+                <div class="selected-tags mt-2" id="planning-category-tags"></div>
             </div>
 
             <!-- Companies List -->
@@ -1517,11 +1632,13 @@ function updateAlertCounts() {
     const high = companies.filter(c => c.highest_priority === 'high').length;
     const medium = companies.filter(c => c.highest_priority === 'medium').length;
     const allAlerts = companies.filter(c => c.has_alerts).length;
+    const noAlerts = companies.filter(c => !c.has_alerts).length;
     
     document.getElementById('critical-count').textContent = critical;
     document.getElementById('high-count').textContent = high;
     document.getElementById('medium-count').textContent = medium;
     document.getElementById('all-alerts-count').textContent = allAlerts;
+    document.getElementById('no-alerts-count').textContent = noAlerts;
 }
 
 // Extract categories from company data (same logic as data page)
@@ -1543,11 +1660,10 @@ function getCompanyCategories(company) {
     return [];
 }
 
+// Category state management for planning page
+let planningCategoryStates = {};
+
 function populateCategoryFilter() {
-    const categoryFilter = document.getElementById('category-filter');
-    const categoryBadges = document.getElementById('category-badges');
-    if (!categoryFilter) return;
-    
     // Extract all unique categories
     const categorySet = new Set();
     companies.forEach(company => {
@@ -1557,31 +1673,171 @@ function populateCategoryFilter() {
     
     const sortedCategories = Array.from(categorySet).sort();
     
-    // Populate dropdown
-    categoryFilter.innerHTML = '<option value="">All Categories</option>';
+    // Initialize all categories as included
+    planningCategoryStates = {};
     sortedCategories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        categoryFilter.appendChild(option);
+        planningCategoryStates[cat] = 'included';
     });
     
-    // Show badges with counts
-    if (categoryBadges) {
-        categoryBadges.innerHTML = '';
-        sortedCategories.slice(0, 6).forEach(cat => {
-            const count = companies.filter(c => getCompanyCategories(c).includes(cat)).length;
-            const badge = document.createElement('span');
-            badge.className = 'badge bg-secondary';
-            badge.style.cursor = 'pointer';
-            badge.textContent = `${cat} (${count})`;
-            badge.onclick = () => {
-                categoryFilter.value = cat;
-                applyAlertFilter();
-            };
-            categoryBadges.appendChild(badge);
+    renderPlanningCategoryDropdown();
+    initPlanningCategoryDropdown();
+}
+
+function renderPlanningCategoryDropdown() {
+    const optionsContainer = document.getElementById('planning-category-options');
+    const tagsContainer = document.getElementById('planning-category-tags');
+    if (!optionsContainer) return;
+    
+    const categories = Object.keys(planningCategoryStates).sort();
+    
+    if (categories.length === 0) {
+        optionsContainer.innerHTML = '<div class="p-3 text-center text-muted small">No categories found</div>';
+        return;
+    }
+    
+    // Render action buttons and options
+    optionsContainer.innerHTML = `
+        <div class="d-flex gap-2 p-2 border-bottom">
+            <button class="btn btn-sm btn-outline-success flex-fill" onclick="selectAllPlanningCategories()">
+                <i class="fas fa-check-double me-1"></i>All
+            </button>
+            <button class="btn btn-sm btn-outline-danger flex-fill" onclick="deselectAllPlanningCategories()">
+                <i class="fas fa-times me-1"></i>None
+            </button>
+        </div>
+    `;
+    
+    categories.forEach(category => {
+        const state = planningCategoryStates[category];
+        const stateClass = state === 'excluded' ? 'excluded' : 'included';
+        const icon = state === 'excluded' ? 'times-circle' : 'check-circle';
+        
+        const option = document.createElement('div');
+        option.className = `dropdown-option-item ${stateClass}`;
+        option.innerHTML = `
+            <div class="option-checkbox">
+                <i class="fas fa-${icon}"></i>
+            </div>
+            <span class="option-label">${escapeHtml(category)}</span>
+        `;
+        option.onclick = () => togglePlanningCategory(category);
+        optionsContainer.appendChild(option);
+    });
+    
+    // Render excluded tags
+    const excludedCategories = categories.filter(cat => planningCategoryStates[cat] === 'excluded');
+    if (tagsContainer) {
+        tagsContainer.innerHTML = '';
+        excludedCategories.forEach(category => {
+            const tag = document.createElement('span');
+            tag.className = 'selected-tag excluded';
+            tag.innerHTML = `<span>${escapeHtml(category)}</span><i class="fas fa-times"></i>`;
+            tag.onclick = () => togglePlanningCategory(category);
+            tagsContainer.appendChild(tag);
         });
     }
+    
+    // Update trigger text
+    const trigger = document.getElementById('planning-category-trigger');
+    if (trigger) {
+        const triggerText = trigger.querySelector('.trigger-text');
+        if (excludedCategories.length === 0) {
+            triggerText.textContent = 'All categories';
+            triggerText.className = 'trigger-text text-muted';
+        } else {
+            triggerText.textContent = `${excludedCategories.length} excluded`;
+            triggerText.className = 'trigger-text text-danger';
+        }
+    }
+}
+
+function initPlanningCategoryDropdown() {
+    const trigger = document.getElementById('planning-category-trigger');
+    const menu = document.getElementById('planning-category-menu');
+    const searchInput = document.getElementById('planning-category-search');
+    
+    if (trigger && menu) {
+        trigger.onclick = (e) => {
+            e.stopPropagation();
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        };
+        
+        document.addEventListener('click', (e) => {
+            if (!menu.contains(e.target) && !trigger.contains(e.target)) {
+                menu.style.display = 'none';
+            }
+        });
+    }
+    
+    if (searchInput) {
+        searchInput.oninput = () => filterPlanningCategoryDropdown(searchInput.value);
+    }
+}
+
+function filterPlanningCategoryDropdown(searchTerm) {
+    const optionsContainer = document.getElementById('planning-category-options');
+    const categories = Object.keys(planningCategoryStates).sort();
+    
+    const filtered = categories.filter(cat => 
+        cat.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    optionsContainer.innerHTML = `
+        <div class="d-flex gap-2 p-2 border-bottom">
+            <button class="btn btn-sm btn-outline-success flex-fill" onclick="selectAllPlanningCategories()">
+                <i class="fas fa-check-double me-1"></i>All
+            </button>
+            <button class="btn btn-sm btn-outline-danger flex-fill" onclick="deselectAllPlanningCategories()">
+                <i class="fas fa-times me-1"></i>None
+            </button>
+        </div>
+    `;
+    
+    filtered.forEach(category => {
+        const state = planningCategoryStates[category];
+        const stateClass = state === 'excluded' ? 'excluded' : 'included';
+        const icon = state === 'excluded' ? 'times-circle' : 'check-circle';
+        
+        const option = document.createElement('div');
+        option.className = `dropdown-option-item ${stateClass}`;
+        option.innerHTML = `
+            <div class="option-checkbox">
+                <i class="fas fa-${icon}"></i>
+            </div>
+            <span class="option-label">${escapeHtml(category)}</span>
+        `;
+        option.onclick = () => togglePlanningCategory(category);
+        optionsContainer.appendChild(option);
+    });
+}
+
+function togglePlanningCategory(category) {
+    planningCategoryStates[category] = planningCategoryStates[category] === 'included' ? 'excluded' : 'included';
+    renderPlanningCategoryDropdown();
+    applyAlertFilter();
+}
+
+function selectAllPlanningCategories() {
+    Object.keys(planningCategoryStates).forEach(cat => {
+        planningCategoryStates[cat] = 'included';
+    });
+    renderPlanningCategoryDropdown();
+    applyAlertFilter();
+}
+
+function deselectAllPlanningCategories() {
+    Object.keys(planningCategoryStates).forEach(cat => {
+        planningCategoryStates[cat] = 'excluded';
+    });
+    renderPlanningCategoryDropdown();
+    applyAlertFilter();
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function toggleAlertFilter(priority) {
@@ -1593,20 +1849,26 @@ function toggleAlertFilter(priority) {
     }
     
     // Update button states
-    ['critical', 'high', 'medium', 'all-alerts'].forEach(p => {
+    ['critical', 'high', 'medium', 'all-alerts', 'no-alerts'].forEach(p => {
         const btn = document.getElementById(`filter-${p}`);
         if (btn) {
-            if (p === priority.replace('all', 'all-alerts') && activeAlertFilter) {
-                btn.classList.remove('btn-outline-danger', 'btn-outline-warning', 'btn-outline-info', 'btn-outline-secondary');
+            const isActive = (p === 'all-alerts' && activeAlertFilter === 'all') ||
+                            (p === 'no-alerts' && activeAlertFilter === 'none') ||
+                            (p === activeAlertFilter);
+            
+            if (isActive) {
+                btn.classList.remove('btn-outline-danger', 'btn-outline-warning', 'btn-outline-info', 'btn-outline-secondary', 'btn-outline-success');
                 if (p === 'critical') btn.classList.add('btn-danger');
                 else if (p === 'high') btn.classList.add('btn-warning');
                 else if (p === 'medium') btn.classList.add('btn-info');
+                else if (p === 'no-alerts') btn.classList.add('btn-success');
                 else btn.classList.add('btn-secondary');
             } else {
-                btn.classList.remove('btn-danger', 'btn-warning', 'btn-info', 'btn-secondary');
+                btn.classList.remove('btn-danger', 'btn-warning', 'btn-info', 'btn-secondary', 'btn-success');
                 if (p === 'critical') btn.classList.add('btn-outline-danger');
                 else if (p === 'high') btn.classList.add('btn-outline-warning');
                 else if (p === 'medium') btn.classList.add('btn-outline-info');
+                else if (p === 'no-alerts') btn.classList.add('btn-outline-success');
                 else btn.classList.add('btn-outline-secondary');
             }
         }
@@ -1621,23 +1883,33 @@ function applyAlertFilter() {
     const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
     const alertTypeFilter = document.getElementById('alert-type-filter');
     const selectedAlertType = alertTypeFilter ? alertTypeFilter.value : '';
-    const categoryFilter = document.getElementById('category-filter');
-    const selectedCategory = categoryFilter ? categoryFilter.value : '';
     
     filteredCompanies = companies.filter(company => {
         // Apply alert priority filter
         if (activeAlertFilter) {
             if (activeAlertFilter === 'all') {
                 if (!company.has_alerts) return false;
+            } else if (activeAlertFilter === 'none') {
+                if (company.has_alerts) return false;
             } else {
                 if (company.highest_priority !== activeAlertFilter) return false;
             }
         }
         
-        // Apply category filter
-        if (selectedCategory) {
-            const companyCategories = getCompanyCategories(company);
-            if (!companyCategories.includes(selectedCategory)) return false;
+        // Apply category filter (using states like data page)
+        const companyCategories = getCompanyCategories(company);
+        const excludedCategories = Object.keys(planningCategoryStates).filter(cat => planningCategoryStates[cat] === 'excluded');
+        
+        if (excludedCategories.length > 0) {
+            // If company has any excluded category, filter it out
+            const hasExcludedCategory = companyCategories.some(cat => excludedCategories.includes(cat));
+            if (hasExcludedCategory) return false;
+        }
+        
+        // If all categories are excluded, show nothing
+        const includedCategories = Object.keys(planningCategoryStates).filter(cat => planningCategoryStates[cat] === 'included');
+        if (includedCategories.length === 0 && Object.keys(planningCategoryStates).length > 0) {
+            return false;
         }
         
         // Apply alert type filter
