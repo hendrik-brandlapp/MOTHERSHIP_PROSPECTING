@@ -137,8 +137,8 @@ def get_douano_client():
         return None
 
 
-def make_api_request(endpoint, method='GET', params=None):
-    """Make authenticated API request to DOUANO"""
+def make_api_request(endpoint, method='GET', params=None, max_retries=3):
+    """Make authenticated API request to DOUANO with retry logic"""
     if not is_token_valid():
         return None, "Token expired or invalid"
     
@@ -150,21 +150,42 @@ def make_api_request(endpoint, method='GET', params=None):
     
     url = f"{DOUANO_CONFIG['base_url']}{endpoint}"
     
-    try:
-        if method == 'GET':
-            response = requests.get(url, headers=headers, params=params, timeout=15)
-        elif method == 'POST':
-            response = requests.post(url, headers=headers, json=params, timeout=15)
-        else:
-            return None, f"Unsupported method: {method}"
-        
-        if response.status_code == 200:
-            return response.json(), None
-        else:
-            return None, f"API Error: {response.status_code} - {response.text[:200]}"
+    # Increased timeout for large data fetches (connect timeout, read timeout)
+    timeout_config = (10, 60)  # 10s to connect, 60s to read
+    
+    for attempt in range(max_retries):
+        try:
+            if method == 'GET':
+                response = requests.get(url, headers=headers, params=params, timeout=timeout_config)
+            elif method == 'POST':
+                response = requests.post(url, headers=headers, json=params, timeout=timeout_config)
+            else:
+                return None, f"Unsupported method: {method}"
             
-    except Exception as e:
-        return None, f"Request failed: {str(e)}"
+            if response.status_code == 200:
+                return response.json(), None
+            else:
+                error_msg = f"API Error: {response.status_code} - {response.text[:200]}"
+                if attempt < max_retries - 1:
+                    print(f"⚠️ Attempt {attempt + 1} failed: {error_msg}. Retrying...")
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                return None, error_msg
+                
+        except requests.exceptions.Timeout as e:
+            if attempt < max_retries - 1:
+                print(f"⏱️ Timeout on attempt {attempt + 1}. Retrying...")
+                time.sleep(2 ** attempt)
+                continue
+            return None, f"Request timed out after {max_retries} attempts: {str(e)}"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"❌ Error on attempt {attempt + 1}: {str(e)}. Retrying...")
+                time.sleep(2 ** attempt)
+                continue
+            return None, f"Request failed after {max_retries} attempts: {str(e)}"
+    
+    return None, "All retry attempts failed"
 
 
 def _extract_belgian_vat_numbers(text: str):
@@ -5594,23 +5615,30 @@ def api_sync_2025_invoices():
             }
             
             print(f"📡 Fetching page {page} with params: {params}")
+            page_start_time = time.time()
+            
             data, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
             
+            page_duration = time.time() - page_start_time
+            
             if error:
-                print(f"❌ API Error: {error}")
+                print(f"❌ API Error on page {page} (took {page_duration:.1f}s): {error}")
                 return jsonify({
-                    'error': f'Failed to fetch invoices: {error}',
+                    'error': f'Failed to fetch invoices on page {page}: {error}',
                     'success': False,
-                    'details': str(error)
+                    'details': str(error),
+                    'page': page,
+                    'duration': page_duration
                 }), 500
             
             invoices = data.get('result', {}).get('data', [])
             
             if not invoices:
+                print(f"✅ No more invoices on page {page}. Sync complete.")
                 break
             
             all_invoices.extend(invoices)
-            print(f"📄 Fetched page {page}: {len(invoices)} invoices (Total: {len(all_invoices)})")
+            print(f"📄 Page {page}: {len(invoices)} invoices (Total: {len(all_invoices)}) - took {page_duration:.1f}s")
             
             # Check pagination
             current_page = data.get('result', {}).get('current_page', page)
