@@ -7351,6 +7351,16 @@ def api_companies_from_db():
         
         print(f"✅ Total invoices loaded: {len(all_invoices)} (2024: {invoices_2024_count}, 2025: {invoices_2025_count})")
         
+        # Debug: Check first few invoices for amount fields
+        if all_invoices:
+            sample = all_invoices[0]
+            inv_data = sample.get('invoice_data') or {}
+            print(f"📋 Sample invoice fields: total_amount={sample.get('total_amount')}, "
+                  f"total_without_vat={inv_data.get('total_without_vat')}, "
+                  f"total_with_vat={inv_data.get('total_with_vat')}, "
+                  f"type={inv_data.get('type')}, "
+                  f"payable={inv_data.get('payable_amount_without_financial_discount')}")
+        
         # Step 2: Aggregate invoices by company (pure Python - very fast)
         company_metrics = {}
         for inv in all_invoices:
@@ -7377,7 +7387,32 @@ def api_companies_from_db():
                     'count_2025': 0,
                 }
             
-            amount = float(inv.get('total_amount') or 0)
+            # Get the amount - check invoice_data for the correct field
+            invoice_data = inv.get('invoice_data') or {}
+            
+            # Use total_without_vat if available (matches DUANO's "Omzet" which is ex-VAT)
+            # Otherwise fall back to total_amount
+            amount = float(
+                invoice_data.get('total_without_vat') or 
+                invoice_data.get('total_excl_vat') or
+                invoice_data.get('net_amount') or
+                inv.get('total_amount') or 0
+            )
+            
+            # Check if this is a credit note (negative revenue)
+            # Credit notes might have: type='credit', is_credit_note=True, or negative amount
+            is_credit = (
+                invoice_data.get('type', '').lower() in ['credit', 'credit_note', 'creditnote'] or
+                invoice_data.get('is_credit_note') == True or
+                invoice_data.get('document_type', '').lower() in ['credit', 'credit_note'] or
+                'credit' in str(invoice_data.get('invoice_number', '')).lower()
+            )
+            
+            # If amount is already negative, it's a credit note
+            # If it's a credit note with positive amount, make it negative
+            if is_credit and amount > 0:
+                amount = -amount
+            
             company_metrics[cid]['total_revenue'] += amount
             company_metrics[cid]['invoice_count'] += 1
             company_metrics[cid]['invoices'].append(inv.get('invoice_date'))
