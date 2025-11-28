@@ -509,8 +509,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 const companyId = {{ company_id }};
-let allData = [];
-let filteredData = [];
+let aggregatedData = {};
 let charts = {};
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -529,16 +528,17 @@ async function loadDetailedData() {
             throw new Error(result.error || 'Failed to load data');
         }
         
-        console.log(`✅ Received ${result.total_records} records from API`);
-        console.log(`📊 Data array length: ${result.data ? result.data.length : 0}`);
+        console.log(`✅ Received aggregated data: ${result.total_records} records, ${result.total_quantity} units`);
         
-        allData = result.data;
-        filteredData = [...allData];
+        // Store aggregated data
+        aggregatedData = result;
         
         document.getElementById('retailer-name').textContent = result.retailer_name;
         
-        populateFilters();
-        applyFilters();
+        // Update UI with aggregated data
+        updateKPIsFromAggregated();
+        updateChartsFromAggregated();
+        updateTablesFromAggregated();
         
         hideLoading();
         
@@ -548,74 +548,245 @@ async function loadDetailedData() {
     }
 }
 
-function populateFilters() {
-    const years = [...new Set(allData.map(d => d.jaar))].sort().reverse();
-    const months = [...new Set(allData.map(d => d.maand))].filter(m => m);
-    const products = [...new Set(allData.map(d => d.product))].filter(p => p);
-    const flavors = [...new Set(allData.map(d => d.smaak))].filter(f => f);
-    const chains = [...new Set(allData.map(d => d.keten))].filter(c => c);
-    const provinces = [...new Set(allData.map(d => d.provincie))].filter(p => p);
+// New functions for aggregated data
+function updateKPIsFromAggregated() {
+    const data = aggregatedData;
     
-    populateSelect('year-filter', years);
-    populateSelect('month-filter', months);
-    populateSelect('product-filter', products);
-    populateSelect('flavor-filter', flavors);
-    populateSelect('chain-filter', chains);
-    populateSelect('province-filter', provinces);
+    document.getElementById('kpi-total-units').textContent = (data.total_quantity || 0).toLocaleString();
+    document.getElementById('kpi-customers').textContent = Object.keys(data.by_customer || {}).length;
+    document.getElementById('kpi-products').textContent = Object.keys(data.by_product || {}).length;
+    document.getElementById('kpi-flavors').textContent = Object.keys(data.by_flavor || {}).length;
+    document.getElementById('kpi-chains').textContent = '-'; // Not available in aggregated
+    document.getElementById('kpi-regions').textContent = Object.keys(data.by_city || {}).length;
+    document.getElementById('total-records-badge').textContent = `${(data.total_records || 0).toLocaleString()} records (aggregated)`;
+}
+
+function updateTablesFromAggregated() {
+    const data = aggregatedData;
+    
+    // Top Locations (customers)
+    const topLocations = Object.entries(data.by_customer || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+    const locTbody = document.getElementById('top-locations-table');
+    locTbody.innerHTML = topLocations.map(([name, units], i) => `
+        <tr>
+            <td><span class="badge bg-${i < 3 ? 'warning' : 'secondary'}">#${i + 1}</span></td>
+            <td><strong>${esc(name)}</strong></td>
+            <td>-</td>
+            <td class="text-end"><span class="badge bg-success">${units.toLocaleString()}</span></td>
+        </tr>
+    `).join('');
+    
+    // Top Flavors
+    const topFlavors = Object.entries(data.by_flavor || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
+    const flavorTbody = document.getElementById('top-flavors-table');
+    flavorTbody.innerHTML = topFlavors.map(([flavor, units], i) => `
+        <tr>
+            <td><span class="badge bg-${i < 3 ? 'warning' : 'secondary'}">#${i + 1}</span></td>
+            <td><strong>${esc(flavor)}</strong></td>
+            <td><small class="text-muted">-</small></td>
+            <td class="text-end"><span class="badge bg-info">${units.toLocaleString()}</span></td>
+        </tr>
+    `).join('');
+    
+    // Product Details
+    const productDetails = Object.entries(data.by_product || {})
+        .sort((a, b) => b[1] - a[1]);
+    const prodTbody = document.getElementById('product-details-table');
+    prodTbody.innerHTML = productDetails.map(([product, units]) => `
+        <tr>
+            <td><strong>${esc(product)}</strong></td>
+            <td>-</td>
+            <td><span class="badge bg-secondary">-</span></td>
+            <td class="text-end">${units.toLocaleString()}</td>
+            <td class="text-end">-</td>
+            <td class="text-end">-</td>
+        </tr>
+    `).join('');
+    
+    // City Details (locations)
+    const cityDetails = Object.entries(data.by_city || {})
+        .sort((a, b) => b[1] - a[1]);
+    const cityTbody = document.getElementById('locations-details-table');
+    cityTbody.innerHTML = cityDetails.map(([city, units]) => `
+        <tr>
+            <td><code>-</code></td>
+            <td><strong>-</strong></td>
+            <td><small>-</small></td>
+            <td>${esc(city)}</td>
+            <td>-</td>
+            <td><span class="badge bg-primary">-</span></td>
+            <td><small>-</small></td>
+            <td class="text-end"><strong>${units.toLocaleString()}</strong></td>
+        </tr>
+    `).join('');
+    
+    // Chain details not available in aggregated view
+    document.getElementById('chain-details-table').innerHTML = `
+        <tr><td colspan="5" class="text-center text-muted"><em>Chain breakdown not available in aggregated view</em></td></tr>
+    `;
+    
+    // Detailed data not available
+    document.getElementById('detailed-data-table').innerHTML = `
+        <tr><td colspan="12" class="text-center text-muted">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Raw data not available</strong><br>
+            <small>This view shows aggregated summaries of ${(data.total_records || 0).toLocaleString()} records to improve performance.</small>
+        </td></tr>
+    `;
+}
+
+function updateChartsFromAggregated() {
+    const data = aggregatedData;
+    
+    // Timeline chart (by month)
+    const ctx1 = document.getElementById('timeline-chart');
+    if (ctx1) {
+        const monthData = data.by_month || {};
+        const labels = Object.keys(monthData).sort();
+        destroyChart('timeline-chart');
+        charts['timeline-chart'] = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Units',
+                    data: labels.map(l => monthData[l]),
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1,
+                    fill: true,
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+    
+    // Product pie chart
+    const ctx2 = document.getElementById('product-pie-chart');
+    if (ctx2) {
+        const productData = data.by_product || {};
+        destroyChart('product-pie-chart');
+        charts['product-pie-chart'] = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(productData),
+                datasets: [{
+                    data: Object.values(productData),
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+    
+    // Product bar chart
+    const ctx3 = document.getElementById('product-bar-chart');
+    if (ctx3) {
+        const productData = data.by_product || {};
+        destroyChart('product-bar-chart');
+        charts['product-bar-chart'] = new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(productData),
+                datasets: [{
+                    label: 'Units',
+                    data: Object.values(productData),
+                    backgroundColor: 'rgba(54, 162, 235, 0.8)'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+    
+    // City chart
+    const ctx4 = document.getElementById('city-chart');
+    if (ctx4) {
+        const cityData = data.by_city || {};
+        const sorted = Object.entries(cityData).sort((a, b) => b[1] - a[1]).slice(0, 10);
+        destroyChart('city-chart');
+        charts['city-chart'] = new Chart(ctx4, {
+            type: 'bar',
+            data: {
+                labels: sorted.map(s => s[0]),
+                datasets: [{
+                    label: 'Units by City',
+                    data: sorted.map(s => s[1]),
+                    backgroundColor: 'rgba(255, 159, 64, 0.8)'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true, indexAxis: 'y' }
+        });
+    }
+    
+    // Year comparison chart
+    const ctx5 = document.getElementById('year-comparison-chart');
+    if (ctx5) {
+        const yearData = data.by_year || {};
+        destroyChart('year-comparison-chart');
+        charts['year-comparison-chart'] = new Chart(ctx5, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(yearData).sort(),
+                datasets: [{
+                    label: 'Units by Year',
+                    data: Object.values(yearData),
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+    
+    // Monthly trend
+    const ctx6 = document.getElementById('monthly-trend-chart');
+    if (ctx6) {
+        const monthData = data.by_month || {};
+        const labels = Object.keys(monthData).sort();
+        destroyChart('monthly-trend-chart');
+        charts['monthly-trend-chart'] = new Chart(ctx6, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Units per Month',
+                    data: labels.map(l => monthData[l]),
+                    borderColor: 'rgb(255, 99, 132)',
+                    tension: 0.4,
+                    fill: true,
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)'
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: true }
+        });
+    }
+}
+
+// Old filter functions - now mostly disabled since we have aggregated data
+function populateFilters() {
+    // Filters don't work with aggregated data
+    console.log('Filters disabled - using aggregated data');
 }
 
 function populateSelect(id, options) {
-    const select = document.getElementById(id);
-    const currentValue = select.value;
-    
-    options.forEach(opt => {
-        const option = document.createElement('option');
-        option.value = opt;
-        option.textContent = opt;
-        select.appendChild(option);
-    });
-    
-    if (currentValue) select.value = currentValue;
+    // Disabled
 }
 
 function applyFilters() {
-    const year = document.getElementById('year-filter').value;
-    const month = document.getElementById('month-filter').value;
-    const product = document.getElementById('product-filter').value;
-    const flavor = document.getElementById('flavor-filter').value;
-    const chain = document.getElementById('chain-filter').value;
-    const province = document.getElementById('province-filter').value;
-    const search = document.getElementById('search-filter').value.toLowerCase();
-    
-    filteredData = allData.filter(d => {
-        if (year !== 'all' && d.jaar != year) return false;
-        if (month !== 'all' && d.maand !== month) return false;
-        if (product !== 'all' && d.product !== product) return false;
-        if (flavor !== 'all' && d.smaak !== flavor) return false;
-        if (chain !== 'all' && d.keten !== chain) return false;
-        if (province !== 'all' && d.provincie !== province) return false;
-        
-        if (search) {
-            const searchText = [
-                d.naam_klant, d.stad, d.code_klant, d.product, d.smaak
-            ].join(' ').toLowerCase();
-            if (!searchText.includes(search)) return false;
-        }
-        
-        return true;
-    });
-    
-    updateUI();
+    // Filters don't work with aggregated data - just refresh
+    console.log('Filters not available with aggregated view');
 }
 
 function updateUI() {
-    updateKPIs();
-    updateAllTables();
-    updateAllCharts();
+    updateKPIsFromAggregated();
+    updateChartsFromAggregated();
+    updateTablesFromAggregated();
 }
 
 function safeParseAantal(value) {
-    // Handle NULL strings, empty values, and invalid numbers
     if (value === null || value === 'NULL' || value === '' || value === undefined) {
         return 0;
     }
@@ -624,22 +795,7 @@ function safeParseAantal(value) {
 }
 
 function updateKPIs() {
-    const totalUnits = filteredData.reduce((sum, d) => sum + safeParseAantal(d.aantal), 0);
-    const uniqueCustomers = new Set(filteredData.map(d => d.naam_klant)).size;
-    const uniqueProducts = new Set(filteredData.map(d => d.product)).size;
-    const uniqueFlavors = new Set(filteredData.map(d => d.smaak)).size;
-    const uniqueChains = new Set(filteredData.map(d => d.keten)).size;
-    const uniqueProvinces = new Set(filteredData.map(d => d.provincie)).size;
-    
-    console.log(`📊 Calculating KPIs from ${filteredData.length} records: ${totalUnits.toLocaleString()} units`);
-    
-    document.getElementById('kpi-total-units').textContent = totalUnits.toLocaleString();
-    document.getElementById('kpi-customers').textContent = uniqueCustomers;
-    document.getElementById('kpi-products').textContent = uniqueProducts;
-    document.getElementById('kpi-flavors').textContent = uniqueFlavors;
-    document.getElementById('kpi-chains').textContent = uniqueChains;
-    document.getElementById('kpi-regions').textContent = uniqueProvinces;
-    document.getElementById('total-records-badge').textContent = `${filteredData.length} records`;
+    updateKPIsFromAggregated();
 }
 
 function updateAllTables() {

@@ -7683,7 +7683,13 @@ def api_major_retailer_detailed(company_id):
                     
                     # Aggregate in Python
                     for record in result.data:
-                        qty = int(record.get('aantal') or 0)
+                        # Handle 'NULL' strings and other invalid values
+                        qty_val = record.get('aantal')
+                        try:
+                            qty = int(qty_val) if qty_val and str(qty_val).upper() != 'NULL' else 0
+                        except (ValueError, TypeError):
+                            qty = 0
+                        
                         aggregated['total_quantity'] += qty
                         aggregated['total_records'] += 1
                         table_records += 1
