@@ -5556,13 +5556,28 @@ def api_sync_2025_invoices():
     Sync all 2025 sales invoices to Supabase.
     Fetches all invoices from 2025 and stores them in the sales_2025 table.
     """
+    print("=== SYNC 2025 ENDPOINT CALLED ===")
+    
     if not is_token_valid():
-        return jsonify({'error': 'Not authenticated'}), 401
+        print("❌ Token validation failed")
+        print(f"Has access_token: {'access_token' in session}")
+        print(f"Has token_expires_at: {'token_expires_at' in session}")
+        return jsonify({
+            'error': 'Not authenticated',
+            'message': 'Your DUANO session has expired. Please log in again.',
+            'success': False
+        }), 401
+    
+    if not supabase_client:
+        print("❌ Supabase client not configured")
+        return jsonify({'error': 'Supabase not configured', 'success': False}), 500
     
     try:
         from datetime import datetime
         
         print("🚀 Starting 2025 invoice sync...")
+        print(f"Token valid: {is_token_valid()}")
+        print(f"Supabase client: {supabase_client is not None}")
         
         # Fetch all 2025 invoices with pagination
         all_invoices = []
@@ -6490,8 +6505,21 @@ def api_sync_2024_invoices():
     """
     Sync all 2024 invoices from Douano API to Supabase
     """
+    print("=== SYNC 2024 ENDPOINT CALLED ===")
+    
     if not is_token_valid():
-        return jsonify({'error': 'Not authenticated'}), 401
+        print("❌ Token validation failed")
+        print(f"Has access_token: {'access_token' in session}")
+        print(f"Has token_expires_at: {'token_expires_at' in session}")
+        return jsonify({
+            'error': 'Not authenticated',
+            'message': 'Your DUANO session has expired. Please log in again.',
+            'success': False
+        }), 401
+    
+    if not supabase_client:
+        print("❌ Supabase client not configured")
+        return jsonify({'error': 'Supabase not configured', 'success': False}), 500
     
     try:
         # Fetch all 2024 invoices from Douano API
@@ -10174,6 +10202,64 @@ def reoptimize_trip(trip_id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
+# DEBUG ENDPOINTS
+# =====================================================
+
+@app.route('/api/test-sync', methods=['GET'])
+def api_test_sync():
+    """Test endpoint to verify API is working"""
+    try:
+        return jsonify({
+            'success': True,
+            'message': 'API is working',
+            'token_valid': is_token_valid(),
+            'supabase_configured': supabase_client is not None,
+            'has_access_token': 'access_token' in session,
+            'has_token_expires': 'token_expires_at' in session
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+# =====================================================
+# GLOBAL ERROR HANDLERS
+# =====================================================
+
+@app.errorhandler(500)
+def handle_500_error(e):
+    """Handle 500 errors and return JSON instead of HTML"""
+    print(f"500 Error: {e}")
+    import traceback
+    traceback.print_exc()
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': str(e),
+        'success': False
+    }), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """Handle all unhandled exceptions and return JSON for API routes"""
+    print(f"Unhandled exception: {e}")
+    import traceback
+    traceback.print_exc()
+    
+    # Check if this is an API request
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'error': 'An unexpected error occurred',
+            'message': str(e),
+            'success': False
+        }), 500
+    
+    # For non-API routes, re-raise to use default error handling
+    raise e
 
 
 if __name__ == '__main__':

@@ -12,16 +12,24 @@
                     <p class="text-muted mb-0">Comprehensive company and invoice data analysis</p>
                 </div>
                 <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="syncLatestData()" title="Sync latest data from DUANO">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="syncLatestData()" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
+                            title="Sync Latest Invoices: Fetch and sync the most recent invoices from DUANO API">
                         <i class="fas fa-sync-alt"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshCompanyMetrics()" title="Refresh company metrics">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshCompanyMetrics()" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
+                            title="Recalculate Metrics: Update revenue totals, invoice counts, and averages for all companies">
                         <i class="fas fa-calculator"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="populateCompaniesDatabase()" title="Populate from invoices">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="populateCompaniesDatabase()" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
+                            title="Build Companies Database: Extract and populate company information from all invoices">
                         <i class="fas fa-database"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="loadData()" title="Refresh data">
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadData()" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
+                            title="Refresh View: Reload the current company data and refresh this page">
                         <i class="fas fa-refresh"></i>
                     </button>
                 </div>
@@ -252,9 +260,9 @@
     <div class="sidepanel-header">
         <h5 class="sidepanel-title" id="companyModalTitle">Company Details</h5>
         <button type="button" class="btn-close" onclick="closeCompanyPanel()"></button>
-    </div>
+            </div>
     <div class="sidepanel-body" id="companyModalBody">
-        <!-- Company details will be loaded here -->
+                <!-- Company details will be loaded here -->
     </div>
 </div>
 
@@ -529,6 +537,25 @@ function isMajorRetailer(companyId) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips with instant appearance
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl, {
+            delay: { show: 0, hide: 0 }
+        });
+    });
+    
+    // Check authentication status on page load
+    fetch('/api/test-sync')
+        .then(res => res.json())
+        .then(data => {
+            console.log('Auth status:', data);
+            if (!data.token_valid) {
+                console.warn('⚠️ Not authenticated - sync operations will fail');
+            }
+        })
+        .catch(err => console.error('Failed to check auth status:', err));
+    
     // Check if we need to filter by company (coming from alerts page)
     const filterCompanyId = sessionStorage.getItem('filterCompanyId');
     const filterCompanyName = sessionStorage.getItem('filterCompanyName');
@@ -681,13 +708,49 @@ async function syncLatestData() {
     try {
         document.getElementById('sync-status').style.display = 'block';
         document.getElementById('sync-results').style.display = 'none';
+        document.getElementById('sync-message').innerHTML = 'Fetching latest invoices from DUANO...<br><small class="text-muted">This may take 30-60 seconds depending on the number of invoices</small>';
         
-        const response = await fetch(`/api/sync-${currentYear}-invoices`, {
+        // Handle combined view - sync 2025 by default
+        const yearToSync = currentYear === 'combined' ? '2025' : currentYear;
+        
+        console.log(`Starting sync for year: ${yearToSync}`);
+        
+        const response = await fetch(`/api/sync-${yearToSync}-invoices`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             }
         });
+        
+        if (!response.ok) {
+            // Try to parse error message
+            let errorData;
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            // Handle authentication errors
+            if (response.status === 401) {
+                document.getElementById('sync-status').style.display = 'none';
+                document.getElementById('sync-results').style.display = 'block';
+                document.getElementById('sync-results').innerHTML = `
+                    <div class="alert alert-warning">
+                        <h5><i class="fas fa-lock me-2"></i>Authentication Required</h5>
+                        <p class="mb-2"><strong>${errorData.message || 'Your session has expired.'}</strong></p>
+                        <p class="mb-0">
+                            <a href="/" class="btn btn-primary">
+                                <i class="fas fa-sign-in-alt me-2"></i>Log In to DUANO
+                            </a>
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+            
+            throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        }
         
         const result = await response.json();
         
@@ -733,12 +796,32 @@ async function syncLatestData() {
         }
         
     } catch (error) {
+        console.error('Sync error:', error);
         document.getElementById('sync-status').style.display = 'none';
         document.getElementById('sync-results').style.display = 'block';
+        
+        let errorMessage = error.message;
+        let errorDetails = '';
+        
+        // Provide helpful context for common errors
+        if (error.message.includes('Not authenticated') || error.message.includes('401') || error.message.includes('403')) {
+            errorMessage = '🔐 Authentication Required';
+            errorDetails = '<strong>Your DUANO session has expired.</strong> Please <a href="/" class="alert-link">log in again</a> to continue syncing data.';
+        } else if (error.message.includes('JSON')) {
+            errorMessage = 'Server returned an invalid response (not JSON)';
+            errorDetails = 'This usually means the server encountered an error. Check the Flask logs for details.';
+        } else if (error.message.includes('500')) {
+            errorMessage = 'Server error occurred while syncing data';
+            errorDetails = 'The DUANO API may be temporarily unavailable, or your session may have expired. Try <a href="/" class="alert-link">logging in again</a>.';
+        }
+        
         document.getElementById('sync-results').innerHTML = `
             <div class="alert alert-danger">
-                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
-                <p class="mb-0">${error.message}</p>
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Sync Failed</h5>
+                <p class="mb-2"><strong>${errorMessage}</strong></p>
+                ${errorDetails ? `<p class="mb-0 small">${errorDetails}</p>` : ''}
+                <hr class="my-2">
+                <small class="text-muted">Technical details: ${error.message}</small>
             </div>
         `;
     }
