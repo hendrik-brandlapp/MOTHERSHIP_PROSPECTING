@@ -9858,33 +9858,92 @@ def whatsapp_inbox_page():
     return render_template('whatsapp_inbox.html')
 
 
-@app.route('/api/company-notes/<company_id>', methods=['POST'])
-def api_update_company_notes(company_id):
+@app.route('/api/company-notes/<company_id>', methods=['GET', 'POST'])
+def api_company_notes(company_id):
     """
-    Update company notes and assigned salesperson
+    Get or update company notes, status, and assigned salesperson
     """
     try:
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
         
+        if request.method == 'GET':
+            # Get company notes and status
+            result = supabase_client.table('companies').select(
+                'notes, assigned_salesperson, customer_status'
+            ).eq('company_id', int(company_id)).execute()
+            
+            if result.data and len(result.data) > 0:
+                return jsonify({
+                    'success': True,
+                    'notes': result.data[0].get('notes', ''),
+                    'assigned_salesperson': result.data[0].get('assigned_salesperson', ''),
+                    'customer_status': result.data[0].get('customer_status', 'active')
+                })
+            return jsonify({'success': True, 'notes': '', 'assigned_salesperson': '', 'customer_status': 'active'})
+        
+        # POST - Update notes and status
         data = request.get_json()
         notes = data.get('notes', '')
         salesperson = data.get('assigned_salesperson', '')
+        customer_status = data.get('customer_status', 'active')
         
         # Update in Supabase
         result = supabase_client.table('companies').update({
             'notes': notes,
             'assigned_salesperson': salesperson,
+            'customer_status': customer_status,
             'updated_at': datetime.now().isoformat()
         }).eq('company_id', int(company_id)).execute()
         
         return jsonify({
             'success': True,
-            'message': 'Notes and salesperson updated successfully'
+            'message': 'Company details updated successfully'
         })
         
     except Exception as e:
-        print(f"Error updating company notes: {str(e)}")
+        print(f"Error with company notes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/company-trips/<company_id>', methods=['GET'])
+def api_company_trips(company_id):
+    """
+    Get all trips that include this company
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        # Find all trip stops for this company
+        stops_result = supabase_client.table('trip_stops').select(
+            'trip_id, stop_order'
+        ).eq('company_id', int(company_id)).execute()
+        
+        if not stops_result.data:
+            return jsonify({'success': True, 'trips': []})
+        
+        # Get unique trip IDs
+        trip_ids = list(set(stop['trip_id'] for stop in stops_result.data))
+        
+        # Fetch trip details
+        trips_result = supabase_client.table('trips').select('*').in_('id', trip_ids).execute()
+        
+        trips = []
+        for trip in trips_result.data or []:
+            trips.append({
+                'id': trip['id'],
+                'name': trip.get('name', 'Unnamed Trip'),
+                'date': trip.get('trip_date'),
+                'status': trip.get('status', 'planned'),
+                'total_distance': trip.get('total_distance_km'),
+                'total_stops': trip.get('total_stops', 0)
+            })
+        
+        return jsonify({'success': True, 'trips': trips})
+        
+    except Exception as e:
+        print(f"Error getting company trips: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -629,7 +629,7 @@ function renderStopsList() {
         <div class="trip-stop-item">
             <div class="stop-number">${stop.stop_order}</div>
             <div class="stop-content">
-                <a href="/data?company=${stop.company_id}" class="stop-name-link" title="View company details">
+                <a href="/data?company=${stop.company_id}&name=${encodeURIComponent(stop.company_name)}" class="stop-name-link" title="View company details">
                     ${escapeHtml(stop.company_name)}
                 </a>
                 <div class="stop-address">${escapeHtml(stop.address || 'No address')}</div>
