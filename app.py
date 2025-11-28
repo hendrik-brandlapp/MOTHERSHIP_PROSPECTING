@@ -5561,13 +5561,15 @@ def api_sync_2025_invoices():
     
     try:
         from datetime import datetime
+        import time as time_module
         
         print("🚀 Starting 2025 invoice sync...")
+        sync_start = time_module.time()
         
-        # Fetch all 2025 invoices with pagination
+        # Fetch 2025 invoices - single direct request first to test
         all_invoices = []
         page = 1
-        per_page = 100
+        per_page = 50  # Smaller batch for faster response
         
         while True:
             params = {
@@ -5578,10 +5580,41 @@ def api_sync_2025_invoices():
                 'order_by_date': 'desc'
             }
             
-            data, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
+            print(f"📡 Fetching page {page}...")
+            page_start = time_module.time()
             
-            if error:
-                return jsonify({'error': f'Failed to fetch invoices: {error}', 'success': False}), 500
+            # Direct API call with longer timeout
+            headers = {
+                'Authorization': f"Bearer {session['access_token']}",
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/trade/sales-invoices"
+            
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=30)
+                page_duration = time_module.time() - page_start
+                print(f"⏱️ Page {page} response in {page_duration:.1f}s - Status: {response.status_code}")
+                
+                if response.status_code != 200:
+                    return jsonify({
+                        'error': f'DUANO API error: {response.status_code}',
+                        'success': False,
+                        'response': response.text[:500]
+                    }), 500
+                
+                data = response.json()
+            except requests.exceptions.Timeout:
+                return jsonify({
+                    'error': 'DUANO API timeout - API is responding slowly',
+                    'success': False,
+                    'page': page
+                }), 500
+            except Exception as e:
+                return jsonify({
+                    'error': f'Request failed: {str(e)}',
+                    'success': False
+                }), 500
             
             invoices = data.get('result', {}).get('data', [])
             
@@ -5589,7 +5622,13 @@ def api_sync_2025_invoices():
                 break
             
             all_invoices.extend(invoices)
-            print(f"📄 Fetched page {page}: {len(invoices)} invoices (Total: {len(all_invoices)})")
+            print(f"📄 Page {page}: {len(invoices)} invoices (Total: {len(all_invoices)})")
+            
+            # Check if we should continue
+            total_time = time_module.time() - sync_start
+            if total_time > 90:  # Stop after 90 seconds to avoid timeout
+                print(f"⚠️ Stopping after {total_time:.0f}s to avoid timeout")
+                break
             
             # Check pagination
             current_page = data.get('result', {}).get('current_page', page)
