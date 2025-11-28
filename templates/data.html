@@ -27,9 +27,9 @@
                             title="Build Companies Database: Extract and populate company information from all invoices">
                         <i class="fas fa-database"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="loadData()" 
+                    <button class="btn btn-sm btn-outline-primary" onclick="forceRefreshData()" 
                             data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
-                            title="Refresh View: Reload the current company data and refresh this page">
+                            title="Refresh: Clear cache and fetch latest company data">
                         <i class="fas fa-refresh"></i>
                     </button>
                 </div>
@@ -529,6 +529,58 @@ let currentYear = '2025';
 let categoryStates = {}; // Track category filter states: 'included', 'excluded', or null (removed)
 let showOnlyMajorRetailers = false; // Filter for major retailers
 
+// Cache configuration
+const DATA_CACHE_PREFIX = 'data_companies_cache_';
+const DATA_CACHE_TIME_PREFIX = 'data_companies_cache_time_';
+const DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+function getCacheKey(year) {
+    return DATA_CACHE_PREFIX + year;
+}
+
+function getCacheTimeKey(year) {
+    return DATA_CACHE_TIME_PREFIX + year;
+}
+
+function isCacheValid(year) {
+    const cachedTime = sessionStorage.getItem(getCacheTimeKey(year));
+    if (!cachedTime) return false;
+    return (Date.now() - parseInt(cachedTime)) < DATA_CACHE_DURATION;
+}
+
+function getCachedData(year) {
+    if (!isCacheValid(year)) return null;
+    const cached = sessionStorage.getItem(getCacheKey(year));
+    if (!cached) return null;
+    try {
+        return JSON.parse(cached);
+    } catch (e) {
+        return null;
+    }
+}
+
+function setCachedData(year, data) {
+    try {
+        sessionStorage.setItem(getCacheKey(year), JSON.stringify(data));
+        sessionStorage.setItem(getCacheTimeKey(year), String(Date.now()));
+    } catch (e) {
+        console.warn('Failed to cache data:', e);
+    }
+}
+
+function clearCache(year) {
+    if (year) {
+        sessionStorage.removeItem(getCacheKey(year));
+        sessionStorage.removeItem(getCacheTimeKey(year));
+    } else {
+        // Clear all years
+        ['2024', '2025', 'combined'].forEach(y => {
+            sessionStorage.removeItem(getCacheKey(y));
+            sessionStorage.removeItem(getCacheTimeKey(y));
+        });
+    }
+}
+
 // Major retailer company IDs
 const MAJOR_RETAILER_IDS = [1324, 1340, 9986, 1213, 1712]; // Delhaize, Geers, Inter Drinks, Biofresh, Terroirist
 
@@ -653,15 +705,42 @@ async function changeYear(year) {
     loadData();
 }
 
-async function loadData() {
+async function loadData(forceRefresh = false) {
     try {
-        document.getElementById('loading').style.display = 'block';
         document.getElementById('error-message').style.display = 'none';
         document.getElementById('companies-cards').style.display = 'none';
         document.getElementById('companies-table').style.display = 'none';
         document.getElementById('results-info').style.display = 'none';
         document.getElementById('no-results').style.display = 'none';
         document.getElementById('year-stats').style.display = 'none';
+        
+        // Check cache first (unless force refresh)
+        const cachedData = !forceRefresh ? getCachedData(currentYear) : null;
+        
+        if (cachedData) {
+            console.log(`📦 Using cached data for ${currentYear} (${cachedData.companies?.length || 0} companies)`);
+            document.getElementById('loading').style.display = 'none';
+            
+            allCompanies = cachedData.companies || [];
+            filteredCompanies = [...allCompanies];
+            
+            // Populate category filter dropdown
+            populateCategories();
+            
+            // Update stats
+            updateStats(cachedData);
+            
+            // Display companies
+            displayCompanies();
+            
+            // Show cached indicator
+            showCacheIndicator(true);
+            return;
+        }
+        
+        // No cache, fetch from API
+        console.log(`📡 Fetching fresh data for ${currentYear}...`);
+        document.getElementById('loading').style.display = 'block';
         
         const apiEndpoint = `/api/companies-from-db?year=${currentYear}`;
         
@@ -677,6 +756,10 @@ async function loadData() {
             throw new Error(data.error);
         }
         
+        // Cache the data
+        setCachedData(currentYear, data);
+        console.log(`✅ Cached ${data.companies?.length || 0} companies for ${currentYear}`);
+        
         allCompanies = data.companies || [];
         filteredCompanies = [...allCompanies];
         
@@ -690,6 +773,7 @@ async function loadData() {
         displayCompanies();
         
         document.getElementById('loading').style.display = 'none';
+        showCacheIndicator(false);
         
     } catch (error) {
         console.error('Error loading companies:', error);
@@ -697,6 +781,32 @@ async function loadData() {
         document.getElementById('error-message').style.display = 'block';
         document.getElementById('error-text').textContent = error.message;
     }
+}
+
+function showCacheIndicator(fromCache) {
+    // Remove existing indicator
+    const existing = document.getElementById('cache-indicator');
+    if (existing) existing.remove();
+    
+    if (fromCache) {
+        const indicator = document.createElement('span');
+        indicator.id = 'cache-indicator';
+        indicator.className = 'badge bg-secondary ms-2';
+        indicator.style.fontSize = '0.7rem';
+        indicator.innerHTML = '<i class="fas fa-database me-1"></i>Cached';
+        indicator.title = 'Data loaded from cache. Click refresh to fetch latest.';
+        
+        const yearStats = document.getElementById('year-stats');
+        if (yearStats) {
+            yearStats.appendChild(indicator);
+        }
+    }
+}
+
+// Force refresh function for the refresh button
+function forceRefreshData() {
+    clearCache(currentYear);
+    loadData(true);
 }
 
 function updateStats(data) {
@@ -807,8 +917,9 @@ async function syncLatestData() {
                 </div>
             `;
             
-            // Refresh data after sync
-            setTimeout(() => loadData(), 2000);
+            // Clear cache and refresh data after sync
+            clearCache(); // Clear all year caches since invoices may affect all views
+            setTimeout(() => loadData(true), 2000);
         } else {
             document.getElementById('sync-results').innerHTML = `
                 <div class="alert alert-danger">
@@ -886,8 +997,9 @@ async function refreshCompanyMetrics() {
                 </div>
             `;
             
-            // Refresh data after metrics update
-            setTimeout(() => loadData(), 1500);
+            // Clear cache and refresh data after metrics update
+            clearCache();
+            setTimeout(() => loadData(true), 1500);
         } else {
             document.getElementById('sync-results').innerHTML = `
                 <div class="alert alert-danger">
@@ -960,8 +1072,9 @@ async function populateCompaniesDatabase() {
                 </div>
             `;
             
-            // Refresh data after population
-            setTimeout(() => loadData(), 2000);
+            // Clear cache and refresh data after population
+            clearCache();
+            setTimeout(() => loadData(true), 2000);
         } else {
             document.getElementById('sync-results').innerHTML = `
                 <div class="alert alert-danger">
