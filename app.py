@@ -10276,6 +10276,47 @@ def api_test_sync():
         }), 500
 
 
+@app.route('/api/test-duano-speed', methods=['GET'])
+def api_test_duano_speed():
+    """Test how fast DUANO API responds"""
+    if not is_token_valid():
+        return jsonify({'error': 'Not authenticated', 'success': False}), 401
+    
+    try:
+        import time
+        start_time = time.time()
+        
+        # Make a small test request (just 1 invoice)
+        params = {
+            'per_page': 1,
+            'page': 1
+        }
+        
+        data, error = make_api_request('/api/public/v1/trade/sales-invoices', params=params)
+        
+        elapsed = time.time() - start_time
+        
+        if error:
+            return jsonify({
+                'success': False,
+                'error': error,
+                'elapsed_seconds': elapsed
+            }), 500
+        
+        return jsonify({
+            'success': True,
+            'message': f'DUANO API responded in {elapsed:.2f} seconds',
+            'elapsed_seconds': elapsed,
+            'data_received': bool(data)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # =====================================================
 # GLOBAL ERROR HANDLERS
 # =====================================================
