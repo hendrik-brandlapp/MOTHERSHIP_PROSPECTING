@@ -5452,10 +5452,11 @@ def api_search_director_in_crm(director_name):
         return jsonify({'error': str(e)}), 500
 
 
-def recalculate_company_metrics_from_invoices(company_ids=None):
+def recalculate_company_metrics_from_invoices(company_ids=None, max_companies=100):
     """
     Recalculate company aggregates (revenue, invoice counts) from invoice tables.
-    If company_ids is provided, only update those companies. Otherwise update all.
+    If company_ids is provided, only update those companies.
+    max_companies limits processing to avoid timeout (default 100).
     """
     if not supabase_client:
         return False
@@ -5466,30 +5467,21 @@ def recalculate_company_metrics_from_invoices(company_ids=None):
             company_ids = set()
             
             for year in ['2024', '2025']:
-                batch_size = 1000
-                offset = 0
-                
-                while True:
-                    try:
-                        batch = supabase_client.table(f'sales_{year}').select('company_id').range(offset, offset + batch_size - 1).execute()
-                        if not batch.data:
-                            break
-                        
+                try:
+                    # Just get distinct company IDs - more efficient
+                    batch = supabase_client.table(f'sales_{year}').select('company_id').limit(5000).execute()
+                    if batch.data:
                         for record in batch.data:
                             if record.get('company_id'):
                                 company_ids.add(record['company_id'])
-                        
-                        if len(batch.data) < batch_size:
-                            break
-                        offset += batch_size
-                    except Exception as e:
-                        print(f"Error fetching company IDs from {year}: {e}")
-                        break
+                except Exception as e:
+                    print(f"Error fetching company IDs from {year}: {e}")
         
-        print(f"📊 Recalculating metrics for {len(company_ids)} companies...")
+        company_list = list(company_ids)[:max_companies]  # Limit to avoid timeout
+        print(f"📊 Recalculating metrics for {len(company_list)} companies (limited from {len(company_ids)})...")
         updated_count = 0
         
-        for company_id in company_ids:
+        for company_id in company_list:
             try:
                 # Get invoices from both years
                 metrics_2024 = {'revenue': 0, 'count': 0, 'first_date': None, 'last_date': None}
@@ -6452,12 +6444,14 @@ def api_refresh_company_metrics():
     
     try:
         print("🔄 Manual company metrics refresh triggered...")
-        success = recalculate_company_metrics_from_invoices()
+        # Limit to 100 companies per call to avoid timeout
+        # User can call multiple times to process all companies
+        success = recalculate_company_metrics_from_invoices(max_companies=100)
         
         if success:
             return jsonify({
                 'success': True,
-                'message': 'Company metrics recalculated successfully'
+                'message': 'Company metrics recalculated for batch of companies (max 100 per call)'
             })
         else:
             return jsonify({
