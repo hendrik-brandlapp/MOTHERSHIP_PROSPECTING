@@ -5716,10 +5716,11 @@ def api_sync_2025_invoices():
         
         print(f"✅ Sync complete: {result}")
         
-        # Recalculate company metrics to update frontend display
-        if saved_count > 0 or updated_count > 0:
-            print("📊 Updating company metrics...")
-            recalculate_company_metrics_from_invoices()
+        # Skip automatic metrics recalculation - it takes too long (1010 companies)
+        # Use the "Recalculate Metrics" button separately if needed
+        # if saved_count > 0 or updated_count > 0:
+        #     print("📊 Updating company metrics...")
+        #     recalculate_company_metrics_from_invoices()
         
         return jsonify(result)
         
