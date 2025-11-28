@@ -7585,13 +7585,19 @@ def api_company_invoices(company_id):
 
 @app.route('/api/major-retailer-detailed/<int:company_id>', methods=['GET'])
 def api_major_retailer_detailed(company_id):
-    """Get ALL detailed records for major retailers from their specialized databases."""
+    """Get AGGREGATED data for major retailers from their specialized databases.
+    Returns summaries instead of raw data to avoid timeouts with 85k+ records.
+    """
     if not is_token_valid():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
+        
+        import time as time_module
+        start_time = time_module.time()
+        time_limit = 25  # Stop before Gunicorn timeout
         
         # Map company IDs to their database tables
         MAJOR_RETAILERS = {
@@ -7633,56 +7639,124 @@ def api_major_retailer_detailed(company_id):
             return jsonify({'success': False, 'error': 'Not a major retailer'})
         
         retailer_config = MAJOR_RETAILERS[retailer_key]
+        year_filter = request.args.get('year')
         
-        # Fetch ALL data from all years for this retailer
-        all_records = []
+        # Aggregate data server-side instead of returning all raw records
+        aggregated = {
+            'by_product': {},
+            'by_flavor': {},
+            'by_month': {},
+            'by_year': {},
+            'by_customer': {},
+            'by_city': {},
+            'total_quantity': 0,
+            'total_records': 0
+        }
         
-        for table_name in retailer_config['tables']:
-            try:
-                print(f"📡 Fetching ALL data from {table_name}...")
+        tables_to_fetch = retailer_config['tables']
+        if year_filter:
+            tables_to_fetch = [t for t in tables_to_fetch if year_filter in t]
+        
+        for table_name in tables_to_fetch:
+            # Check time limit
+            if time_module.time() - start_time > time_limit:
+                print(f"⚠️ Time limit reached, returning partial data")
+                break
                 
-                # Fetch ALL data efficiently with pagination
-                # Select only the fields we need (not SELECT *)
-                table_data = []
+            try:
+                print(f"📡 Aggregating data from {table_name}...")
                 offset = 0
                 batch_size = 1000
+                table_records = 0
                 
                 while True:
+                    # Check time limit
+                    if time_module.time() - start_time > time_limit:
+                        break
+                    
                     result = supabase_client.table(table_name).select(
-                        'source,code_klant,naam_klant,adres_straat_huisnr,postcode,stad,land,provincie,'
-                        'tel_nr,email,verantwoordelijke,aantal,week,maand,jaar,product,smaak,verpakking,'
-                        'douane_klant_naam,douane_klant_nr,douane_bedrijfs_cat,keten,type_zaak'
+                        'aantal,jaar,maand,product,smaak,naam_klant,stad'
                     ).range(offset, offset + batch_size - 1).execute()
                     
-                    if not result.data or len(result.data) == 0:
+                    if not result.data:
                         break
                     
-                    table_data.extend(result.data)
-                    print(f"  📦 Batch {offset//batch_size + 1}: {len(result.data)} records")
+                    # Aggregate in Python
+                    for record in result.data:
+                        qty = int(record.get('aantal') or 0)
+                        aggregated['total_quantity'] += qty
+                        aggregated['total_records'] += 1
+                        table_records += 1
+                        
+                        # By product
+                        product = record.get('product') or 'Unknown'
+                        if product not in aggregated['by_product']:
+                            aggregated['by_product'][product] = 0
+                        aggregated['by_product'][product] += qty
+                        
+                        # By flavor
+                        flavor = record.get('smaak') or 'Unknown'
+                        if flavor not in aggregated['by_flavor']:
+                            aggregated['by_flavor'][flavor] = 0
+                        aggregated['by_flavor'][flavor] += qty
+                        
+                        # By year
+                        year = str(record.get('jaar') or 'Unknown')
+                        if year not in aggregated['by_year']:
+                            aggregated['by_year'][year] = 0
+                        aggregated['by_year'][year] += qty
+                        
+                        # By month (year-month)
+                        month = record.get('maand')
+                        if year and month:
+                            month_key = f"{year}-{str(month).zfill(2)}"
+                            if month_key not in aggregated['by_month']:
+                                aggregated['by_month'][month_key] = 0
+                            aggregated['by_month'][month_key] += qty
+                        
+                        # By customer (top customers)
+                        customer = record.get('naam_klant') or 'Unknown'
+                        if customer not in aggregated['by_customer']:
+                            aggregated['by_customer'][customer] = 0
+                        aggregated['by_customer'][customer] += qty
+                        
+                        # By city
+                        city = record.get('stad') or 'Unknown'
+                        if city not in aggregated['by_city']:
+                            aggregated['by_city'][city] = 0
+                        aggregated['by_city'][city] += qty
                     
-                    # If we got less than batch_size, we've reached the end
                     if len(result.data) < batch_size:
                         break
-                    
                     offset += batch_size
                 
-                if table_data:
-                    print(f"✅ Loaded {len(table_data)} total records from {table_name}")
-                    all_records.extend(table_data)
+                print(f"  ✅ Aggregated {table_records:,} records from {table_name}")
                         
             except Exception as e:
                 print(f"Error fetching {table_name}: {e}")
                 continue
         
-        print(f"✅ Returning {len(all_records):,} records for {retailer_config['company_name']}")
+        # Sort and limit aggregations for response
+        def top_items(d, limit=50):
+            return dict(sorted(d.items(), key=lambda x: x[1], reverse=True)[:limit])
         
-        return jsonify({
+        result = {
             'success': True,
             'retailer_name': retailer_config['company_name'],
             'retailer_key': retailer_key,
-            'total_records': len(all_records),
-            'data': all_records
-        })
+            'total_records': aggregated['total_records'],
+            'total_quantity': aggregated['total_quantity'],
+            'by_product': top_items(aggregated['by_product'], 100),
+            'by_flavor': top_items(aggregated['by_flavor'], 50),
+            'by_year': dict(sorted(aggregated['by_year'].items())),
+            'by_month': dict(sorted(aggregated['by_month'].items())),
+            'by_customer': top_items(aggregated['by_customer'], 100),
+            'by_city': top_items(aggregated['by_city'], 50),
+        }
+        
+        print(f"✅ Returning aggregated data for {retailer_config['company_name']}: {aggregated['total_records']:,} records, {aggregated['total_quantity']:,} units")
+        
+        return jsonify(result)
         
     except Exception as e:
         print(f"Error getting detailed retailer data: {e}")
