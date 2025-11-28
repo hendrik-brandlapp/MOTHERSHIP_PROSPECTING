@@ -7290,7 +7290,10 @@ def api_companies_with_alerts():
 
 @app.route('/api/companies-from-db', methods=['GET'])
 def api_companies_from_db():
-    """Get companies data directly from the enhanced companies table."""
+    """
+    Get companies data calculated DIRECTLY from invoice tables.
+    No external API calls - pure database aggregation.
+    """
     if not is_token_valid():
         return jsonify({'error': 'Not authenticated'}), 401
     
@@ -7300,89 +7303,144 @@ def api_companies_from_db():
         
         year_filter = request.args.get('year', '2025')
         
-        # Fetch all companies from the enhanced companies table
-        companies_result = supabase_client.table('companies').select('*').execute()
+        # Step 1: Fetch ALL invoices from the database (fast - data already there)
+        all_invoices = []
         
-        if not companies_result.data:
-            return jsonify({
-                'companies': [],
-                'total_companies': 0,
-                'total_revenue': 0,
-                'total_invoices': 0
-            })
+        if year_filter in ['2025', 'combined']:
+            # Fetch all 2025 invoices in batches
+            offset = 0
+            batch_size = 1000
+            while True:
+                result = supabase_client.table('sales_2025').select(
+                    'company_id, company_name, total_amount, date, vat_number'
+                ).range(offset, offset + batch_size - 1).execute()
+                if not result.data:
+                    break
+                for inv in result.data:
+                    inv['year'] = '2025'
+                all_invoices.extend(result.data)
+                if len(result.data) < batch_size:
+                    break
+                offset += batch_size
         
+        if year_filter in ['2024', 'combined']:
+            # Fetch all 2024 invoices in batches
+            offset = 0
+            batch_size = 1000
+            while True:
+                result = supabase_client.table('sales_2024').select(
+                    'company_id, company_name, total_amount, date, vat_number'
+                ).range(offset, offset + batch_size - 1).execute()
+                if not result.data:
+                    break
+                for inv in result.data:
+                    inv['year'] = '2024'
+                all_invoices.extend(result.data)
+                if len(result.data) < batch_size:
+                    break
+                offset += batch_size
+        
+        # Step 2: Aggregate invoices by company (pure Python - very fast)
+        company_metrics = {}
+        for inv in all_invoices:
+            cid = inv.get('company_id')
+            if not cid:
+                continue
+            
+            if cid not in company_metrics:
+                company_metrics[cid] = {
+                    'company_id': cid,
+                    'name': inv.get('company_name', 'Unknown'),
+                    'vat_number': inv.get('vat_number'),
+                    'total_revenue': 0.0,
+                    'invoice_count': 0,
+                    'invoices': [],
+                    'revenue_2024': 0.0,
+                    'count_2024': 0,
+                    'revenue_2025': 0.0,
+                    'count_2025': 0,
+                }
+            
+            amount = float(inv.get('total_amount') or 0)
+            company_metrics[cid]['total_revenue'] += amount
+            company_metrics[cid]['invoice_count'] += 1
+            company_metrics[cid]['invoices'].append(inv.get('date'))
+            
+            # Track by year
+            if inv.get('year') == '2024':
+                company_metrics[cid]['revenue_2024'] += amount
+                company_metrics[cid]['count_2024'] += 1
+            else:
+                company_metrics[cid]['revenue_2025'] += amount
+                company_metrics[cid]['count_2025'] += 1
+        
+        # Step 3: Try to enrich with company details from companies table (optional)
+        company_details = {}
+        try:
+            comp_result = supabase_client.table('companies').select(
+                'company_id, email, phone_number, website, latitude, longitude, '
+                'city, country_name, address_line1, post_code, company_tag'
+            ).execute()
+            if comp_result.data:
+                for c in comp_result.data:
+                    company_details[c['company_id']] = c
+        except Exception as e:
+            print(f"Could not fetch company details (optional): {e}")
+        
+        # Step 4: Build final company list
         companies_list = []
         total_revenue = 0
         total_invoices = 0
         
-        for company in companies_result.data:
-            # Calculate metrics based on year filter with safe float conversion
-            try:
-                if year_filter == '2024':
-                    revenue_val = company.get('total_revenue_2024', 0)
-                    revenue = float(revenue_val) if revenue_val is not None else 0.0
-                    invoice_count = company.get('invoice_count_2024', 0) or 0
-                elif year_filter == '2025':
-                    revenue_val = company.get('total_revenue_2025', 0)
-                    revenue = float(revenue_val) if revenue_val is not None else 0.0
-                    invoice_count = company.get('invoice_count_2025', 0) or 0
-                else:  # combined
-                    revenue_val = company.get('total_revenue_all_time', 0)
-                    revenue = float(revenue_val) if revenue_val is not None else 0.0
-                    invoice_count = company.get('invoice_count_all_time', 0) or 0
-            except (ValueError, TypeError) as e:
-                print(f"DEBUG: Error processing company {company.get('company_id')}: {e}")
-                revenue = 0.0
-                invoice_count = 0
+        for cid, metrics in company_metrics.items():
+            # Get dates
+            dates = [d for d in metrics['invoices'] if d]
+            first_date = min(dates) if dates else None
+            last_date = max(dates) if dates else None
             
-            # Skip companies with no activity in the selected year
-            if invoice_count == 0 and year_filter != 'combined':
+            # Get optional enrichment data
+            details = company_details.get(cid, {})
+            
+            # Use year-specific metrics if filtering
+            if year_filter == '2024':
+                revenue = metrics['revenue_2024']
+                invoice_count = metrics['count_2024']
+            elif year_filter == '2025':
+                revenue = metrics['revenue_2025']
+                invoice_count = metrics['count_2025']
+            else:
+                revenue = metrics['total_revenue']
+                invoice_count = metrics['invoice_count']
+            
+            # Skip if no invoices in selected period
+            if invoice_count == 0:
                 continue
             
-            # Build company data with all enhanced fields INCLUDING GEOCODING
+            avg_invoice = revenue / invoice_count if invoice_count > 0 else 0
+            
             company_data = {
-                'id': company['id'],
-                'company_id': company['company_id'],
-                'name': company['name'],
-                'public_name': company.get('public_name'),
-                'company_tag': company.get('company_tag'),
-                'vat_number': company.get('vat_number'),
-                'email': company.get('email'),
-                'email_addresses': company.get('email_addresses'),
-                'phone': company.get('phone_number'),
-                'website': company.get('website'),
-                'contact_person': company.get('contact_person_name'),
-                'is_customer': company.get('is_customer'),
-                'is_supplier': company.get('is_supplier'),
-                'company_status_name': company.get('company_status_name'),
-                'sales_price_class_name': company.get('sales_price_class_name'),
-                'document_delivery_type': company.get('document_delivery_type'),
-                'company_categories': company.get('company_categories'),
-                'addresses': company.get('addresses'),
-                'extension_values': company.get('extension_values'),
-                'bank_accounts': company.get('bank_accounts'),
-                'default_document_notes': company.get('default_document_notes'),
-                'raw_company_data': company.get('raw_company_data'),
-                # Geocoding fields - CRITICAL for Planning/Trips
-                'latitude': company.get('latitude'),
-                'longitude': company.get('longitude'),
-                'geocoded_address': company.get('geocoded_address'),
-                'geocoding_quality': company.get('geocoding_quality'),
-                'geocoded_at': company.get('geocoded_at'),
-                # Financial metrics
-                'total_revenue': revenue,
+                'id': cid,
+                'company_id': cid,
+                'name': metrics['name'],
+                'vat_number': metrics.get('vat_number'),
+                'email': details.get('email'),
+                'phone': details.get('phone_number'),
+                'website': details.get('website'),
+                'company_tag': details.get('company_tag'),
+                # Geocoding
+                'latitude': details.get('latitude'),
+                'longitude': details.get('longitude'),
+                # Metrics - calculated fresh from invoices
+                'total_revenue': round(revenue, 2),
                 'invoice_count': invoice_count,
-                'average_invoice_value': float(company.get('average_invoice_value', 0)) if company.get('average_invoice_value') is not None else 0.0,
-                'first_invoice_date': company.get('first_invoice_date'),
-                'last_invoice_date': company.get('last_invoice_date'),
-                'payment_terms': company.get('payment_terms', []),
-                'currencies': company.get('currencies_used', []),
+                'average_invoice_value': round(avg_invoice, 2),
+                'first_invoice_date': first_date,
+                'last_invoice_date': last_date,
                 'address': {
-                    'city': company.get('city', ''),
-                    'country': company.get('country_name', ''),
-                    'street': company.get('address_line1', ''),
-                    'street2': company.get('address_line2', ''),
-                    'postal_code': company.get('post_code', '')
+                    'city': details.get('city', ''),
+                    'country': details.get('country_name', ''),
+                    'street': details.get('address_line1', ''),
+                    'postal_code': details.get('post_code', '')
                 }
             }
             
@@ -7390,12 +7448,12 @@ def api_companies_from_db():
             if year_filter == 'combined':
                 company_data['years_data'] = {
                     '2024': {
-                        'total_revenue': float(company.get('total_revenue_2024', 0)),
-                        'invoice_count': company.get('invoice_count_2024', 0)
+                        'total_revenue': round(metrics['revenue_2024'], 2),
+                        'invoice_count': metrics['count_2024']
                     },
                     '2025': {
-                        'total_revenue': float(company.get('total_revenue_2025', 0)),
-                        'invoice_count': company.get('invoice_count_2025', 0)
+                        'total_revenue': round(metrics['revenue_2025'], 2),
+                        'invoice_count': metrics['count_2025']
                     }
                 }
             
