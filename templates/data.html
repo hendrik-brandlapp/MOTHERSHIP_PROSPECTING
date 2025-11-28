@@ -12,6 +12,7 @@
                     <p class="text-muted mb-0">Comprehensive company and invoice data analysis</p>
                 </div>
                 <div class="d-flex gap-2">
+                    {% if session.user_role == 'admin' %}
                     <button class="btn btn-sm btn-outline-secondary" onclick="syncLatestData()" 
                             data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
                             title="Sync Latest Invoices: Fetch and sync the most recent invoices from DUANO API">
@@ -27,6 +28,7 @@
                             title="Build Companies Database: Extract and populate company information from all invoices">
                         <i class="fas fa-database"></i>
                     </button>
+                    {% endif %}
                     <button class="btn btn-sm btn-outline-primary" onclick="forceRefreshData()" 
                             data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
                             title="Refresh: Clear cache and fetch latest company data">

@@ -97,7 +97,7 @@ DOUANO_CONFIG = {
 
 
 def is_token_valid():
-    """Check if the stored token is valid"""
+    """Check if the stored DUANO token is valid (for admin)"""
     if 'access_token' not in session:
         return False
     
@@ -108,12 +108,37 @@ def is_token_valid():
     return datetime.now() < expires_at - timedelta(minutes=5)
 
 
+def is_logged_in():
+    """Check if user is logged in (either as admin or sales rep)"""
+    # Sales rep login
+    if session.get('user_role') == 'sales_rep':
+        return True
+    # Admin login via DUANO
+    if is_token_valid():
+        return True
+    return False
+
+
+def is_admin():
+    """Check if current user is admin"""
+    return session.get('user_role') == 'admin' and is_token_valid()
+
+
+def get_current_user():
+    """Get current user info"""
+    return {
+        'name': session.get('user_name', 'Unknown'),
+        'role': session.get('user_role', 'unknown'),
+        'is_admin': is_admin()
+    }
+
+
 def get_douano_client():
     """Get initialized Douano client with current session token"""
     if not DuanoClient:
         return None
     
-    if not is_token_valid():
+    if not is_logged_in():
         return None
     
     try:
@@ -139,7 +164,7 @@ def get_douano_client():
 
 def make_api_request(endpoint, method='GET', params=None):
     """Make authenticated API request to DOUANO"""
-    if not is_token_valid():
+    if not is_logged_in():
         return None, "Token expired or invalid"
     
     headers = {
@@ -304,16 +329,52 @@ def make_paginated_api_request(endpoint, params=None):
 
 @app.route('/')
 def index():
-    """Home page"""
-    if not is_token_valid():
-        return render_template('login.html')
-    # Serve a clean, simplified overview page
-    return render_template('home.html')
+    """Home page - check if user is logged in (either as admin or sales rep)"""
+    # Check if logged in as sales rep
+    if session.get('user_role') == 'sales_rep':
+        return render_template('home.html')
+    
+    # Check if logged in as admin (via DUANO)
+    if is_token_valid():
+        session['user_role'] = 'admin'
+        session['user_name'] = 'Admin'
+        return render_template('home.html')
+    
+    # Not logged in - show login page
+    return render_template('login.html')
+
+
+@app.route('/login-sales-rep', methods=['POST'])
+def login_sales_rep():
+    """Login as a sales rep (no DUANO auth required)"""
+    name = request.form.get('name')
+    
+    if name not in ['Caitlin', 'Kesha', 'Django']:
+        return redirect(url_for('index'))
+    
+    session['user_role'] = 'sales_rep'
+    session['user_name'] = name
+    session.permanent = True
+    
+    return redirect(url_for('index'))
+
+
+@app.route('/admin-login')
+def admin_login():
+    """Redirect to DUANO OAuth for admin login"""
+    return redirect(url_for('login'))
+
+
+@app.route('/logout')
+def logout():
+    """Logout user"""
+    session.clear()
+    return redirect(url_for('index'))
 
 
 @app.route('/login')
 def login():
-    """Initiate OAuth2 login"""
+    """Initiate OAuth2 login for admin"""
     state = secrets.token_urlsafe(32)
     session['oauth_state'] = state
     
@@ -395,7 +456,7 @@ def logout():
 @app.route('/dashboard')
 def dashboard():
     """Deprecated: redirect to simplified home"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     return redirect(url_for('index'))
 
@@ -403,7 +464,7 @@ def dashboard():
 @app.route('/api/company-categories')
 def api_company_categories():
     """Get company categories"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters to get all results
@@ -437,7 +498,7 @@ def api_company_categories():
 @app.route('/api/crm-contacts')
 def api_crm_contacts():
     """Get CRM contact persons"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters to get all results
@@ -465,7 +526,7 @@ def api_crm_contacts():
 @app.route('/api/crm-actions')
 def api_crm_actions():
     """Get CRM actions"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters to get all results
@@ -485,7 +546,7 @@ def api_crm_actions():
 @app.route('/api/company-statuses')
 def api_company_statuses():
     """Get company statuses"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get query parameters for filtering and ordering
@@ -524,7 +585,7 @@ def api_company_statuses():
 @app.route('/api/company-statuses/<int:status_id>')
 def api_company_status(status_id):
     """Get specific company status"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     data, error = make_api_request(f'/api/public/v1/core/company-statuses/{status_id}')
@@ -538,7 +599,7 @@ def api_company_status(status_id):
 @app.route('/api/accountancy/accounts')
 def api_accountancy_accounts():
     """Get accountancy accounts"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get query parameters for filtering and ordering
@@ -571,7 +632,7 @@ def api_accountancy_accounts():
 @app.route('/api/accountancy/accounts/<int:account_id>')
 def api_accountancy_account(account_id):
     """Get specific accountancy account"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     data, error = make_api_request(f'/api/public/v1/accountancy/accounts/{account_id}')
@@ -585,7 +646,7 @@ def api_accountancy_account(account_id):
 @app.route('/api/accountancy/bookings')
 def api_accountancy_bookings():
     """Get accountancy bookings with extensive filtering"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters to get all results
@@ -647,7 +708,7 @@ def api_accountancy_bookings():
 @app.route('/api/accountancy/bookings/<int:booking_id>')
 def api_accountancy_booking(booking_id):
     """Get specific accountancy booking"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     data, error = make_api_request(f'/api/public/v1/accountancy/bookings/{booking_id}')
@@ -661,7 +722,7 @@ def api_accountancy_booking(booking_id):
 @app.route('/api/companies')
 def api_companies():
     """Get all companies (actual companies, not categories)"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get query parameters for filtering and ordering
@@ -749,7 +810,7 @@ def api_companies():
 @app.route('/api/companies/<int:company_id>')
 def api_company(company_id):
     """Get specific company"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     data, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
@@ -763,7 +824,7 @@ def api_company(company_id):
 @app.route('/api/sales-invoices')
 def api_sales_invoices():
     """Get sales invoices with enhanced transport method data"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters to get all results
@@ -896,7 +957,7 @@ def api_sales_orders():
     print(f"DEBUG: Session keys: {list(session.keys())}")
     print(f"DEBUG: is_token_valid(): {is_token_valid()}")
     
-    if not is_token_valid():
+    if not is_logged_in():
         print("DEBUG: Not authenticated, returning 401")
         return jsonify({'error': 'Not authenticated'}), 401
     
@@ -1101,7 +1162,7 @@ def debug_auth_status():
 @app.route('/api/debug/address/<int:address_id>')
 def debug_address(address_id):
     """Debug endpoint to test address API directly"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     print(f"DEBUG: Testing address API for address ID {address_id}")
@@ -1137,7 +1198,7 @@ def debug_address(address_id):
 @app.route('/api/debug/raw-sales-orders')
 def debug_raw_sales_orders():
     """Debug endpoint to see raw sales orders data like CSV export"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get raw sales orders with minimal filtering to compare with CSV
@@ -1201,7 +1262,7 @@ def api_analytics_sales():
       group_by: date|company|product (default: date)
       interval: day|week|month (default: day)
     """
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
 
     group_by = request.args.get('group_by', 'date')
@@ -1303,7 +1364,7 @@ def api_analytics_sales():
 @app.route('/api/sales-invoices/<int:invoice_id>')
 def api_sales_invoice(invoice_id):
     """Get specific sales invoice"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     data, error = make_api_request(f'/api/public/v1/trade/sales-invoices/{invoice_id}')
@@ -1317,7 +1378,7 @@ def api_sales_invoice(invoice_id):
 @app.route('/api/companies/<int:company_id>/sales')
 def api_company_sales(company_id):
     """Get sales data for a specific company"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters and company filter
@@ -1346,7 +1407,7 @@ def api_company_sales(company_id):
 @app.route('/api/companies/<int:company_id>/bookings')
 def api_company_bookings(company_id):
     """Get bookings for a specific company"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters and company filter
@@ -1377,7 +1438,7 @@ def api_company_bookings(company_id):
 @app.route('/api/composed-product-items')
 def api_composed_product_items():
     """Get composed product items"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters to get all results
@@ -1411,7 +1472,7 @@ def api_composed_product_items():
 @app.route('/api/composed-product-items/<int:item_id>')
 def api_composed_product_item(item_id):
     """Get specific composed product item"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     data, error = make_api_request(f'/api/public/v1/core/composed-product-items/{item_id}')
@@ -1425,7 +1486,7 @@ def api_composed_product_item(item_id):
 @app.route('/api/products/hierarchy')
 def api_products_hierarchy():
     """Get product hierarchy with composed products and their components"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -1523,7 +1584,7 @@ def api_products_hierarchy():
 @app.route('/api/composed-products/<int:composed_product_id>/components')
 def api_composed_product_components(composed_product_id):
     """Get all component products for a specific composed product"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     params = {
@@ -1543,7 +1604,7 @@ def api_composed_product_components(composed_product_id):
 @app.route('/api/products/<int:product_id>/composed-products')
 def api_product_composed_products(product_id):
     """Get all composed products that use a specific component product"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     params = {
@@ -1563,7 +1624,7 @@ def api_product_composed_products(product_id):
 @app.route('/prospecting')
 def prospecting():
     """Prospecting page with Google Maps and VAT lookup"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     return render_template('prospecting.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
@@ -1571,7 +1632,7 @@ def prospecting():
 @app.route('/planning')
 def planning():
     """Planning page with Mapbox map visualization"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     # Mapbox API key
@@ -1584,7 +1645,7 @@ def planning():
 @app.route('/tasks')
 def tasks():
     """Task Management Dashboard"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     return render_template('tasks.html')
 
@@ -1625,7 +1686,7 @@ def _search_duano_by_vat(vat_number: str):
 
 @app.route('/api/prospecting/vat-lookup', methods=['POST'])
 def api_prospecting_vat_lookup():
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     payload = request.get_json(silent=True) or {}
     company_name = (payload.get('company_name') or '').strip()
@@ -1686,7 +1747,7 @@ def api_prospecting_vat_lookup():
 
 @app.route('/api/prospecting/check-vat', methods=['GET'])
 def api_prospecting_check_vat():
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     vat_number = request.args.get('vat_number', '').strip()
     matches = _search_duano_by_vat(vat_number)
@@ -1700,7 +1761,7 @@ def api_prospecting_enrich_company():
     Body: { company_name, website_url?, city?, region?, country? }
     Returns: { summary, sources, websites, official_site, vat_numbers, emails, phone_numbers, addresses, social_links, companyweb_url }
     """
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
 
     if not (OPENAI_API_KEY and openai_client):
@@ -1786,7 +1847,7 @@ def api_prospecting_companyweb_search():
     Body: { company_name: str, address: str }
     Returns: { result: { ...structured fields... } }
     """
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
 
     if not (OPENAI_API_KEY and openai_client):
@@ -1995,7 +2056,7 @@ def api_prospecting_companyweb_search():
 @app.route('/api/prospects', methods=['GET'])
 def api_get_prospects():
     """Get all prospects from Supabase"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2033,7 +2094,7 @@ def api_get_prospects():
 @app.route('/api/prospects', methods=['POST'])
 def api_create_prospect():
     """Create a new prospect in Supabase with background enrichment"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2138,7 +2199,7 @@ def api_create_prospect():
 @app.route('/api/prospects/<prospect_id>', methods=['PATCH'])
 def api_update_prospect(prospect_id):
     """Update a prospect's status or other fields"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2210,7 +2271,7 @@ def api_update_prospect(prospect_id):
 @app.route('/api/prospects/<prospect_id>', methods=['DELETE'])
 def api_delete_prospect(prospect_id):
     """Delete a prospect from Supabase"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2234,7 +2295,7 @@ def api_delete_prospect(prospect_id):
 @app.route('/api/prospects/pipeline-stats', methods=['GET'])
 def api_get_pipeline_stats():
     """Get prospect pipeline statistics"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
 
     if not supabase_client:
@@ -2286,7 +2347,7 @@ def api_get_pipeline_stats():
 @app.route('/api/prospect-tasks', methods=['GET'])
 def api_get_prospect_tasks():
     """Get prospect tasks/reminders"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2333,7 +2394,7 @@ def api_get_prospect_tasks():
 @app.route('/api/prospect-tasks', methods=['POST'])
 def api_create_prospect_task():
     """Create a new prospect task"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2375,7 +2436,7 @@ def api_create_prospect_task():
 @app.route('/api/prospect-tasks/<task_id>', methods=['PATCH'])
 def api_update_prospect_task(task_id):
     """Update a prospect task"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2416,7 +2477,7 @@ def api_update_prospect_task(task_id):
 @app.route('/api/unqualified-reasons', methods=['GET'])
 def api_get_unqualified_reasons():
     """Get predefined unqualified reasons"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2453,7 +2514,7 @@ def api_get_unqualified_reasons():
 @app.route('/api/tasks', methods=['GET'])
 def api_get_tasks():
     """Get tasks with filtering and sorting options"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2526,7 +2587,7 @@ def api_get_tasks():
 @app.route('/api/tasks', methods=['POST'])
 def api_create_task():
     """Create a new task"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2584,7 +2645,7 @@ def api_create_task():
 @app.route('/api/tasks/<task_id>', methods=['GET'])
 def api_get_task(task_id):
     """Get a specific task with full details"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2623,7 +2684,7 @@ def api_get_task(task_id):
 @app.route('/api/tasks/<task_id>', methods=['PATCH'])
 def api_update_task(task_id):
     """Update a task"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2685,7 +2746,7 @@ def api_update_task(task_id):
 @app.route('/api/tasks/<task_id>', methods=['DELETE'])
 def api_delete_task(task_id):
     """Delete a task"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2706,7 +2767,7 @@ def api_delete_task(task_id):
 @app.route('/api/tasks/<task_id>/comments', methods=['POST'])
 def api_add_task_comment(task_id):
     """Add a comment to a task"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2742,7 +2803,7 @@ def api_add_task_comment(task_id):
 @app.route('/api/tasks/analytics', methods=['GET'])
 def api_get_task_analytics():
     """Get task analytics and statistics"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2810,7 +2871,7 @@ def api_get_task_analytics():
 @app.route('/api/task-templates', methods=['GET'])
 def api_get_task_templates():
     """Get available task templates"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2831,7 +2892,7 @@ def api_get_task_templates():
 @app.route('/api/tasks/upcoming', methods=['GET'])
 def api_get_upcoming_tasks():
     """Get upcoming tasks for dashboard"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2865,7 +2926,7 @@ def api_get_upcoming_tasks():
 @app.route('/api/tasks/calendar', methods=['GET'])
 def api_get_tasks_calendar():
     """Get all tasks for calendar view, including far future ones"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -2916,7 +2977,7 @@ def api_get_tasks_calendar():
 @app.route('/api/tasks/debug/<prospect_id>')
 def api_debug_prospect_tasks(prospect_id):
     """Debug endpoint to see all tasks for a specific prospect"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -3290,7 +3351,7 @@ def _enrich_prospect_background(prospect_id, company_name, address, website):
 @app.route('/company-categories') 
 def company_categories_page():
     """Company categories page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('companies.html')
@@ -3299,7 +3360,7 @@ def company_categories_page():
 @app.route('/crm')
 def crm():
     """CRM data page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('crm.html')
@@ -3308,7 +3369,7 @@ def crm():
 @app.route('/company-statuses')
 def company_statuses():
     """Company statuses page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('company_statuses.html')
@@ -3317,7 +3378,7 @@ def company_statuses():
 @app.route('/accountancy')
 def accountancy():
     """Accountancy data page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('accountancy.html')
@@ -3326,7 +3387,7 @@ def accountancy():
 @app.route('/sales')
 def sales():
     """Sales data page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('sales.html')
@@ -3335,7 +3396,7 @@ def sales():
 @app.route('/sales-2025')
 def sales_2025():
     """2025 Sales data extraction and management page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('sales_2025.html')
@@ -3344,7 +3405,7 @@ def sales_2025():
 @app.route('/products')
 def products():
     """Products data page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('products.html')
@@ -3353,7 +3414,7 @@ def products():
 @app.route('/visualize')
 def visualize():
     """Data visualization playground"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     return render_template('visualize.html')
 
@@ -3361,7 +3422,7 @@ def visualize():
 @app.route('/maps-ai')
 def maps_ai():
     """Maps AI with Gemini grounding"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     return render_template('maps_ai.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
@@ -3369,7 +3430,7 @@ def maps_ai():
 @app.route('/api/maps-ai/chat', methods=['POST'])
 def api_maps_ai_chat():
     """Chat with Maps AI using Gemini grounding"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
     
     if gemini_client is None:
@@ -3445,7 +3506,7 @@ def api_maps_ai_chat():
 @app.route('/maps-ai-enhanced')
 def maps_ai_enhanced():
     """Enhanced Maps AI with interactive map visualization"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     return render_template('maps_ai_enhanced.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
@@ -3453,7 +3514,7 @@ def maps_ai_enhanced():
 @app.route('/api/maps-ai/chat-enhanced', methods=['POST'])
 def api_maps_ai_chat_enhanced():
     """Enhanced chat with agentic map features and place details"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
     
     if gemini_client is None:
@@ -3565,7 +3626,7 @@ def api_maps_ai_chat_enhanced():
 @app.route('/maps-ai-3d')
 def maps_ai_3d():
     """3D Photorealistic Maps AI with agentic functionality"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     return render_template('maps_ai_3d.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
@@ -3573,7 +3634,7 @@ def maps_ai_3d():
 @app.route('/api/maps-ai/chat-3d', methods=['POST'])
 def api_maps_ai_chat_3d():
     """Agentic chat with 3D map visualization and tool functions"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
     
     if gemini_client is None:
@@ -3735,7 +3796,7 @@ Always cite your sources from Google Maps."""
 @app.route('/api/delivery-orders')
 def api_delivery_orders():
     """Get delivery orders"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters to get all results
@@ -3773,7 +3834,7 @@ def api_delivery_orders():
 @app.route('/api/delivery-orders/<int:order_id>')
 def api_delivery_order(order_id):
     """Get specific delivery order"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     data, error = make_api_request(f'/api/public/v1/crm/delivery-orders/{order_id}')
@@ -3885,7 +3946,7 @@ def api_analytics_deliveries():
       filter_by_start_date, filter_by_end_date: date range
       group_by: week|month (default: week)
     """
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
 
     # Get query parameters
@@ -4126,7 +4187,7 @@ def api_analytics_deliveries():
 @app.route('/api/delivery-methods')
 def api_delivery_methods():
     """Get available delivery methods from multiple sources including company transport methods, sales invoices and delivery orders"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     delivery_methods = set()
@@ -4254,7 +4315,7 @@ def api_delivery_methods():
 @app.route('/api/orders-by-delivery-method')
 def api_orders_by_delivery_method():
     """Get count of purchase orders grouped by transport method for visualization"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get query parameters
@@ -4368,7 +4429,7 @@ def api_orders_by_delivery_method():
 @app.route('/api/addresses')
 def api_addresses():
     """Get all addresses from core addresses endpoint"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get query parameters for filtering
@@ -4398,7 +4459,7 @@ def api_addresses():
 @app.route('/api/debug/addresses')
 def api_debug_addresses():
     """Debug endpoint to see actual address structure"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get a small sample of addresses to inspect structure
@@ -4422,7 +4483,7 @@ def api_debug_addresses():
 @app.route('/api/test/delivery-methods')
 def api_test_delivery_methods():
     """Simple test endpoint for delivery methods"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated', 'authenticated': False}), 401
     
     # Return a simple test response
@@ -4443,7 +4504,7 @@ def api_test_delivery_methods():
 @app.route('/api/debug/delivery-orders')
 def api_debug_delivery_orders():
     """Debug endpoint to see actual delivery order structure"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get a small sample of delivery orders to inspect structure
@@ -4467,7 +4528,7 @@ def api_debug_delivery_orders():
 @app.route('/api/debug/sales-invoices')
 def api_debug_sales_invoices():
     """Debug endpoint to see actual sales invoice structure for delivery info"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get a small sample of sales invoices to inspect structure
@@ -4491,7 +4552,7 @@ def api_debug_sales_invoices():
 @app.route('/api/debug/companies')
 def api_debug_companies():
     """Debug endpoint to see actual company structure and available transport method fields"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get a small sample of companies to inspect structure
@@ -4529,7 +4590,7 @@ def api_debug_companies():
 @app.route('/api/transport-methods')
 def api_transport_methods():
     """Get transport methods from the official Duano API endpoint"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get query parameters for filtering and ordering (matching Duano API documentation)
@@ -4569,7 +4630,7 @@ def api_transport_methods():
 @app.route('/api/transport-methods/<int:transport_method_id>')
 def api_transport_method(transport_method_id):
     """Get specific transport method by ID from Duano API"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     data, error = make_api_request(f'/api/public/v1/core/transport-methods/{transport_method_id}')
@@ -4583,7 +4644,7 @@ def api_transport_method(transport_method_id):
 @app.route('/api/debug/transport-methods')
 def api_debug_transport_methods():
     """Debug endpoint to explore transport methods from multiple sources"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     results = {}
@@ -4632,7 +4693,7 @@ def api_debug_transport_methods():
 @app.route('/api/companies/<int:company_id>/orders')
 def api_company_orders(company_id):
     """Get purchase orders for a specific company with transport method information"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # First get the company information to extract transport method
@@ -4710,7 +4771,7 @@ def api_company_orders(company_id):
 @app.route('/api/companies/<int:company_id>/supplier-orders')
 def api_company_supplier_orders(company_id):
     """Get delivery orders where company is the supplier with transport method information"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # First get the company information to extract transport method
@@ -4774,7 +4835,7 @@ def api_company_supplier_orders(company_id):
 @app.route('/orders')
 def orders():
     """Delivery orders page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('orders.html')
@@ -4783,7 +4844,7 @@ def orders():
 @app.route('/transport-methods-test')
 def transport_methods_test():
     """Transport methods test page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('transport_methods.html')
@@ -4792,7 +4853,7 @@ def transport_methods_test():
 @app.route('/api/purchase-orders-by-transport')
 def api_purchase_orders_by_transport():
     """Get sales orders filtered by transport method - simple table data"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get query parameters
@@ -4970,7 +5031,7 @@ def api_purchase_orders_by_transport():
 @app.route('/api/orders-with-full-addresses')
 def api_orders_with_full_addresses():
     """Get all orders with full address details - simplified version"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Get query parameters
@@ -5106,7 +5167,7 @@ def api_orders_with_full_addresses():
 @app.route('/api/debug/orders-summary')
 def api_debug_orders_summary():
     """Debug endpoint to explore different order endpoints and find transport methods"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Try multiple order-related endpoints to find where transport methods are stored
@@ -5163,7 +5224,7 @@ def api_debug_orders_summary():
 @app.route('/api/debug/find-transport-methods')
 def api_debug_find_transport_methods():
     """Specifically look for the endpoint that contains transport method data like in the user's example"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Based on the user's example showing transaction data with transport_method field
@@ -5235,7 +5296,7 @@ def api_debug_find_transport_methods():
 @app.route('/api/pricing/purchase-adjustments')
 def api_purchase_price_adjustments():
     """Get purchase price adjustments"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters
@@ -5265,7 +5326,7 @@ def api_purchase_price_adjustments():
 @app.route('/api/pricing/sales-adjustments')
 def api_sales_price_adjustments():
     """Get sales price adjustments"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     # Add pagination parameters
@@ -5295,7 +5356,7 @@ def api_sales_price_adjustments():
 @app.route('/api/companies/<int:company_id>/pricing')
 def api_company_pricing(company_id):
     """Get pricing adjustments for a specific company"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -5330,7 +5391,7 @@ def api_company_pricing(company_id):
 @app.route('/api/crm/companies', methods=['GET'])
 def api_get_crm_companies():
     """Get companies from Duano CRM"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -5402,7 +5463,7 @@ def _get_crm_companies_data():
 @app.route('/api/crm/search-vat/<vat_number>', methods=['GET'])
 def api_search_company_by_vat(vat_number):
     """Search company in CRM by VAT number"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -5428,7 +5489,7 @@ def api_search_company_by_vat(vat_number):
 @app.route('/api/crm/search-director/<director_name>', methods=['GET'])
 def api_search_director_in_crm(director_name):
     """Search for a director in CRM companies"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -5548,9 +5609,10 @@ def api_sync_2025_invoices():
     """
     Sync all 2025 sales invoices to Supabase.
     Fetches all invoices from 2025 and stores them in the sales_2025 table.
+    Admin only - requires DUANO authentication.
     """
-    if not is_token_valid():
-        return jsonify({'error': 'Not authenticated', 'success': False}), 401
+    if not is_admin():
+        return jsonify({'error': 'Admin access required', 'success': False}), 403
     
     try:
         from datetime import datetime
@@ -5729,7 +5791,7 @@ def api_sync_2025_invoices():
 @app.route('/api/sync-product-categories', methods=['POST'])
 def api_sync_product_categories():
     """Sync all product categories from Douano to Supabase."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -5796,7 +5858,7 @@ def api_sync_product_categories():
 @app.route('/api/sync-products', methods=['POST'])
 def api_sync_products():
     """Sync all products from Douano to Supabase."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -5887,7 +5949,7 @@ def api_sync_products():
 @app.route('/api/sync-price-lists', methods=['POST'])
 def api_sync_price_lists():
     """Sync all sales price lists from Douano to Supabase."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -5963,7 +6025,7 @@ def api_sync_price_lists():
 @app.route('/api/sync-product-prices', methods=['POST'])
 def api_sync_product_prices():
     """Sync all product prices (products in price lists) from Douano to Supabase."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -6060,7 +6122,7 @@ def api_sync_product_prices():
 @app.route('/api/sync-company-pricing', methods=['POST'])
 def api_sync_company_pricing():
     """Sync company-specific pricing (price lists and discounts) from Douano to Supabase."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -6167,7 +6229,7 @@ def api_sync_company_pricing():
 @app.route('/api/sync-all-products', methods=['POST'])
 def api_sync_all_products():
     """Convenience endpoint to sync all product-related data in sequence."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     if not supabase_client:
@@ -6441,11 +6503,13 @@ _background_task_running = False
 
 @app.route('/api/refresh-company-metrics', methods=['POST'])
 def api_refresh_company_metrics():
-    """Manually trigger recalculation of company metrics from invoice data - runs in background."""
+    """Manually trigger recalculation of company metrics from invoice data - runs in background.
+    Admin only.
+    """
     global _background_task_running
     
-    if not is_token_valid():
-        return jsonify({'error': 'Not authenticated'}), 401
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
     
     if _background_task_running:
         return jsonify({
@@ -6487,7 +6551,7 @@ def api_refresh_company_metrics():
 @app.route('/api/2025-sales-stats', methods=['GET'])
 def api_2025_sales_stats():
     """Get statistics about 2025 sales data in Supabase."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -6528,7 +6592,7 @@ def api_2025_sales_stats():
 @app.route('/sales-2024')
 def sales_2024():
     """2024 Sales Data page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('login'))
     
     return render_template('sales_2024.html')
@@ -6537,10 +6601,11 @@ def sales_2024():
 @app.route('/api/sync-2024-invoices', methods=['POST'])
 def api_sync_2024_invoices():
     """
-    Sync all 2024 invoices from Douano API to Supabase
+    Sync all 2024 invoices from Douano API to Supabase.
+    Admin only - requires DUANO authentication.
     """
-    if not is_token_valid():
-        return jsonify({'error': 'Not authenticated', 'success': False}), 401
+    if not is_admin():
+        return jsonify({'error': 'Admin access required', 'success': False}), 403
     
     try:
         # Fetch all 2024 invoices from Douano API
@@ -6672,7 +6737,7 @@ def api_sync_2024_invoices():
 @app.route('/api/2024-sales-stats', methods=['GET'])
 def api_2024_sales_stats():
     """Get statistics about 2024 sales data in Supabase."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -6713,8 +6778,8 @@ def api_2024_sales_stats():
 @app.route('/data')
 def data():
     """Unified Data Analysis page"""
-    if not is_token_valid():
-        return redirect(url_for('login'))
+    if not is_logged_in():
+        return redirect(url_for('index'))
     
     return render_template('data.html')
 
@@ -6722,7 +6787,7 @@ def data():
 @app.route('/retailer-details/<int:company_id>')
 def retailer_details(company_id):
     """Detailed analytics page for major retailers"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('login'))
     
     # Get year parameter
@@ -6744,7 +6809,7 @@ def safe_parse_aantal(value):
 @app.route('/api/ai-query-retailer', methods=['POST'])
 def api_ai_query_retailer():
     """AI-powered natural language queries for retailer data using Gemini."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -6885,15 +6950,15 @@ Please provide a clear, concise answer based on the data above. Include specific
 @app.route('/alerts')
 def alerts():
     """Pattern disruption alerts for sales team."""
-    if not is_token_valid():
-        return redirect(url_for('login'))
+    if not is_logged_in():
+        return redirect(url_for('index'))
     return render_template('alerts.html')
 
 
 @app.route('/api/2024-companies-analysis', methods=['GET'])
 def api_2024_companies_analysis():
     """Get detailed company analysis from 2024 sales data."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -7057,7 +7122,7 @@ def api_2024_companies_analysis():
 @app.route('/api/2025-companies-analysis', methods=['GET'])
 def api_2025_companies_analysis():
     """Get detailed company analysis from 2025 sales data."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -7219,7 +7284,7 @@ def api_2025_companies_analysis():
 @app.route('/api/companies-with-alerts', methods=['GET'])
 def api_companies_with_alerts():
     """Get companies with their active alerts for planning."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -7301,7 +7366,7 @@ def api_companies_from_db():
     Get companies data calculated DIRECTLY from invoice tables.
     No external API calls - pure database aggregation.
     """
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -7531,7 +7596,7 @@ def api_companies_from_db():
 @app.route('/api/company-invoices/<int:company_id>', methods=['GET'])
 def api_company_invoices(company_id):
     """Get all invoices for a specific company."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -7599,7 +7664,7 @@ def api_major_retailer_detailed(company_id):
     """Get AGGREGATED data for major retailers from their specialized databases.
     Returns summaries instead of raw data to avoid timeouts with 85k+ records.
     """
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -7783,7 +7848,7 @@ def api_major_retailer_detailed(company_id):
 @app.route('/api/major-retailer/<int:company_id>', methods=['GET'])
 def api_major_retailer_data(company_id):
     """Get detailed data for major retailers from their specialized databases."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -7962,7 +8027,7 @@ def api_get_alerts():
     Fetch stored alerts from database with optional filtering.
     Much faster than recalculating - use this for regular page loads.
     """
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -8067,7 +8132,7 @@ def api_refresh_alerts():
     Recalculate all alerts and update database.
     Use this for scheduled updates or manual refresh.
     """
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -8426,7 +8491,7 @@ def api_refresh_alerts():
 @app.route('/api/alerts/<int:alert_id>/dismiss', methods=['POST'])
 def api_dismiss_alert(alert_id):
     """Mark an alert as dismissed."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -8460,7 +8525,7 @@ def api_dismiss_alert(alert_id):
 @app.route('/api/alerts/<int:alert_id>/action', methods=['POST'])
 def api_action_alert(alert_id):
     """Mark an alert as actioned."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -8494,7 +8559,7 @@ def api_action_alert(alert_id):
 @app.route('/api/alerts/bulk-dismiss', methods=['POST'])
 def api_bulk_dismiss_alerts():
     """Dismiss multiple alerts at once."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -8530,7 +8595,7 @@ def api_bulk_dismiss_alerts():
 @app.route('/api/alerts/stats', methods=['GET'])
 def api_alert_stats():
     """Get alert statistics and history."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -8572,7 +8637,7 @@ def api_alert_stats():
 @app.route('/api/pattern-disruptions', methods=['GET'])
 def api_pattern_disruptions():
     """Detect companies with disrupted ordering patterns."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -8787,7 +8852,7 @@ def analyze_ordering_pattern(invoices, intervals, current_date):
 @app.route('/api/combined-companies-analysis', methods=['GET'])
 def api_combined_companies_analysis():
     """Get combined company analysis from both 2024 and 2025 sales data."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -8999,7 +9064,7 @@ def api_combined_companies_analysis():
 @app.route('/api/invoice-details/<year>/<int:invoice_id>', methods=['GET'])
 def api_invoice_details(year, invoice_id):
     """Get detailed invoice information including line items."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -9047,9 +9112,11 @@ def api_invoice_details(year, invoice_id):
 
 @app.route('/api/populate-companies-enhanced', methods=['POST'])
 def api_populate_companies_enhanced():
-    """Populate companies table with enhanced data from DOUANO API."""
-    if not is_token_valid():
-        return jsonify({'error': 'Not authenticated'}), 401
+    """Populate companies table with enhanced data from DOUANO API.
+    Admin only - requires DUANO authentication.
+    """
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
     
     try:
         if not supabase_client:
@@ -9361,9 +9428,11 @@ def api_populate_companies_enhanced():
 
 @app.route('/api/populate-companies', methods=['POST'])
 def api_populate_companies():
-    """Populate companies table from invoice data across all years."""
-    if not is_token_valid():
-        return jsonify({'error': 'Not authenticated'}), 401
+    """Populate companies table from invoice data across all years.
+    Admin only.
+    """
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
     
     try:
         if not supabase_client:
@@ -9610,7 +9679,7 @@ def api_populate_companies():
 @app.route('/api/companies-stats', methods=['GET'])
 def api_companies_stats():
     """Get statistics about companies in the database."""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -9984,7 +10053,7 @@ def api_update_prospect_notes(prospect_id):
 @app.route('/trips')
 def trips_page():
     """Render trips management page"""
-    if not is_token_valid():
+    if not is_logged_in():
         return redirect(url_for('index'))
     
     return render_template('trips.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
@@ -9993,7 +10062,7 @@ def trips_page():
 @app.route('/api/trips', methods=['GET'])
 def get_trips():
     """Get all trips"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -10031,7 +10100,7 @@ def get_trips():
 @app.route('/api/trips/<trip_id>', methods=['GET'])
 def get_trip(trip_id):
     """Get a single trip with all its stops"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -10064,7 +10133,7 @@ def get_trip(trip_id):
 @app.route('/api/trips', methods=['POST'])
 def create_trip():
     """Create a new trip with optimized route"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -10184,7 +10253,7 @@ def create_trip():
 @app.route('/api/geocode-companies', methods=['POST'])
 def geocode_all_companies():
     """Geocode all companies that don't have coordinates yet"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -10285,7 +10354,7 @@ def geocode_all_companies():
 @app.route('/api/trips/<trip_id>', methods=['PUT'])
 def update_trip(trip_id):
     """Update trip details"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -10324,7 +10393,7 @@ def update_trip(trip_id):
 @app.route('/api/trips/<trip_id>', methods=['DELETE'])
 def delete_trip(trip_id):
     """Delete a trip (and all its stops via CASCADE)"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -10346,7 +10415,7 @@ def delete_trip(trip_id):
 @app.route('/api/trips/<trip_id>/stops/<stop_id>', methods=['DELETE'])
 def delete_trip_stop(trip_id, stop_id):
     """Delete a stop from a trip and reorder remaining stops"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -10388,7 +10457,7 @@ def delete_trip_stop(trip_id, stop_id):
 @app.route('/api/trips/<trip_id>/optimize', methods=['POST'])
 def reoptimize_trip(trip_id):
     """Re-optimize an existing trip's route"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
@@ -10499,7 +10568,7 @@ def api_test_sync():
 @app.route('/api/test-duano-speed', methods=['GET'])
 def api_test_duano_speed():
     """Test how fast DUANO API responds"""
-    if not is_token_valid():
+    if not is_logged_in():
         return jsonify({'error': 'Not authenticated', 'success': False}), 401
     
     try:

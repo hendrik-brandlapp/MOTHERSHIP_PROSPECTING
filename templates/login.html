@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connect to CRMinal</title>
+    <title>CRMinal - Login</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -13,7 +13,7 @@
     <div class="content">
         <!-- Logo -->
         <div class="logo">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg width="64" height="64" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <rect width="48" height="48" rx="12" fill="url(#gradient)"/>
                 <path d="M14 18H34V30H14V18Z" stroke="white" stroke-width="2" stroke-linecap="round"/>
                 <path d="M19 22H29" stroke="white" stroke-width="2" stroke-linecap="round"/>
@@ -29,14 +29,47 @@
 
         <!-- Title -->
         <h1 class="title">CRMinal</h1>
+        <p class="subtitle">Select your profile to continue</p>
         
-        <!-- CTA Button -->
-        <a href="{{ url_for('login') }}" class="connect-btn">
-            <span>Connect to CRMinal</span>
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M4.16667 10H15.8333M15.8333 10L10.8333 5M15.8333 10L10.8333 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+        <!-- Sales Rep Selection -->
+        <div class="user-grid">
+            <button class="user-card" onclick="loginAsSalesRep('Caitlin')">
+                <div class="user-avatar" style="background: linear-gradient(135deg, #EC4899, #F472B6);">
+                    <i class="fas fa-user"></i>
+                </div>
+                <span class="user-name">Caitlin</span>
+                <span class="user-role">Sales Rep</span>
+            </button>
+            
+            <button class="user-card" onclick="loginAsSalesRep('Kesha')">
+                <div class="user-avatar" style="background: linear-gradient(135deg, #10B981, #34D399);">
+                    <i class="fas fa-user"></i>
+                </div>
+                <span class="user-name">Kesha</span>
+                <span class="user-role">Sales Rep</span>
+            </button>
+            
+            <button class="user-card" onclick="loginAsSalesRep('Django')">
+                <div class="user-avatar" style="background: linear-gradient(135deg, #F59E0B, #FBBF24);">
+                    <i class="fas fa-user"></i>
+                </div>
+                <span class="user-name">Django</span>
+                <span class="user-role">Sales Rep</span>
+            </button>
+        </div>
+        
+        <!-- Divider -->
+        <div class="divider">
+            <span>or</span>
+        </div>
+        
+        <!-- Admin Login -->
+        <a href="{{ url_for('admin_login') }}" class="admin-btn">
+            <i class="fas fa-shield-halved me-2"></i>
+            <span>Admin Login</span>
+            <i class="fas fa-arrow-right ms-2"></i>
         </a>
+        <p class="admin-note">Admin login requires DUANO authentication</p>
     </div>
 
     <!-- Background -->
@@ -69,18 +102,19 @@ body {
     text-align: center;
     z-index: 2;
     position: relative;
+    padding: 20px;
 }
 
 .logo {
-    margin-bottom: 32px;
+    margin-bottom: 24px;
     animation: float 6s ease-in-out infinite;
 }
 
 .title {
-    font-size: 4rem;
+    font-size: 3.5rem;
     font-weight: 900;
     color: white;
-    margin-bottom: 60px;
+    margin-bottom: 8px;
     letter-spacing: -0.02em;
     background: linear-gradient(135deg, #FFFFFF 0%, #E2E8F0 100%);
     -webkit-background-clip: text;
@@ -88,50 +122,107 @@ body {
     background-clip: text;
 }
 
-.connect-btn {
-    display: inline-flex;
+.subtitle {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1.1rem;
+    margin-bottom: 40px;
+}
+
+.user-grid {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+}
+
+.user-card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 24px 32px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 12px;
-    padding: 18px 36px;
-    background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+    min-width: 140px;
+}
+
+.user-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(99, 102, 241, 0.5);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(99, 102, 241, 0.2);
+}
+
+.user-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
     color: white;
-    text-decoration: none;
-    border-radius: 12px;
+}
+
+.user-name {
+    color: white;
     font-weight: 600;
     font-size: 1.1rem;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 8px 32px rgba(99, 102, 241, 0.3);
 }
 
-.connect-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 40px rgba(99, 102, 241, 0.4);
+.user-role {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    margin: 24px 0;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.divider span {
+    padding: 0 16px;
+    font-size: 0.9rem;
+}
+
+.admin-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 14px 28px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: none;
+    border-radius: 10px;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.admin-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.3);
     color: white;
 }
 
-.connect-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-    transition: left 0.5s;
-}
-
-.connect-btn:hover::before {
-    left: 100%;
-}
-
-.connect-btn svg {
-    transition: transform 0.3s ease;
-}
-
-.connect-btn:hover svg {
-    transform: translateX(4px);
+.admin-note {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.8rem;
+    margin-top: 12px;
 }
 
 .bg-gradient {
@@ -148,65 +239,40 @@ body {
 }
 
 @keyframes float {
-    0%, 100% {
-        transform: translateY(0px);
-    }
-    50% {
-        transform: translateY(-10px);
-    }
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
 }
 
 @keyframes gradientShift {
-    0%, 100% {
-        opacity: 0.6;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.8;
-        transform: scale(1.1);
-    }
+    0%, 100% { opacity: 0.6; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.1); }
 }
 
 /* Mobile */
 @media (max-width: 768px) {
-    .title {
-        font-size: 3rem;
-    }
-    
-    .connect-btn {
-        padding: 16px 28px;
-        font-size: 1rem;
-    }
-}
-
-@media (max-width: 480px) {
-    .title {
-        font-size: 2.5rem;
-    }
-}
-
-/* Accessibility */
-@media (prefers-reduced-motion: reduce) {
-    .logo,
-    .bg-gradient {
-        animation: none;
-    }
-    
-    .connect-btn {
-        transition: none;
-    }
-}
-
-@media (prefers-contrast: high) {
-    .login-page {
-        background: #000;
-    }
-    
-    .connect-btn {
-        background: #0066CC;
-    }
+    .title { font-size: 2.5rem; }
+    .user-grid { flex-direction: column; align-items: center; }
+    .user-card { width: 100%; max-width: 200px; }
 }
 </style>
+
+<script>
+function loginAsSalesRep(name) {
+    // Submit form to backend
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/login-sales-rep';
+    
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'name';
+    input.value = name;
+    
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+}
+</script>
 
 </body>
 </html>

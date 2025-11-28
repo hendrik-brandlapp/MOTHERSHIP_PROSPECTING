@@ -957,7 +957,7 @@
             </div>
             
             <nav class="sidebar-nav">
-                    {% if session.access_token %}
+                    {% if session.user_role %}
                 <div class="nav-section">
                     <div class="nav-section-title">Main</div>
                     <a href="{{ url_for('data') }}" class="nav-item">
@@ -997,8 +997,18 @@
                     {% endif %}
             </nav>
                 
-                    {% if session.access_token %}
+                    {% if session.user_role %}
             <div style="padding: var(--space-md); border-top: 1px solid var(--border-subtle);">
+                <!-- User info -->
+                <div class="user-info mb-2" style="padding: 8px 12px; background: var(--bg-hover); border-radius: 8px;">
+                    <small style="color: var(--text-secondary);">Logged in as</small>
+                    <div style="font-weight: 600; color: var(--text-primary);">
+                        {{ session.user_name }}
+                        {% if session.user_role == 'admin' %}
+                        <span class="badge bg-primary ms-1" style="font-size: 0.65rem;">Admin</span>
+                        {% endif %}
+                    </div>
+                </div>
                 <a href="{{ url_for('logout') }}" class="nav-item">
                     <i class="fas fa-sign-out-alt"></i>
                     <span>Logout</span>
