@@ -790,7 +790,14 @@ async function syncLatestData() {
             document.getElementById('sync-results').innerHTML = `
                 <div class="alert alert-danger">
                     <h5><i class="fas fa-exclamation-triangle me-2"></i>Sync Failed</h5>
-                    <p class="mb-0">${result.error || result.message || 'Unknown error'}</p>
+                    <p class="mb-2"><strong>${result.error || result.message || 'Unknown error'}</strong></p>
+                    ${result.error_type ? `<p class="mb-1"><small><strong>Error Type:</strong> ${result.error_type}</small></p>` : ''}
+                    ${result.details ? `
+                        <details class="mt-2">
+                            <summary class="cursor-pointer text-muted small">Technical Details (click to expand)</summary>
+                            <pre class="mt-2 p-2 bg-light border rounded small" style="max-height: 200px; overflow-y: auto;">${escapeHtml(result.details)}</pre>
+                        </details>
+                    ` : ''}
                 </div>
             `;
         }

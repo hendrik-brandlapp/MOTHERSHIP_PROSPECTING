@@ -5593,10 +5593,16 @@ def api_sync_2025_invoices():
                 'order_by_date': 'desc'
             }
             
+            print(f"📡 Fetching page {page} with params: {params}")
             data, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
             
             if error:
-                return jsonify({'error': f'Failed to fetch invoices: {error}'}), 500
+                print(f"❌ API Error: {error}")
+                return jsonify({
+                    'error': f'Failed to fetch invoices: {error}',
+                    'success': False,
+                    'details': str(error)
+                }), 500
             
             invoices = data.get('result', {}).get('data', [])
             
@@ -5705,8 +5711,15 @@ def api_sync_2025_invoices():
         return jsonify(result)
         
     except Exception as e:
-        print(f"❌ Error in sync: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"❌ FATAL ERROR in sync: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'error': str(e),
+            'success': False,
+            'error_type': type(e).__name__,
+            'details': traceback.format_exc()
+        }), 500
 
 
 # =====================================================
