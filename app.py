@@ -7302,9 +7302,12 @@ def api_companies_from_db():
             return jsonify({'error': 'Supabase not configured'}), 500
         
         year_filter = request.args.get('year', '2025')
+        print(f"📊 Loading companies from invoices for year: {year_filter}")
         
         # Step 1: Fetch ALL invoices from the database (fast - data already there)
         all_invoices = []
+        invoices_2025_count = 0
+        invoices_2024_count = 0
         
         if year_filter in ['2025', 'combined']:
             # Fetch all 2025 invoices in batches
@@ -7316,10 +7319,13 @@ def api_companies_from_db():
                 ).range(offset, offset + batch_size - 1).execute()
                 if not result.data:
                     break
+                batch_count = len(result.data)
+                invoices_2025_count += batch_count
                 for inv in result.data:
                     inv['year'] = '2025'
                 all_invoices.extend(result.data)
-                if len(result.data) < batch_size:
+                print(f"  📄 Fetched 2025 batch: {batch_count} invoices (total: {invoices_2025_count})")
+                if batch_count < batch_size:
                     break
                 offset += batch_size
         
@@ -7333,12 +7339,17 @@ def api_companies_from_db():
                 ).range(offset, offset + batch_size - 1).execute()
                 if not result.data:
                     break
+                batch_count = len(result.data)
+                invoices_2024_count += batch_count
                 for inv in result.data:
                     inv['year'] = '2024'
                 all_invoices.extend(result.data)
-                if len(result.data) < batch_size:
+                print(f"  📄 Fetched 2024 batch: {batch_count} invoices (total: {invoices_2024_count})")
+                if batch_count < batch_size:
                     break
                 offset += batch_size
+        
+        print(f"✅ Total invoices loaded: {len(all_invoices)} (2024: {invoices_2024_count}, 2025: {invoices_2025_count})")
         
         # Step 2: Aggregate invoices by company (pure Python - very fast)
         company_metrics = {}
@@ -7464,16 +7475,21 @@ def api_companies_from_db():
         # Sort by revenue descending
         companies_list.sort(key=lambda x: x['total_revenue'], reverse=True)
         
+        print(f"✅ Returning {len(companies_list)} companies, {total_invoices} invoices, €{round(total_revenue, 2)} revenue")
+        
         return jsonify({
             'companies': companies_list,
             'total_companies': len(companies_list),
             'total_revenue': round(total_revenue, 2),
             'total_invoices': total_invoices,
-            'year_filter': year_filter
+            'year_filter': year_filter,
+            'debug_raw_invoice_count': len(all_invoices)
         })
         
     except Exception as e:
-        print(f"Error in companies from DB: {e}")
+        print(f"❌ Error in companies from DB: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
