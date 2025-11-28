@@ -7315,7 +7315,7 @@ def api_companies_from_db():
             batch_size = 1000
             while True:
                 result = supabase_client.table('sales_2025').select(
-                    'company_id, company_name, total_amount, date, vat_number'
+                    'company_id, company_name, total_amount, invoice_date, invoice_data'
                 ).range(offset, offset + batch_size - 1).execute()
                 if not result.data:
                     break
@@ -7335,7 +7335,7 @@ def api_companies_from_db():
             batch_size = 1000
             while True:
                 result = supabase_client.table('sales_2024').select(
-                    'company_id, company_name, total_amount, date, vat_number'
+                    'company_id, company_name, total_amount, invoice_date, invoice_data'
                 ).range(offset, offset + batch_size - 1).execute()
                 if not result.data:
                     break
@@ -7359,10 +7359,15 @@ def api_companies_from_db():
                 continue
             
             if cid not in company_metrics:
+                # Get VAT from invoice_data if available
+                invoice_data = inv.get('invoice_data') or {}
+                company_info = invoice_data.get('company') or {}
+                vat_number = company_info.get('vat_number')
+                
                 company_metrics[cid] = {
                     'company_id': cid,
                     'name': inv.get('company_name', 'Unknown'),
-                    'vat_number': inv.get('vat_number'),
+                    'vat_number': vat_number,
                     'total_revenue': 0.0,
                     'invoice_count': 0,
                     'invoices': [],
@@ -7375,7 +7380,7 @@ def api_companies_from_db():
             amount = float(inv.get('total_amount') or 0)
             company_metrics[cid]['total_revenue'] += amount
             company_metrics[cid]['invoice_count'] += 1
-            company_metrics[cid]['invoices'].append(inv.get('date'))
+            company_metrics[cid]['invoices'].append(inv.get('invoice_date'))
             
             # Track by year
             if inv.get('year') == '2024':
