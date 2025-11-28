@@ -5452,11 +5452,11 @@ def api_search_director_in_crm(director_name):
         return jsonify({'error': str(e)}), 500
 
 
-def recalculate_company_metrics_from_invoices(company_ids=None, max_companies=100):
+def recalculate_company_metrics_from_invoices(company_ids=None, max_companies=9999):
     """
     Recalculate company aggregates (revenue, invoice counts) from invoice tables.
     If company_ids is provided, only update those companies.
-    max_companies limits processing to avoid timeout (default 100).
+    max_companies limits processing (default 9999 = all).
     """
     if not supabase_client:
         return False
@@ -5477,8 +5477,9 @@ def recalculate_company_metrics_from_invoices(company_ids=None, max_companies=10
                 except Exception as e:
                     print(f"Error fetching company IDs from {year}: {e}")
         
-        company_list = list(company_ids)[:max_companies]  # Limit to avoid timeout
-        print(f"📊 Recalculating metrics for {len(company_list)} companies (limited from {len(company_ids)})...")
+        company_list = list(company_ids)[:max_companies]
+        total_companies = len(company_list)
+        print(f"📊 Recalculating metrics for {total_companies} companies...")
         updated_count = 0
         
         for company_id in company_list:
@@ -6438,26 +6439,31 @@ def api_sync_all_products():
 
 @app.route('/api/refresh-company-metrics', methods=['POST'])
 def api_refresh_company_metrics():
-    """Manually trigger recalculation of company metrics from invoice data."""
+    """Manually trigger recalculation of company metrics from invoice data - runs in background."""
     if not is_token_valid():
         return jsonify({'error': 'Not authenticated'}), 401
     
     try:
-        print("🔄 Manual company metrics refresh triggered...")
-        # Limit to 100 companies per call to avoid timeout
-        # User can call multiple times to process all companies
-        success = recalculate_company_metrics_from_invoices(max_companies=100)
+        import threading
         
-        if success:
-            return jsonify({
-                'success': True,
-                'message': 'Company metrics recalculated for batch of companies (max 100 per call)'
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Failed to recalculate company metrics'
-            }), 500
+        print("🔄 Starting background company metrics refresh...")
+        
+        # Run in background thread
+        def background_metrics_update():
+            try:
+                recalculate_company_metrics_from_invoices(max_companies=9999)  # Process all
+                print("✅ Background metrics update complete!")
+            except Exception as e:
+                print(f"❌ Background metrics update failed: {e}")
+        
+        thread = threading.Thread(target=background_metrics_update)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Metrics recalculation started in background. This will take 2-3 minutes to process all companies.'
+        })
     
     except Exception as e:
         print(f"Error refreshing company metrics: {e}")
