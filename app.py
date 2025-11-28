@@ -5566,16 +5566,17 @@ def api_sync_2025_invoices():
         print("🚀 Starting 2025 invoice sync...")
         sync_start = time_module.time()
         
-        # Fetch 2025 invoices - single direct request first to test
+        # Fetch only NEW invoices since last sync (2025-11-06)
+        # This is much faster than fetching all 3000+ invoices
         all_invoices = []
         page = 1
-        per_page = 50  # Smaller batch for faster response
+        per_page = 100  # Can use larger batches now
         
         while True:
             params = {
                 'per_page': per_page,
                 'page': page,
-                'filter_by_start_date': '2025-01-01',
+                'filter_by_start_date': '2025-11-06',  # Last sync date
                 'filter_by_end_date': '2025-12-31',
                 'order_by_date': 'desc'
             }
@@ -5623,12 +5624,6 @@ def api_sync_2025_invoices():
             
             all_invoices.extend(invoices)
             print(f"📄 Page {page}: {len(invoices)} invoices (Total: {len(all_invoices)})")
-            
-            # Check if we should continue
-            total_time = time_module.time() - sync_start
-            if total_time > 90:  # Stop after 90 seconds to avoid timeout
-                print(f"⚠️ Stopping after {total_time:.0f}s to avoid timeout")
-                break
             
             # Check pagination
             current_page = data.get('result', {}).get('current_page', page)
@@ -5716,7 +5711,7 @@ def api_sync_2025_invoices():
             'saved': saved_count,
             'updated': updated_count,
             'errors': error_count,
-            'message': f'Successfully synced {saved_count + updated_count} invoices'
+            'message': f'Successfully synced {saved_count + updated_count} invoices (since Nov 6, 2025)'
         }
         
         print(f"✅ Sync complete: {result}")
