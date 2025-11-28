@@ -5624,7 +5624,8 @@ def api_sync_2025_invoices():
             print(f"📡 Fetching page {page} with params: {params}")
             page_start_time = time.time()
             
-            data, error = make_paginated_api_request('/api/public/v1/trade/sales-invoices', params=params)
+            # Use direct API call instead of paginated wrapper for better timeout control
+            data, error = make_api_request('/api/public/v1/trade/sales-invoices', params=params)
             
             page_duration = time.time() - page_start_time
             
