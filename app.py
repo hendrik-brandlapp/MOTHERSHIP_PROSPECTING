@@ -7250,7 +7250,7 @@ def api_companies_with_alerts():
             company_alerts_map[company_id].append({
                 'id': alert.get('id'),
                 'alert_type': alert.get('alert_type'),
-                'priority': alert.get('priority'),
+                'priority': alert.get('priority', '').lower() if alert.get('priority') else 'low',
                 'description': alert.get('description'),
                 'recommendation': alert.get('recommendation'),
                 'created_at': alert.get('created_at')
@@ -7263,8 +7263,8 @@ def api_companies_with_alerts():
                 company['alerts'] = company_alerts_map[company_id]
                 company['has_alerts'] = True
                 company['alert_count'] = len(company_alerts_map[company_id])
-                # Get highest priority
-                priorities = [a['priority'] for a in company_alerts_map[company_id]]
+                # Get highest priority (normalize to lowercase for frontend)
+                priorities = [a['priority'].lower() if a['priority'] else 'low' for a in company_alerts_map[company_id]]
                 if 'critical' in priorities:
                     company['highest_priority'] = 'critical'
                 elif 'high' in priorities:

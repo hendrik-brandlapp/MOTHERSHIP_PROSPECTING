@@ -1131,8 +1131,19 @@ function renderCategoryTags() {
         return;
     }
     
+    // Render action buttons
+    optionsContainer.innerHTML = `
+        <div class="d-flex gap-2 p-2 border-bottom">
+            <button class="btn btn-sm btn-outline-success flex-fill" onclick="selectAllCategories()">
+                <i class="fas fa-check-double me-1"></i>Select All
+            </button>
+            <button class="btn btn-sm btn-outline-danger flex-fill" onclick="deselectAllCategories()">
+                <i class="fas fa-times me-1"></i>Deselect All
+            </button>
+        </div>
+    `;
+    
     // Render options in dropdown
-    optionsContainer.innerHTML = '';
     categories.forEach(category => {
         const state = categoryStates[category];
         const stateClass = state === 'excluded' ? 'excluded' : 'included';
@@ -1254,6 +1265,22 @@ function toggleCategory(category) {
         categoryStates[category] = 'included';
     }
     
+    renderCategoryTags();
+    filterCompanies();
+}
+
+function selectAllCategories() {
+    Object.keys(categoryStates).forEach(cat => {
+        categoryStates[cat] = 'included';
+    });
+    renderCategoryTags();
+    filterCompanies();
+}
+
+function deselectAllCategories() {
+    Object.keys(categoryStates).forEach(cat => {
+        categoryStates[cat] = 'excluded';
+    });
     renderCategoryTags();
     filterCompanies();
 }

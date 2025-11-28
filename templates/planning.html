@@ -296,6 +296,15 @@
                 </select>
             </div>
 
+            <!-- Category Filter -->
+            <div class="category-filters mb-3" style="padding: 0 1rem;">
+                <label class="form-label small fw-bold mb-2"><i class="fas fa-tags me-1"></i>Filter by Category</label>
+                <select class="form-select form-select-sm" id="category-filter" onchange="applyAlertFilter()">
+                    <option value="">All Categories</option>
+                </select>
+                <div class="mt-2 d-flex gap-1 flex-wrap" id="category-badges"></div>
+            </div>
+
             <!-- Companies List -->
             <div id="companies-list">
                 <div class="text-center py-5 text-muted">
@@ -517,6 +526,7 @@ async function loadCompaniesData() {
         filteredCompanies = [...companies];
         displayCompaniesList();
         updateAlertCounts();
+        populateCategoryFilter();
         
         // Also load prospects
         await loadProspectsData();
@@ -1514,6 +1524,66 @@ function updateAlertCounts() {
     document.getElementById('all-alerts-count').textContent = allAlerts;
 }
 
+// Extract categories from company data (same logic as data page)
+function getCompanyCategories(company) {
+    // Try raw_company_data first
+    if (company.raw_company_data && company.raw_company_data.company_categories) {
+        if (Array.isArray(company.raw_company_data.company_categories)) {
+            return company.raw_company_data.company_categories.map(cat => cat.name || cat);
+        }
+    }
+    
+    // Fallback: try direct company_categories field
+    if (company.company_categories) {
+        if (Array.isArray(company.company_categories)) {
+            return company.company_categories.map(cat => cat.name || cat);
+        }
+    }
+    
+    return [];
+}
+
+function populateCategoryFilter() {
+    const categoryFilter = document.getElementById('category-filter');
+    const categoryBadges = document.getElementById('category-badges');
+    if (!categoryFilter) return;
+    
+    // Extract all unique categories
+    const categorySet = new Set();
+    companies.forEach(company => {
+        const cats = getCompanyCategories(company);
+        cats.forEach(cat => categorySet.add(cat));
+    });
+    
+    const sortedCategories = Array.from(categorySet).sort();
+    
+    // Populate dropdown
+    categoryFilter.innerHTML = '<option value="">All Categories</option>';
+    sortedCategories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        categoryFilter.appendChild(option);
+    });
+    
+    // Show badges with counts
+    if (categoryBadges) {
+        categoryBadges.innerHTML = '';
+        sortedCategories.slice(0, 6).forEach(cat => {
+            const count = companies.filter(c => getCompanyCategories(c).includes(cat)).length;
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-secondary';
+            badge.style.cursor = 'pointer';
+            badge.textContent = `${cat} (${count})`;
+            badge.onclick = () => {
+                categoryFilter.value = cat;
+                applyAlertFilter();
+            };
+            categoryBadges.appendChild(badge);
+        });
+    }
+}
+
 function toggleAlertFilter(priority) {
     // Toggle the filter
     if (activeAlertFilter === priority) {
@@ -1551,6 +1621,8 @@ function applyAlertFilter() {
     const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
     const alertTypeFilter = document.getElementById('alert-type-filter');
     const selectedAlertType = alertTypeFilter ? alertTypeFilter.value : '';
+    const categoryFilter = document.getElementById('category-filter');
+    const selectedCategory = categoryFilter ? categoryFilter.value : '';
     
     filteredCompanies = companies.filter(company => {
         // Apply alert priority filter
@@ -1560,6 +1632,12 @@ function applyAlertFilter() {
             } else {
                 if (company.highest_priority !== activeAlertFilter) return false;
             }
+        }
+        
+        // Apply category filter
+        if (selectedCategory) {
+            const companyCategories = getCompanyCategories(company);
+            if (!companyCategories.includes(selectedCategory)) return false;
         }
         
         // Apply alert type filter
