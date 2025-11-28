@@ -6438,23 +6438,37 @@ def api_sync_all_products():
 
 
 @app.route('/api/refresh-company-metrics', methods=['POST'])
+_background_task_running = False
+
 def api_refresh_company_metrics():
     """Manually trigger recalculation of company metrics from invoice data - runs in background."""
+    global _background_task_running
+    
     if not is_token_valid():
         return jsonify({'error': 'Not authenticated'}), 401
+    
+    if _background_task_running:
+        return jsonify({
+            'success': False,
+            'message': 'A background task is already running. Please wait for it to complete.'
+        }), 429
     
     try:
         import threading
         
         print("🔄 Starting background company metrics refresh...")
+        _background_task_running = True
         
         # Run in background thread
         def background_metrics_update():
+            global _background_task_running
             try:
                 recalculate_company_metrics_from_invoices(max_companies=9999)  # Process all
                 print("✅ Background metrics update complete!")
             except Exception as e:
                 print(f"❌ Background metrics update failed: {e}")
+            finally:
+                _background_task_running = False
         
         thread = threading.Thread(target=background_metrics_update)
         thread.daemon = True
@@ -6462,7 +6476,7 @@ def api_refresh_company_metrics():
         
         return jsonify({
             'success': True,
-            'message': 'Metrics recalculation started in background. This will take 2-3 minutes to process all companies.'
+            'message': 'Metrics recalculation started in background. This will take 2-3 minutes. Do NOT click other buttons while it runs.'
         })
     
     except Exception as e:
