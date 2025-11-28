@@ -442,14 +442,6 @@ def oauth_callback():
             
     except Exception as e:
         flash(f"Login error: {str(e)}", 'error')
-        return redirect(url_for('index'))
-
-
-@app.route('/logout')
-def logout():
-    """Logout user"""
-    session.clear()
-    flash("Successfully logged out", 'info')
     return redirect(url_for('index'))
 
 
