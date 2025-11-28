@@ -5600,17 +5600,24 @@ def api_sync_2025_invoices():
         print(f"Token valid: {is_token_valid()}")
         print(f"Supabase client: {supabase_client is not None}")
         
-        # Fetch all 2025 invoices with pagination
+        # Fetch recent 2025 invoices with pagination (smaller batches to avoid timeout)
         all_invoices = []
         page = 1
-        per_page = 100
+        per_page = 25  # Smaller batch size for faster response
+        
+        # Only sync last 30 days to avoid timeout (Render has 30s proxy limit)
+        from datetime import datetime, timedelta
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30)
+        
+        print(f"📅 Syncing invoices from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
         
         while True:
             params = {
                 'per_page': per_page,
                 'page': page,
-                'filter_by_start_date': '2025-01-01',
-                'filter_by_end_date': '2025-12-31',
+                'filter_by_start_date': start_date.strftime('%Y-%m-%d'),
+                'filter_by_end_date': end_date.strftime('%Y-%m-%d'),
                 'order_by_date': 'desc'
             }
             
@@ -5726,7 +5733,7 @@ def api_sync_2025_invoices():
             'saved': saved_count,
             'updated': updated_count,
             'errors': error_count,
-            'message': f'Successfully synced {saved_count + updated_count} invoices'
+            'message': f'Successfully synced {saved_count + updated_count} invoices from the last 30 days'
         }
         
         print(f"✅ Sync complete: {result}")
