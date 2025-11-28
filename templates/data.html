@@ -606,9 +606,32 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     } else {
-        loadData();
+        loadData().then(() => {
+            // Check if there's a company parameter in URL to auto-open
+            checkUrlForCompany();
+        });
     }
 });
+
+// Check URL for company parameter and open the company panel
+function checkUrlForCompany() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const companyId = urlParams.get('company');
+    
+    if (companyId) {
+        // Wait a bit for data to load, then find and show the company
+        setTimeout(() => {
+            const company = allCompanies.find(c => c.company_id == companyId || c.id == companyId);
+            if (company) {
+                showCompanyDetails(company.id);
+            } else {
+                console.warn('Company not found:', companyId);
+            }
+            // Clean up the URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }, 500);
+    }
+}
 
 async function changeYear(year) {
     currentYear = year;
