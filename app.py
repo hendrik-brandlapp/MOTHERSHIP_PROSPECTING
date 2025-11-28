@@ -7229,10 +7229,17 @@ def api_companies_with_alerts():
         # Get all companies
         companies_result = supabase_client.table('companies').select('*').execute()
         companies = companies_result.data if companies_result.data else []
+        print(f"📊 Found {len(companies)} companies")
         
         # Get all active alerts
         alerts_result = supabase_client.table('customer_alerts').select('*').eq('status', 'active').execute()
         alerts = alerts_result.data if alerts_result.data else []
+        print(f"🔔 Found {len(alerts)} active alerts")
+        
+        # Debug: Show sample alert priorities
+        if alerts:
+            priorities = set(a.get('priority') for a in alerts[:10])
+            print(f"📋 Sample alert priorities: {priorities}")
         
         # Create a map of company_id to alerts
         company_alerts_map = {}
@@ -7414,7 +7421,8 @@ def api_companies_from_db():
         try:
             comp_result = supabase_client.table('companies').select(
                 'company_id, email, phone_number, website, latitude, longitude, '
-                'city, country_name, address_line1, post_code, company_tag'
+                'city, country_name, address_line1, post_code, company_tag, '
+                'company_categories, raw_company_data'
             ).execute()
             if comp_result.data:
                 for c in comp_result.data:
@@ -7462,6 +7470,9 @@ def api_companies_from_db():
                 'phone': details.get('phone_number'),
                 'website': details.get('website'),
                 'company_tag': details.get('company_tag'),
+                # Categories for filtering
+                'company_categories': details.get('company_categories'),
+                'raw_company_data': details.get('raw_company_data'),
                 # Geocoding
                 'latitude': details.get('latitude'),
                 'longitude': details.get('longitude'),
