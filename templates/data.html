@@ -1886,6 +1886,7 @@ async function loadCompanyInvoicesV2(companyId) {
         console.error('Error loading invoices:', error);
         document.getElementById('invoices-list-container').innerHTML = '<div class="p-3 text-danger text-center">Error loading invoices</div>';
     }
+}
 
 function openCompanyPanel() {
     document.getElementById('companyPanel').classList.add('show');
