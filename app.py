@@ -10917,7 +10917,7 @@ Context: Viewing {context.get('currentYear', '2025')} data, {context.get('totalC
             tools=tools,
             tool_choice="auto",
             temperature=0.5,
-            max_tokens=16000
+            max_completion_tokens=16000
         )
         
         response_message = response.choices[0].message
@@ -10953,7 +10953,7 @@ Context: Viewing {context.get('currentYear', '2025')} data, {context.get('totalC
                 model="gpt-5.1",
                 messages=messages,
                 temperature=0.5,
-                max_tokens=16000
+                max_completion_tokens=16000
             )
             
             ai_response = final_response.choices[0].message.content
