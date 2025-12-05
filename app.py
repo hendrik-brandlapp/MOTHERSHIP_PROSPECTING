@@ -10871,27 +10871,33 @@ def api_ai_chat():
         current_month = current_date.month
         current_year_num = current_date.year
         
-        system_prompt = f"""You are a helpful sales analytics assistant for YUGEN, a Belgian kombucha beverage company.
-You help sales reps analyze their company and invoice data using the available tools.
+        system_prompt = f"""You are a precise sales analytics assistant for YUGEN, a Belgian kombucha beverage company.
+You MUST use the available tools to fetch real data before answering ANY question about numbers, revenue, customers, or invoices.
 
 TODAY'S DATE: {current_date.strftime('%Y-%m-%d')} (December 2025)
 Current month number: {current_month}
 
-IMPORTANT TOOL USAGE:
-- For "revenue this month" or "November revenue": use get_revenue_by_period with year="2025" and month=11
-- For "largest orders this month": use get_top_invoices with year="2025" and month=11
-- For "new customers this month": use query_companies with first_invoice_after="2025-11-01" and first_invoice_before="2025-12-01"
-- For "top customers": use query_companies with order_by="total_revenue_all_time" and order_desc=true
-- For product sales: use get_summary_stats with stat_type="top_products_2025"
+CRITICAL RULES:
+1. NEVER make up numbers or estimates - ALWAYS call a tool first
+2. If a tool returns data, use ONLY those exact numbers in your response
+3. If a tool returns an error or empty data, say "I couldn't retrieve that data" - don't guess
+4. When asked about "this month" in December 2025, use month=12. For November, use month=11
 
-GUIDELINES:
-1. ALWAYS use the tools to fetch real data - don't make up numbers
-2. Keep responses concise and conversational 
-3. Format currency as €X.XXX,XX (Belgian format)
-4. Summarize key insights from the data
-5. If data shows errors or empty results, explain what might be wrong
+TOOL MAPPING:
+- "What is our revenue for [month]?" → get_revenue_by_period(year="2025", month=X)
+- "Top/biggest invoices/orders" → get_top_invoices(year="2025", month=X, limit=10)
+- "New customers this month" → query_companies(first_invoice_after="2025-11-01", first_invoice_before="2025-12-01", order_by="first_invoice_date", limit=20)
+- "Top customers by revenue" → query_companies(order_by="total_revenue_all_time", order_desc=true, limit=10)
+- "Best selling products" → get_summary_stats(stat_type="top_products_2025")
+- "Total revenue 2025" → get_summary_stats(stat_type="total_revenue_2025")
+- "How many customers" → get_summary_stats(stat_type="total_companies")
 
-Current viewing context: {context.get('currentYear', '2025')} year, {context.get('totalCompanies', 0)} total companies
+RESPONSE FORMAT:
+- Use Belgian number format: €1.234,56
+- Be concise but include the actual data
+- List results clearly when showing multiple items
+
+Context: Viewing {context.get('currentYear', '2025')} data, {context.get('totalCompanies', 0)} companies in database
 """
 
         # Build messages for OpenAI
@@ -10910,8 +10916,8 @@ Current viewing context: {context.get('currentYear', '2025')} year, {context.get
             messages=messages,
             tools=tools,
             tool_choice="auto",
-            temperature=0.7,
-            max_tokens=2000
+            temperature=0.5,
+            max_tokens=16000
         )
         
         response_message = response.choices[0].message
@@ -10946,8 +10952,8 @@ Current viewing context: {context.get('currentYear', '2025')} year, {context.get
             final_response = openai_client.chat.completions.create(
                 model="gpt-5.1",
                 messages=messages,
-                temperature=0.7,
-                max_tokens=1500
+                temperature=0.5,
+                max_tokens=16000
             )
             
             ai_response = final_response.choices[0].message.content
