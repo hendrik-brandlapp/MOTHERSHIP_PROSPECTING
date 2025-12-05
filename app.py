@@ -10906,12 +10906,12 @@ Current viewing context: {context.get('currentYear', '2025')} year, {context.get
         
         # First call - let the model decide if it needs tools
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-5.1",
             messages=messages,
             tools=tools,
             tool_choice="auto",
             temperature=0.7,
-            max_tokens=1500
+            max_tokens=2000
         )
         
         response_message = response.choices[0].message
@@ -10944,10 +10944,10 @@ Current viewing context: {context.get('currentYear', '2025')} year, {context.get
             
             # Get final response with data context
             final_response = openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5.1",
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1000
+                max_tokens=1500
             )
             
             ai_response = final_response.choices[0].message.content
