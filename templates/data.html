@@ -6,33 +6,33 @@
 <div class="container-fluid px-4">
     <div class="row">
         <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-5">
                 <div>
-                    <h2>Data Analysis</h2>
-                    <p class="text-muted mb-0">Comprehensive company and invoice data analysis</p>
+                    <h2 class="fw-bold text-dark mb-1">Data Analysis</h2>
+                    <p class="text-muted mb-0">Overview of company performance and invoices</p>
                 </div>
                 <div class="d-flex gap-2">
                     {% if session.user_role == 'admin' %}
-                    <button class="btn btn-sm btn-outline-secondary" onclick="syncLatestData()" 
-                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
-                            title="Sync Latest Invoices: Fetch and sync the most recent invoices from DUANO API">
+                    <button class="btn btn-modern btn-outline-secondary" onclick="syncLatestData()" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                            title="Sync Latest Invoices">
                         <i class="fas fa-sync-alt"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshCompanyMetrics()" 
-                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
-                            title="Recalculate Metrics: Update revenue totals, invoice counts, and averages for all companies">
+                    <button class="btn btn-modern btn-outline-secondary" onclick="refreshCompanyMetrics()" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                            title="Recalculate Metrics">
                         <i class="fas fa-calculator"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="populateCompaniesDatabase()" 
-                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
-                            title="Build Companies Database: Extract and populate company information from all invoices">
+                    <button class="btn btn-modern btn-outline-secondary" onclick="populateCompaniesDatabase()" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                            title="Build Companies Database">
                         <i class="fas fa-database"></i>
                     </button>
                     {% endif %}
-                    <button class="btn btn-sm btn-outline-primary" onclick="forceRefreshData()" 
-                            data-bs-toggle="tooltip" data-bs-placement="bottom" data-bs-trigger="hover"
-                            title="Refresh: Clear cache and fetch latest company data">
-                        <i class="fas fa-refresh"></i>
+                    <button class="btn btn-modern-primary" onclick="forceRefreshData()" 
+                            data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                            title="Refresh Data">
+                        <i class="fas fa-refresh me-2"></i>Refresh
                     </button>
                 </div>
             </div>
@@ -40,80 +40,68 @@
     </div>
 
     <!-- Year Selection and Summary Stats -->
-    <div class="row mb-4">
+    <div class="row mb-5">
         <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-4">
-                            <label class="form-label fw-bold mb-3">Select Data View</label>
-                            <div class="d-flex gap-2 flex-wrap">
-                                <button class="btn btn-outline-primary year-tag active" data-year="2025" onclick="changeYear('2025')">
-                                    <i class="fas fa-calendar-alt me-2"></i>2025
-                                </button>
-                                <button class="btn btn-outline-primary year-tag" data-year="2024" onclick="changeYear('2024')">
-                                    <i class="fas fa-calendar-alt me-2"></i>2024
-                                </button>
-                                <button class="btn btn-outline-success year-tag" data-year="combined" onclick="changeYear('combined')">
-                                    <i class="fas fa-layer-group me-2"></i>Combined
-                                </button>
+            <div class="modern-card p-4">
+                <div class="row align-items-center">
+                    <div class="col-md-4 border-end">
+                        <label class="text-uppercase text-muted small fw-bold mb-3 d-block">Select Data View</label>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button class="btn btn-outline-primary year-tag active rounded-pill px-4" data-year="2025" onclick="changeYear('2025')">
+                                2025
+                            </button>
+                            <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2024" onclick="changeYear('2024')">
+                                2024
+                            </button>
+                            <button class="btn btn-outline-success year-tag rounded-pill px-4" data-year="combined" onclick="changeYear('combined')">
+                                Combined
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-8 ps-md-5">
+                        <div class="row" id="year-stats" style="display: none;">
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <div class="h3 fw-bold text-primary mb-1" id="stat-total-companies">-</div>
+                                    <small class="text-muted fw-bold text-uppercase">Companies</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <div class="h3 fw-bold text-success mb-1" id="stat-total-revenue">-</div>
+                                    <small class="text-muted fw-bold text-uppercase">Total Revenue</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <div class="h3 fw-bold text-info mb-1" id="stat-total-invoices">-</div>
+                                    <small class="text-muted fw-bold text-uppercase">Invoices</small>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <div class="h3 fw-bold text-warning mb-1" id="stat-avg-revenue">-</div>
+                                    <small class="text-muted fw-bold text-uppercase">Avg/Company</small>
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-8">
-                            <div class="row" id="year-stats" style="display: none;">
-                                <div class="col-md-3">
-                                    <div class="text-center">
-                                        <h4 class="mb-1 text-primary" id="stat-total-companies">-</h4>
-                                        <small class="text-muted">Companies</small>
+                        
+                        <!-- Year Breakdown for Combined View -->
+                        <div class="mt-4 pt-3 border-top" id="year-breakdown" style="display: none;">
+                             <div class="row text-sm text-muted">
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-center">
+                                        <div class="badge bg-primary rounded-pill me-2">2024</div>
+                                        <span id="breakdown-2024">-</span>
                                     </div>
                                 </div>
-                                <div class="col-md-3">
-                                    <div class="text-center">
-                                        <h4 class="mb-1 text-success" id="stat-total-revenue">-</h4>
-                                        <small class="text-muted">Total Revenue</small>
+                                <div class="col-md-6">
+                                    <div class="d-flex align-items-center">
+                                        <div class="badge bg-success rounded-pill me-2">2025</div>
+                                        <span id="breakdown-2025">-</span>
                                     </div>
                                 </div>
-                                <div class="col-md-3">
-                                    <div class="text-center">
-                                        <h4 class="mb-1 text-info" id="stat-total-invoices">-</h4>
-                                        <small class="text-muted">Invoices</small>
-                                    </div>
-                                </div>
-                                <div class="col-md-3">
-                                    <div class="text-center">
-                                        <h4 class="mb-1 text-warning" id="stat-avg-revenue">-</h4>
-                                        <small class="text-muted">Avg/Company</small>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Year Breakdown for Combined View -->
-                            <div class="row mt-3" id="year-breakdown" style="display: none;">
-                                <div class="col-12">
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="card bg-light border-0">
-                                                <div class="card-body py-2">
-                                                    <div class="d-flex justify-content-between">
-                                                        <span class="fw-bold text-primary">2024:</span>
-                                                        <span id="breakdown-2024">-</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <div class="card bg-light border-0">
-                                                <div class="card-body py-2">
-                                                    <div class="d-flex justify-content-between">
-                                                        <span class="fw-bold text-success">2025:</span>
-                                                        <span id="breakdown-2025">-</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                             </div>
                         </div>
                     </div>
                 </div>
@@ -138,59 +126,67 @@
     <div id="sync-results" style="display: none;"></div>
 
     <!-- Filters and Search -->
-    <div class="row mb-4">
+    <div class="row mb-5">
         <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-3">
-                            <label class="form-label">Search Companies</label>
-                            <input type="text" class="form-control" id="searchInput" placeholder="Search by name, VAT, email..." onkeyup="filterCompanies()">
+            <div class="modern-card p-4">
+                <div class="row g-4 align-items-end">
+                    <div class="col-md-4 col-lg-3">
+                        <label class="form-label text-muted small fw-bold text-uppercase">Search</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 ps-3"><i class="fas fa-search text-muted"></i></span>
+                            <input type="text" class="form-control border-start-0" id="searchInput" placeholder="Search companies..." onkeyup="filterCompanies()">
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label"><i class="fas fa-tags me-1"></i>Categories</label>
-                            <div class="searchable-dropdown-wrapper">
-                                <div class="dropdown-trigger-modern" id="category-dropdown-trigger">
-                                    <span class="trigger-text text-muted">All categories</span>
-                                    <i class="fas fa-chevron-down"></i>
-                                </div>
-                                <div class="dropdown-menu-modern" id="category-dropdown-menu">
-                                    <div class="dropdown-search-box">
-                                        <i class="fas fa-search"></i>
-                                        <input type="text" placeholder="Search categories..." id="category-search-input">
-                                    </div>
-                                    <div class="dropdown-options-list" id="category-dropdown-options"></div>
-                                </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-muted small fw-bold text-uppercase">Categories</label>
+                        <div class="searchable-dropdown-wrapper w-100">
+                            <div class="dropdown-trigger-modern w-100 justify-content-between bg-white" id="category-dropdown-trigger">
+                                <span class="trigger-text text-muted text-truncate">All categories</span>
+                                <i class="fas fa-chevron-down small"></i>
                             </div>
-                            <div class="selected-tags mt-2" id="category-selected-tags"></div>
+                            <div class="dropdown-menu-modern shadow-lg" id="category-dropdown-menu">
+                                <div class="dropdown-search-box">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Filter..." id="category-search-input">
+                                </div>
+                                <div class="dropdown-options-list" id="category-dropdown-options"></div>
+                            </div>
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Min Revenue</label>
-                            <input type="number" class="form-control" id="minRevenue" placeholder="€0" onchange="filterCompanies()">
+                        <div class="selected-tags mt-2" id="category-selected-tags"></div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label text-muted small fw-bold text-uppercase">Min Revenue</label>
+                        <div class="input-group">
+                             <span class="input-group-text bg-white border-end-0 ps-3 text-muted">€</span>
+                            <input type="number" class="form-control border-start-0" id="minRevenue" placeholder="0" onchange="filterCompanies()">
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label">Sort By</label>
-                            <select class="form-select" id="sortBy" onchange="sortCompanies()">
-                                <option value="revenue_desc">Revenue (High to Low)</option>
-                                <option value="revenue_asc">Revenue (Low to High)</option>
-                                <option value="name_asc">Name (A-Z)</option>
-                                <option value="name_desc">Name (Z-A)</option>
-                                <option value="invoices_desc">Invoice Count (High to Low)</option>
-                                <option value="invoices_asc">Invoice Count (Low to High)</option>
-                            </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label text-muted small fw-bold text-uppercase">Sort By</label>
+                        <select class="form-select" id="sortBy" onchange="sortCompanies()">
+                            <option value="revenue_desc">Revenue (High)</option>
+                            <option value="revenue_asc">Revenue (Low)</option>
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="invoices_desc">Invoices (High)</option>
+                            <option value="invoices_asc">Invoices (Low)</option>
+                        </select>
+                    </div>
+                     <div class="col-md-2 col-lg-2 d-flex gap-2">
+                        <button class="btn btn-outline-warning flex-fill h-100" id="majorRetailerFilter" onclick="toggleMajorRetailerFilter()" title="Show major retailers only">
+                            <i class="fas fa-star"></i>
+                        </button>
+                        <div class="btn-group flex-fill" role="group">
+                             <input type="radio" class="btn-check" name="viewMode" id="viewCard" autocomplete="off" checked onchange="document.getElementById('viewMode').value='cards'; changeViewMode();">
+                            <label class="btn btn-outline-secondary" for="viewCard"><i class="fas fa-th-large"></i></label>
+
+                            <input type="radio" class="btn-check" name="viewMode" id="viewTable" autocomplete="off" onchange="document.getElementById('viewMode').value='table'; changeViewMode();">
+                            <label class="btn btn-outline-secondary" for="viewTable"><i class="fas fa-list"></i></label>
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label">View</label>
-                            <select class="form-select" id="viewMode" onchange="changeViewMode()">
-                                <option value="cards">Card View</option>
-                                <option value="table">Table View</option>
-                            </select>
-                        </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <button class="btn btn-outline-warning w-100" id="majorRetailerFilter" onclick="toggleMajorRetailerFilter()" title="Show only major retailers">
-                                <i class="fas fa-star me-2"></i>Major Retailers
-                            </button>
-                        </div>
+                        <select class="form-select d-none" id="viewMode" onchange="changeViewMode()">
+                            <option value="cards">Card View</option>
+                            <option value="table">Table View</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -294,234 +290,256 @@
 
 {% block extra_scripts %}
 <style>
-/* Sidepanel Styles */
-.sidepanel-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
-    z-index: 1040;
-}
+    :root {
+        --primary-color: #6366f1;
+        --primary-soft: #e0e7ff;
+        --secondary-color: #ec4899;
+        --secondary-soft: #fce7f3;
+        --success-color: #10b981;
+        --success-soft: #d1fae5;
+        --warning-color: #f59e0b;
+        --warning-soft: #fef3c7;
+        --surface-bg: #f9fafb;
+        --card-bg: #ffffff;
+        --text-main: #111827;
+        --text-muted: #6b7280;
+        --border-color: #e5e7eb;
+        --radius-sm: 0.5rem;
+        --radius-md: 0.75rem;
+        --radius-lg: 1rem;
+        --radius-xl: 1.5rem;
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
 
-.sidepanel-overlay.show {
-    opacity: 1;
-    visibility: visible;
-}
+    body {
+        background-color: var(--surface-bg);
+        font-family: var(--font-sans);
+        color: var(--text-main);
+    }
 
-.sidepanel {
-    position: fixed;
-    top: 0;
-    right: -50vw;
-    width: 50vw;
-    max-width: 90vw;
-    height: 100%;
-    background: white;
-    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.2);
-    transition: right 0.3s ease;
-    z-index: 1050;
-    display: flex;
-    flex-direction: column;
-}
+    /* Modern Card */
+    .modern-card {
+        background: var(--card-bg);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--border-color);
+        transition: all 0.2s ease;
+    }
 
-.sidepanel.show {
-    right: 0;
-}
+    .modern-card:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
 
-.sidepanel-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid #dee2e6;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #f8f9fa;
-}
+    /* Sidepanel Styles - Redesigned */
+    .sidepanel-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(4px);
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        z-index: 1040;
+    }
 
-.sidepanel-title {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-}
+    .sidepanel-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
 
-.sidepanel-body {
-    flex: 1;
-    padding: 1.5rem;
-    overflow-y: auto;
-}
+    .sidepanel {
+        position: fixed;
+        top: 0;
+        right: -600px;
+        width: 600px;
+        max-width: 90vw;
+        height: 100%;
+        background: var(--card-bg);
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+        transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        z-index: 1050;
+        display: flex;
+        flex-direction: column;
+    }
 
-.sidepanel-body::-webkit-scrollbar {
-    width: 8px;
-}
+    .sidepanel.show {
+        right: 0;
+    }
 
-.sidepanel-body::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
+    .sidepanel-header {
+        padding: 2rem 2rem 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        background: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
 
-.sidepanel-body::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
-}
+    .sidepanel-title {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-main);
+        letter-spacing: -0.025em;
+    }
 
-.sidepanel-body::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
+    .sidepanel-body {
+        flex: 1;
+        padding: 2rem;
+        overflow-y: auto;
+        background-color: #ffffff;
+    }
 
-/* Excluded Categories - Horizontal Layout */
-.selected-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-}
+    /* Detail Sections */
+    .detail-section {
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+        background: #f8fafc;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-color);
+    }
 
-.selected-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.35rem 0.75rem;
-    background: #fee2e2;
-    border: 1px solid #ef4444;
-    border-radius: 16px;
-    font-size: 0.8rem;
-    color: #991b1b;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
+    .detail-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
 
-.selected-tag:hover {
-    background: #fecaca;
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
+    .detail-value {
+        font-size: 1rem;
+        color: var(--text-main);
+        font-weight: 500;
+    }
 
-.selected-tag i {
-    font-size: 0.7rem;
-}
+    /* Tags */
+    .modern-badge {
+        padding: 0.35em 0.8em;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.025em;
+    }
 
-.year-tag {
-    transition: all 0.2s ease;
-    border-width: 2px !important;
-}
+    .badge-soft-primary { background: var(--primary-soft); color: var(--primary-color); }
+    .badge-soft-success { background: var(--success-soft); color: var(--success-color); }
+    .badge-soft-warning { background: var(--warning-soft); color: var(--warning-color); }
+    .badge-soft-secondary { background: var(--secondary-soft); color: var(--secondary-color); }
 
-.year-tag.active {
-    background-color: var(--bs-primary) !important;
-    border-color: var(--bs-primary) !important;
-    color: white !important;
-}
+    /* Buttons */
+    .btn-modern {
+        border-radius: var(--radius-md);
+        font-weight: 500;
+        padding: 0.5rem 1rem;
+        transition: all 0.2s;
+        border: none;
+    }
+    
+    .btn-modern-primary {
+        background: var(--primary-color);
+        color: white;
+        box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);
+    }
+    
+    .btn-modern-primary:hover {
+        background: #4f46e5;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(99, 102, 241, 0.4);
+    }
 
-.year-tag[data-year="combined"].active {
-    background-color: var(--bs-success) !important;
-    border-color: var(--bs-success) !important;
-    color: white !important;
-}
+    /* Invoice List in Sidepanel */
+    .invoice-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        transition: background 0.2s;
+        cursor: pointer;
+        border-radius: var(--radius-md);
+    }
 
-.year-tag:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
+    .invoice-item:hover {
+        background-color: var(--surface-bg);
+    }
 
-.invoice-container {
-    background: white;
-}
+    .invoice-item:last-child {
+        border-bottom: none;
+    }
 
-.invoice-container::-webkit-scrollbar {
-    width: 8px;
-}
+    /* Invoice Modal */
+    .modal-content {
+        border-radius: var(--radius-xl);
+        border: none;
+        box-shadow: var(--shadow-lg);
+    }
 
-.invoice-container::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
+    .modal-header {
+        border-bottom: 1px solid var(--border-color);
+        padding: 1.5rem 2rem;
+        background: #f8fafc;
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    }
 
-.invoice-container::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
-}
+    .modal-body {
+        padding: 2rem;
+    }
 
-.invoice-container::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
+    .modal-footer {
+        border-top: 1px solid var(--border-color);
+        padding: 1.5rem 2rem;
+        background: #f8fafc;
+        border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+    }
 
-.table thead th {
-    border-bottom: 2px solid #dee2e6;
-    font-weight: 600;
-}
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-.invoice-row:hover {
-    background-color: #f8f9fa !important;
-    transform: scale(1.01);
-    transition: all 0.2s ease;
-}
-
-.invoice-row {
-    transition: all 0.2s ease;
-}
-
-.invoice-row:hover .text-primary {
-    color: #0056b3 !important;
-    text-decoration: underline;
-}
-
-/* Category Tag Filtering */
-.category-tags-filter {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    min-height: 48px;
-    align-items: center;
-}
-
-.category-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.4rem 0.85rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    user-select: none;
-}
-
-.category-tag.included {
-    background: #d1f5d3;
-    border: 2px solid #10b981;
-    color: #065f46;
-}
-
-.category-tag.excluded {
-    background: #fee2e2;
-    border: 2px solid #ef4444;
-    color: #991b1b;
-    opacity: 0.6;
-}
-
-.category-tag:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-
-.category-tag i {
-    font-size: 0.75rem;
-}
-
-.category-tag.included i {
-    color: #10b981;
-}
-
-.category-tag.excluded i {
-    color: #ef4444;
-}
+    /* Category Tags Filter */
+    .category-tags-filter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        min-height: 48px;
+        align-items: center;
+    }
+    
+    /* Selected Tags */
+    .selected-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        background: #fee2e2;
+        border: 1px solid #fca5a5;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        color: #b91c1c;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .year-tag {
+        border-radius: 9999px;
+        font-weight: 500;
+        padding: 0.5rem 1.25rem;
+    }
 </style>
 <script>
 let allCompanies = [];
@@ -1526,45 +1544,40 @@ function displayCardsView() {
         const isMajor = isMajorRetailer(company.company_id);
         
         card.innerHTML = `
-            <div class="card border-0 shadow-sm h-100 ${isMajor ? 'border-warning' : ''}" data-company-id="${company.id}" style="cursor: pointer; ${isMajor ? 'border: 2px solid #ffc107 !important;' : ''}" onclick="showCompanyDetails(${company.id})">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <h5 class="card-title mb-0">
-                            ${isMajor ? '<i class="fas fa-star text-warning me-2" title="Major Retailer"></i>' : ''}
-                            ${escapeHtml(company.name)}
-                        </h5>
-                        <span class="badge bg-primary">${company.invoice_count} invoices</span>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <div class="row text-sm">
-                            <div class="col-6">
-                                <strong>Total Revenue:</strong><br>
-                                <span class="text-success h6">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</span>
-                            </div>
-                            <div class="col-6">
-                                <strong>Avg Invoice:</strong><br>
-                                <span class="text-info h6">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</span>
-                            </div>
+            <div class="modern-card h-100 position-relative" data-company-id="${company.id}" style="cursor: pointer;" onclick="showCompanyDetails(${company.id})">
+                ${isMajor ? '<div class="position-absolute top-0 end-0 mt-3 me-3"><i class="fas fa-star text-warning"></i></div>' : ''}
+                <div class="p-4">
+                    <div class="mb-4">
+                        <h5 class="fw-bold mb-2 text-dark">${escapeHtml(company.name)}</h5>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <span class="badge badge-soft-primary">${company.invoice_count} invoices</span>
+                            ${isMajor ? '<span class="badge badge-soft-warning">Major Retailer</span>' : ''}
                         </div>
                     </div>
                     
-                    <div class="mb-3 text-sm">
-                        ${company.vat_number ? `<div><i class="fas fa-hashtag me-2 text-muted"></i>${escapeHtml(company.vat_number)}</div>` : ''}
-                        ${company.email ? `<div><i class="fas fa-envelope me-2 text-muted"></i>${escapeHtml(company.email)}</div>` : ''}
-                        ${company.phone ? `<div><i class="fas fa-phone me-2 text-muted"></i>${escapeHtml(company.phone)}</div>` : ''}
-                        ${addressParts ? `<div><i class="fas fa-map-marker-alt me-2 text-muted"></i>${escapeHtml(addressParts)}</div>` : ''}
-                        ${company.contact_person ? `<div><i class="fas fa-user me-2 text-muted"></i>${escapeHtml(company.contact_person)}</div>` : ''}
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <div class="text-muted small text-uppercase fw-bold mb-1">Total Revenue</div>
+                            <div class="h5 mb-0 text-success fw-bold">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-muted small text-uppercase fw-bold mb-1">Avg Invoice</div>
+                            <div class="h5 mb-0 text-dark fw-bold">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                        </div>
                     </div>
                     
-                    <div class="d-flex justify-content-between align-items-center">
-                        <small class="text-muted">
-                            Last invoice: ${company.last_invoice_date ? new Date(company.last_invoice_date).toLocaleDateString('nl-BE') : 'N/A'}
-                        </small>
-                        <button class="btn btn-outline-primary btn-sm" onclick="showCompanyDetails(${company.id})">
-                            <i class="fas fa-eye me-1"></i>Details
-                        </button>
+                    <div class="d-flex flex-column gap-2 mb-4">
+                        ${company.vat_number ? `<div class="d-flex align-items-center text-muted small"><i class="fas fa-hashtag w-5 me-2 text-center"></i>${escapeHtml(company.vat_number)}</div>` : ''}
+                        ${addressParts ? `<div class="d-flex align-items-center text-muted small"><i class="fas fa-map-marker-alt w-5 me-2 text-center"></i>${escapeHtml(addressParts)}</div>` : ''}
+                        ${company.contact_person ? `<div class="d-flex align-items-center text-muted small"><i class="fas fa-user w-5 me-2 text-center"></i>${escapeHtml(company.contact_person)}</div>` : ''}
                     </div>
+                </div>
+                
+                <div class="px-4 py-3 bg-light border-top d-flex justify-content-between align-items-center rounded-bottom">
+                    <small class="text-muted">
+                        <i class="far fa-clock me-1"></i> ${company.last_invoice_date ? new Date(company.last_invoice_date).toLocaleDateString('nl-BE') : 'No invoices'}
+                    </small>
+                    <span class="text-primary fw-bold small">View Details <i class="fas fa-arrow-right ms-1"></i></span>
                 </div>
             </div>
         `;
@@ -1692,209 +1705,187 @@ function showCompanyDetails(companyId) {
     
     const modalBody = document.getElementById('companyModalBody');
     modalBody.innerHTML = `
-        <div class="row">
-            <div class="col-md-6">
-                <div class="card border-0 bg-light mb-3">
-                    <div class="card-body">
-                        <h6 class="card-title mb-3"><i class="fas fa-building me-2 text-primary"></i>Company Details</h6>
-                        <div class="row g-2">
-                            <div class="col-12">
-                                <strong>${escapeHtml(company.name)}</strong>
-                                ${company.public_name && company.public_name !== company.name ? `<br><small class="text-muted">${escapeHtml(company.public_name)}</small>` : ''}
-                            </div>
-                            ${company.vat_number ? `<div class="col-12"><small><strong>VAT:</strong> ${escapeHtml(company.vat_number)}</small></div>` : ''}
-                            ${company.email_addresses || company.email ? `<div class="col-12"><small><i class="fas fa-envelope me-1"></i>${escapeHtml(company.email_addresses || company.email)}</small></div>` : ''}
-                        </div>
-                        
-                        <div class="mt-3">
-                            ${company.sales_price_class_name ? `<span class="badge bg-warning text-dark me-2">${escapeHtml(company.sales_price_class_name)}</span>` : ''}
-                            ${company.company_categories && company.company_categories.length > 0 ? 
-                                company.company_categories.slice(0, 2).map(cat => `<span class="badge bg-info me-1">${escapeHtml(cat.name || cat)}</span>`).join('') : ''}
-                        </div>
-                    </div>
-                </div>
-                
-                ${invoiceAddress && Object.keys(invoiceAddress).length > 0 ? `
-                <div class="card border-0 bg-light">
-                    <div class="card-body">
-                        <h6 class="card-title mb-2"><i class="fas fa-map-marker-alt me-2 text-primary"></i>Address</h6>
-                        <address class="mb-0">
-                            ${invoiceAddress.address_line1 ? escapeHtml(invoiceAddress.address_line1) + '<br>' : ''}
-                            ${invoiceAddress.post_code ? escapeHtml(invoiceAddress.post_code) + ' ' : ''}${escapeHtml(invoiceAddress.city || '')}<br>
-                            ${invoiceAddress.country ? escapeHtml(invoiceAddress.country.name || invoiceAddress.country) : ''}
-                            ${invoiceAddress.phone_number ? '<br><small><i class="fas fa-phone me-1"></i>' + escapeHtml(invoiceAddress.phone_number) + '</small>' : ''}
-                        </address>
-                    </div>
-                </div>
-                ` : ''}
+        <div class="d-flex align-items-center mb-4">
+            <div class="bg-light rounded-circle p-3 me-3 text-primary">
+                <i class="fas fa-building fa-2x"></i>
             </div>
-            <div class="col-md-6">
-                <div class="card border-0 bg-light">
-                    <div class="card-body">
-                        <h6 class="card-title mb-3"><i class="fas fa-chart-line me-2 text-success"></i>Business Metrics ${currentYear === 'combined' ? '(Combined)' : `(${currentYear})`}</h6>
-                        
-                        <div class="row g-3">
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h4 class="text-success mb-1">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0})}</h4>
-                                    <small class="text-muted">Total Revenue</small>
-                                </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="text-center">
-                                    <h4 class="text-primary mb-1">${company.invoice_count}</h4>
-                                    <small class="text-muted">Invoices</small>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="text-center">
-                                    <strong class="text-info">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 0})}</strong>
-                                    <small class="text-muted d-block">Average Invoice</small>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        ${currentYear === 'combined' && company.years_data ? `
-                            <hr class="my-3">
-                            <div class="row g-2">
-                                <div class="col-6 text-center">
-                                    <strong class="text-primary">2024</strong><br>
-                                    <small>${company.years_data['2024'].invoice_count} invoices</small>
-                                </div>
-                                <div class="col-6 text-center">
-                                    <strong class="text-success">2025</strong><br>
-                                    <small>${company.years_data['2025'].invoice_count} invoices</small>
-                                </div>
-                            </div>
-                        ` : ''}
+            <div>
+                <h2 class="h4 mb-1 fw-bold text-dark">${escapeHtml(company.name)}</h2>
+                <div class="d-flex gap-2 text-muted small">
+                    ${company.vat_number ? `<span><i class="fas fa-hashtag me-1"></i>${escapeHtml(company.vat_number)}</span>` : ''}
+                    ${invoiceAddress.city ? `<span><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(invoiceAddress.city)}</span>` : ''}
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="row g-3 mb-4">
+            <div class="col-4">
+                <div class="p-3 bg-light rounded-3 border">
+                    <div class="text-muted small fw-bold text-uppercase mb-1">Total Revenue</div>
+                    <div class="h5 mb-0 text-success fw-bold">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="p-3 bg-light rounded-3 border">
+                    <div class="text-muted small fw-bold text-uppercase mb-1">Invoices</div>
+                    <div class="h5 mb-0 text-primary fw-bold">${company.invoice_count}</div>
+                </div>
+            </div>
+            <div class="col-4">
+                <div class="p-3 bg-light rounded-3 border">
+                    <div class="text-muted small fw-bold text-uppercase mb-1">Avg Invoice</div>
+                    <div class="h5 mb-0 text-dark fw-bold">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contact & Details -->
+        <div class="detail-section">
+            <h6 class="mb-3 fw-bold text-dark"><i class="far fa-address-card me-2 text-muted"></i>Contact & Details</h6>
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-label">Contact Person</div>
+                    <div class="detail-value">${escapeHtml(company.contact_person || 'N/A')}</div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value text-break">${company.email_addresses || company.email ? `<a href="mailto:${escapeHtml(company.email_addresses || company.email)}" class="text-decoration-none">${escapeHtml(company.email_addresses || company.email)}</a>` : 'N/A'}</div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-label">Phone</div>
+                    <div class="detail-value">${escapeHtml(company.phone || 'N/A')}</div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-label">Website</div>
+                    <div class="detail-value">${company.website ? `<a href="${escapeHtml(company.website)}" target="_blank" class="text-decoration-none">Visit Website</a>` : 'N/A'}</div>
+                </div>
+                <div class="col-12">
+                    <div class="detail-label">Address</div>
+                    <div class="detail-value">
+                        ${invoiceAddress.address_line1 ? escapeHtml(invoiceAddress.address_line1) + '<br>' : ''}
+                        ${invoiceAddress.post_code ? escapeHtml(invoiceAddress.post_code) + ' ' : ''}${escapeHtml(invoiceAddress.city || '')}<br>
+                        ${invoiceAddress.country ? escapeHtml(invoiceAddress.country.name || invoiceAddress.country) : ''}
                     </div>
                 </div>
             </div>
         </div>
         
-        <!-- Customer Status & Notes Section -->
-        <div class="row mt-4">
-            <div class="col-md-6">
-                <div class="card border-0 bg-light">
-                    <div class="card-body">
-                        <h6 class="card-title mb-3"><i class="fas fa-flag me-2 text-info"></i>Customer Status</h6>
-                        <select class="form-select form-select-sm" id="customerStatusSelect" onchange="updateCustomerStatus(${company.company_id})">
-                            <option value="active">✅ Active Customer</option>
-                            <option value="priority">⭐ Priority Customer</option>
-                            <option value="watch">👀 Watch List</option>
-                            <option value="at_risk">⚠️ At Risk</option>
-                            <option value="dormant">💤 Dormant</option>
-                            <option value="churned">❌ Churned/Lost</option>
-                        </select>
-                        <div class="mt-2">
-                            <label class="form-label small mb-1">Assigned Salesperson</label>
-                            <input type="text" class="form-control form-control-sm" id="assignedSalesperson" placeholder="Enter salesperson name">
-                        </div>
-                    </div>
+        <!-- Customer Status -->
+        <div class="detail-section">
+            <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-tasks me-2 text-muted"></i>CRM Status</h6>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold text-muted">Status</label>
+                    <select class="form-select form-select-sm border-0 bg-white shadow-sm" id="customerStatusSelect" onchange="updateCustomerStatus(${company.company_id})">
+                        <option value="active">✅ Active Customer</option>
+                        <option value="priority">⭐ Priority Customer</option>
+                        <option value="watch">👀 Watch List</option>
+                        <option value="at_risk">⚠️ At Risk</option>
+                        <option value="dormant">💤 Dormant</option>
+                        <option value="churned">❌ Churned/Lost</option>
+                    </select>
                 </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card border-0 bg-light">
-                    <div class="card-body">
-                        <h6 class="card-title mb-2"><i class="fas fa-route me-2 text-primary"></i>Related Trips</h6>
-                        <div id="companyTripsContainer" style="max-height: 100px; overflow-y: auto;">
-                            <small class="text-muted">Loading trips...</small>
-                        </div>
-                    </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold text-muted">Assigned To</label>
+                    <input type="text" class="form-control form-control-sm border-0 bg-white shadow-sm" id="assignedSalesperson" placeholder="Salesperson...">
                 </div>
             </div>
         </div>
-        
-        <!-- Notes Section -->
-        <div class="row mt-3">
-            <div class="col-12">
-                <div class="card border-0 bg-light">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="card-title mb-0"><i class="fas fa-sticky-note me-2 text-warning"></i>Notes</h6>
-                            <button class="btn btn-sm btn-primary" onclick="saveCompanyNotes(${company.company_id})">
-                                <i class="fas fa-save me-1"></i>Save
-                            </button>
-                        </div>
-                        <textarea class="form-control" id="companyNotesTextarea" rows="3" placeholder="Add notes about this customer...">${escapeHtml(company.notes || '')}</textarea>
-                    </div>
-                </div>
+
+        <!-- Notes -->
+        <div class="detail-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0 fw-bold text-dark"><i class="far fa-sticky-note me-2 text-muted"></i>Notes</h6>
+                <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="saveCompanyNotes(${company.company_id})">Save</button>
             </div>
+            <textarea class="form-control border-0 bg-white shadow-sm" id="companyNotesTextarea" rows="3" placeholder="Add private notes about this customer...">${escapeHtml(company.notes || '')}</textarea>
         </div>
         
-        <!-- Invoices Section -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0">All Invoices ${currentYear === 'combined' ? '(Both Years)' : `(${currentYear})`}</h6>
-                    <div>
-                        <span class="badge bg-info" id="invoices-count">Loading...</span>
-                        <small class="text-muted ms-2">Click any invoice for details</small>
-                    </div>
-                </div>
-                
-                <div class="invoice-container" style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 8px;">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light sticky-top">
-                            <tr>
-                                <th>Invoice #</th>
-                                <th>Date</th>
-                                <th>Amount</th>
-                                ${currentYear === 'combined' ? '<th>Year</th>' : ''}
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="invoices-tbody">
-                            <!-- Invoices will be loaded here -->
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div class="mt-2 d-flex justify-content-between align-items-center">
-                    <small class="text-muted" id="invoices-summary">
-                        Loading invoices...
-                    </small>
-                    <small class="text-muted">
-                        Scroll to see all invoices
-                    </small>
-                </div>
+        <!-- Recent Invoices -->
+        <div class="mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0">Recent Invoices</h6>
+                <span class="badge badge-soft-secondary" id="invoices-count">Loading...</span>
+            </div>
+            
+            <div class="bg-white rounded-3 border overflow-hidden" id="invoices-list-container">
+                <div class="p-3 text-center text-muted small">Loading invoices...</div>
             </div>
         </div>
     `;
     
-    // Load company notes, status, and trips
+    // Load company notes, status, and trips (trips logic removed from display but load function kept if needed later)
     loadCompanyNotesAndStatus(company.company_id);
-    loadCompanyTrips(company.company_id);
     
-    // Add major retailer button if applicable
+    // Add major retailer banner logic...
     const isMajor = isMajorRetailer(company.company_id);
     if (isMajor) {
+         // (keeping major retailer logic, but styling it better)
         const majorRetailerBanner = `
-            <div class="alert alert-warning mb-3">
-                <div class="d-flex justify-content-between align-items-center">
+            <div class="p-3 mb-4 bg-warning bg-opacity-10 border border-warning border-opacity-25 rounded-3 d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <div class="bg-warning text-white rounded-circle p-2 me-3"><i class="fas fa-star"></i></div>
                     <div>
-                        <i class="fas fa-star me-2"></i>
-                        <strong>Major Retailer</strong>
-                        <p class="mb-0 small mt-1">This company has detailed analytics available</p>
+                        <div class="fw-bold text-warning-emphasis">Major Retailer</div>
+                        <div class="small text-muted">Advanced analytics available</div>
                     </div>
-                    <a href="/retailer-details/${company.company_id}?year=${currentYear}" class="btn btn-warning" target="_blank">
-                        <i class="fas fa-chart-line me-2"></i>View Detailed Analytics
-                    </a>
                 </div>
+                <button onclick="window.open('/retailer-details/${company.company_id}?year=${currentYear}', '_blank')" class="btn btn-sm btn-warning text-white fw-bold shadow-sm">
+                    View Analytics
+                </button>
             </div>
         `;
-        
-        // Insert banner at the beginning of existing content
-        const existingContent = document.getElementById('companyModalBody').innerHTML;
-        document.getElementById('companyModalBody').innerHTML = majorRetailerBanner + existingContent;
+        modalBody.insertAdjacentHTML('afterbegin', majorRetailerBanner);
     }
     
     // Show sidepanel
     openCompanyPanel();
     
-    // Load invoices
-    loadCompanyInvoices(company.company_id);
+    // Load invoices with new list renderer
+    loadCompanyInvoicesV2(company.company_id);
 }
+
+// New function to render invoices as a clean list
+async function loadCompanyInvoicesV2(companyId) {
+    try {
+        const response = await fetch(`/api/company-invoices/${companyId}?year=${currentYear}`);
+        const data = await response.json();
+        
+        if (data.invoices) {
+            document.getElementById('invoices-count').textContent = `${data.invoices.length}`;
+            
+            const container = document.getElementById('invoices-list-container');
+            if (data.invoices.length === 0) {
+                container.innerHTML = '<div class="p-4 text-center text-muted">No invoices found for this period.</div>';
+                return;
+            }
+
+            container.innerHTML = data.invoices.map(invoice => `
+                <div class="invoice-item" onclick="showInvoiceDetails(${companyId}, ${invoice.id})">
+                    <div class="d-flex align-items-center">
+                        <div class="bg-light rounded p-2 me-3 text-muted">
+                            <i class="fas fa-file-invoice"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold text-dark">Invoice #${escapeHtml(invoice.number || invoice.id)}</div>
+                            <div class="small text-muted">${invoice.date ? new Date(invoice.date).toLocaleDateString('nl-BE') : 'N/A'}</div>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="fw-bold text-success">€${invoice.amount.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</div>
+                        <div class="small text-muted">Paid</div>
+                    </div>
+                </div>
+            `).join('');
+            
+            // Store invoices for invoice details modal
+            window.currentCompanyInvoices = data.invoices;
+        }
+    } catch (error) {
+        console.error('Error loading invoices:', error);
+        document.getElementById('invoices-list-container').innerHTML = '<div class="p-3 text-danger text-center">Error loading invoices</div>';
+    }
 
 function openCompanyPanel() {
     document.getElementById('companyPanel').classList.add('show');
@@ -2084,133 +2075,103 @@ async function showInvoiceDetails(companyId, invoiceId) {
             fullInvoiceData = result.invoice_data;
         }
         
-        // Build modal content
-        const modalBody = document.getElementById('invoiceModalBody');
-        modalBody.innerHTML = `
-            <!-- Breadcrumb Navigation -->
-            <nav aria-label="breadcrumb" class="mb-3">
-                <ol class="breadcrumb bg-light p-2 rounded mb-0">
-                    <li class="breadcrumb-item">
-                        <a href="#" onclick="document.getElementById('invoiceModal').querySelector('.btn-close').click(); return false;" class="text-decoration-none">
-                            <i class="fas fa-building me-1"></i>Company Details
-                        </a>
-                    </li>
-                    <li class="breadcrumb-item active" aria-current="page">
-                        <i class="fas fa-file-invoice me-1"></i>Invoice ${escapeHtml(invoice.number || invoice.id)}
-                    </li>
-                </ol>
-            </nav>
-            
-            <!-- Invoice Summary Card -->
-            <div class="card bg-light border-0 mb-3">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-8">
-                            <h5 class="mb-1">Invoice ${escapeHtml(invoice.number || invoice.id)}</h5>
-                            <p class="text-muted mb-0">
-                                ${invoice.date ? new Date(invoice.date).toLocaleDateString('nl-BE') : 'N/A'}
-                                ${invoice.year ? `<span class="badge ${invoice.year === 2024 ? 'bg-primary' : 'bg-success'} ms-2">${invoice.year}</span>` : ''}
-                            </p>
-                        </div>
-                        <div class="col-md-4 text-end">
-                            <h4 class="text-success mb-1">€${invoice.amount.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</h4>
-                            <span class="badge bg-success">Paid</span>
-                        </div>
-                    </div>
+    // Build modal content
+    const modalBody = document.getElementById('invoiceModalBody');
+    modalBody.innerHTML = `
+        <div class="d-flex justify-content-between align-items-start mb-4">
+            <div>
+                <h5 class="fw-bold mb-1">Invoice #${escapeHtml(invoice.number || invoice.id)}</h5>
+                <div class="text-muted small">
+                    ${invoice.date ? new Date(invoice.date).toLocaleDateString('nl-BE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Date not available'}
                 </div>
             </div>
-            
-            ${invoice.description ? `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6>Description</h6>
-                        <div class="alert alert-light">
-                            ${escapeHtml(invoice.description)}
-                        </div>
-                    </div>
-                </div>
-            ` : ''}
-            
-            ${invoice.notes ? `
-                <div class="row mt-3">
-                    <div class="col-12">
-                        <h6>Notes</h6>
-                        <div class="alert alert-info">
-                            ${escapeHtml(invoice.notes)}
-                        </div>
-                    </div>
-                </div>
-            ` : ''}
-            
-            <div class="row mt-4">
-                <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="mb-0">Products & Line Items</h6>
-                        <span class="badge bg-secondary">${invoice.line_items_count || 0} items</span>
-                    </div>
-                    
-                    <div id="line-items-container">
-                        ${fullInvoiceData && fullInvoiceData.invoice_line_items ? `
-                            <div class="table-responsive">
-                                <table class="table table-sm table-bordered">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Product</th>
-                                            <th>Description</th>
-                                            <th>Quantity</th>
-                                            <th>Unit Price</th>
-                                            <th>Total</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${fullInvoiceData.invoice_line_items.map(item => `
-                                            <tr>
-                                                <td>
-                                                    <strong class="text-primary">${escapeHtml((item.product && item.product.name) || 'N/A')}</strong>
-                                                    ${item.product && item.product.code ? `<br><small class="text-muted"><i class="fas fa-barcode me-1"></i>${escapeHtml(item.product.code)}</small>` : ''}
-                                                </td>
-                                                <td>
-                                                    <span class="text-muted">${escapeHtml(item.description || item.product_description || 'N/A')}</span>
-                                                </td>
-                                                <td>
-                                                    <span class="badge bg-info">${item.quantity || item.qty || 0}</span>
-                                                </td>
-                                                <td>
-                                                    <strong class="text-success">€${(item.price || item.unit_price || item.unit_price_incl_tax || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
-                                                    ${item.discount ? `<br><small class="text-warning"><i class="fas fa-tag me-1"></i>${(item.discount * 100).toFixed(0)}% discount</small>` : ''}
-                                                </td>
-                                                <td>
-                                                    <strong class="text-dark">€${(item.payable_amount || item.revenue || item.total_incl_tax || item.total_excl_tax || (item.price * item.quantity) || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</strong>
-                                                </td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ` : `
-                            <div class="alert alert-warning">
-                                <i class="fas fa-info-circle me-2"></i>
-                                Line item details not available for this invoice.
-                            </div>
-                        `}
-                    </div>
-                </div>
+            <div class="text-end">
+                <span class="badge badge-soft-success px-3 py-2 rounded-pill">Paid</span>
+            </div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-6">
+                <div class="text-uppercase text-muted small fw-bold mb-1">Amount</div>
+                <div class="h3 fw-bold text-dark mb-0">€${invoice.amount.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</div>
+            </div>
+            <div class="col-6 text-end">
+                 ${invoice.year ? `<div class="text-uppercase text-muted small fw-bold mb-1">Fiscal Year</div><div class="fw-bold">${invoice.year}</div>` : ''}
+            </div>
+        </div>
+
+        ${invoice.description ? `
+            <div class="p-3 bg-light rounded-3 mb-4 border border-light">
+                <div class="text-uppercase text-muted small fw-bold mb-2">Description</div>
+                <div>${escapeHtml(invoice.description)}</div>
+            </div>
+        ` : ''}
+        
+        ${invoice.notes ? `
+            <div class="p-3 bg-blue-50 text-blue-900 rounded-3 mb-4 border border-blue-100">
+                <div class="text-uppercase text-primary small fw-bold mb-2">Notes</div>
+                <div>${escapeHtml(invoice.notes)}</div>
+            </div>
+        ` : ''}
+        
+        <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0">Line Items</h6>
+                <span class="badge badge-soft-secondary">${invoice.line_items_count || 0} items</span>
             </div>
             
-            <div class="row mt-3">
-                <div class="col-12">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <small class="text-muted">
-                            Created: ${invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('nl-BE') : 'N/A'}
-                            ${invoice.updated_at ? ` | Updated: ${new Date(invoice.updated_at).toLocaleDateString('nl-BE')}` : ''}
-                        </small>
-                        <button class="btn btn-primary btn-sm" onclick="window.open('/invoice/${invoice.id}/pdf', '_blank')">
-                            <i class="fas fa-file-pdf me-1"></i>View PDF
-                        </button>
+            <div id="line-items-container">
+                ${fullInvoiceData && fullInvoiceData.invoice_line_items ? `
+                    <div class="table-responsive">
+                        <table class="table table-borderless align-middle">
+                            <thead class="bg-light text-muted small text-uppercase">
+                                <tr>
+                                    <th class="ps-3 rounded-start">Product</th>
+                                    <th>Qty</th>
+                                    <th class="text-end">Price</th>
+                                    <th class="text-end pe-3 rounded-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${fullInvoiceData.invoice_line_items.map(item => `
+                                    <tr class="border-bottom">
+                                        <td class="ps-3 py-3">
+                                            <div class="fw-bold text-dark">${escapeHtml((item.product && item.product.name) || 'Product')}</div>
+                                            <div class="small text-muted">${escapeHtml(item.description || item.product_description || '')}</div>
+                                            ${item.product && item.product.code ? `<div class="small text-muted font-monospace mt-1">${escapeHtml(item.product.code)}</div>` : ''}
+                                        </td>
+                                        <td class="py-3">
+                                            <span class="badge bg-light text-dark border">${item.quantity || item.qty || 0}</span>
+                                        </td>
+                                        <td class="text-end py-3">
+                                            <div>€${(item.price || item.unit_price || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</div>
+                                            ${item.discount ? `<div class="small text-danger">-${(item.discount * 100).toFixed(0)}%</div>` : ''}
+                                        </td>
+                                        <td class="text-end pe-3 py-3 fw-bold">
+                                            €${(item.payable_amount || (item.price * item.quantity) || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
                     </div>
-                </div>
+                ` : `
+                    <div class="p-4 text-center bg-light rounded-3 text-muted">
+                        Line item details not available.
+                    </div>
+                `}
             </div>
-        `;
+        </div>
+        
+        <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+             <div class="text-muted small">
+                ID: ${invoice.id} • Created: ${invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('nl-BE') : 'N/A'}
+             </div>
+             <button class="btn btn-modern-primary" onclick="window.open('/invoice/${invoice.id}/pdf', '_blank')">
+                <i class="fas fa-file-pdf me-2"></i>Download PDF
+            </button>
+        </div>
+    `;
         
         new bootstrap.Modal(document.getElementById('invoiceModal')).show();
         
