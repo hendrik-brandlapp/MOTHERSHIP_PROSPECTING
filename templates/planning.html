@@ -1657,7 +1657,7 @@ async function createTrip() {
                 createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
                 return;
             }
-            startLocation = { address: customAddress };
+            startLocation = { address: customAddress, name: customAddress };
             try {
                 const geocodeResponse = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(customAddress)}.json?access_token=${mapboxgl.accessToken}&limit=1`);
                 const geocodeData = await geocodeResponse.json();
@@ -1665,6 +1665,7 @@ async function createTrip() {
                     startLocation.lat = geocodeData.features[0].center[1];
                     startLocation.lng = geocodeData.features[0].center[0];
                     startLocation.address = geocodeData.features[0].place_name;
+                    startLocation.name = geocodeData.features[0].place_name;
                 }
             } catch (e) {
                 console.warn('Could not geocode start location, using default');
@@ -1675,6 +1676,7 @@ async function createTrip() {
             // Use pre-filled coordinates from dropdown
             const selectedOption = startLocationSelect.options[startLocationSelect.selectedIndex];
             startLocation = {
+                name: selectedOption.text.replace(/^[🏢🚉📍]\s*/, ''), // Remove emoji prefix
                 address: startLocationValue,
                 lat: parseFloat(selectedOption.dataset.lat),
                 lng: parseFloat(selectedOption.dataset.lng)
@@ -1694,6 +1696,7 @@ async function createTrip() {
                         const geocodeData = await geocodeResponse.json();
                         if (geocodeData.features && geocodeData.features.length > 0) {
                             endLocation = {
+                                name: geocodeData.features[0].place_name,
                                 lat: geocodeData.features[0].center[1],
                                 lng: geocodeData.features[0].center[0],
                                 address: geocodeData.features[0].place_name
@@ -1706,6 +1709,7 @@ async function createTrip() {
             } else {
                 const selectedOption = endLocationSelect.options[endLocationSelect.selectedIndex];
                 endLocation = {
+                    name: selectedOption.text.replace(/^[🏢🚉📍]\s*/, ''), // Remove emoji prefix
                     address: endLocationSelect.value,
                     lat: parseFloat(selectedOption.dataset.lat),
                     lng: parseFloat(selectedOption.dataset.lng)
