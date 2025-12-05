@@ -489,8 +489,22 @@
                         </div>
                     </div>
                     <div class="mb-3">
+                        <label for="tripStartLocation" class="form-label">Start Location <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="tripStartLocation" placeholder="e.g., Ghent, Belgium" required>
+                        <small class="text-muted">Where does the trip begin?</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="tripEndLocation" class="form-label">End Location</label>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="returnToStart" checked onchange="toggleEndLocation()">
+                            <label class="form-check-label" for="returnToStart">Return to start location</label>
+                        </div>
+                        <input type="text" class="form-control" id="tripEndLocation" placeholder="e.g., Brussels, Belgium" disabled>
+                        <small class="text-muted">Where does the trip end? Leave unchecked to specify different end point.</small>
+                    </div>
+                    <div class="mb-3">
                         <label for="tripNotes" class="form-label">Notes (Optional)</label>
-                        <textarea class="form-control" id="tripNotes" rows="3" placeholder="Add any notes about this trip..."></textarea>
+                        <textarea class="form-control" id="tripNotes" rows="2" placeholder="Add any notes about this trip..."></textarea>
                     </div>
                     <div class="alert alert-info mb-0">
                         <i class="fas fa-info-circle me-2"></i>
@@ -1443,6 +1457,19 @@ function showToast(message, type = 'info') {
 }
 
 // TRIP CREATION FUNCTIONALITY
+function toggleEndLocation() {
+    const returnToStart = document.getElementById('returnToStart').checked;
+    const endLocationInput = document.getElementById('tripEndLocation');
+    
+    if (returnToStart) {
+        endLocationInput.disabled = true;
+        endLocationInput.value = '';
+    } else {
+        endLocationInput.disabled = false;
+        endLocationInput.focus();
+    }
+}
+
 function showCreateTripModal() {
     const totalSelected = selectedCompanies.size + selectedProspects.size;
     
@@ -1458,6 +1485,12 @@ function showCreateTripModal() {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('tripDate').value = today;
     document.getElementById('tripDate').setAttribute('min', today);
+    
+    // Reset start/end location fields
+    document.getElementById('tripStartLocation').value = '';
+    document.getElementById('returnToStart').checked = true;
+    document.getElementById('tripEndLocation').value = '';
+    document.getElementById('tripEndLocation').disabled = true;
     
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('createTripModal'));
@@ -1546,10 +1579,53 @@ async function createTrip() {
             showToast(`${skippedCount} location(s) skipped (no coordinates). Creating trip with ${locations.length} locations.`, 'warning');
         }
         
-        // Prepare start location (use first selected location or default to Brussels)
-        const startLocation = locations.length > 0 && locations[0].latitude && locations[0].longitude 
-            ? { lat: locations[0].latitude, lng: locations[0].longitude }
-            : { lat: 50.8503, lng: 4.3517 }; // Default to Brussels
+        // Get start and end locations from form
+        const startLocationInput = document.getElementById('tripStartLocation').value.trim();
+        const returnToStart = document.getElementById('returnToStart').checked;
+        const endLocationInput = document.getElementById('tripEndLocation').value.trim();
+        
+        if (!startLocationInput) {
+            showToast('Please enter a start location', 'error');
+            createBtn.disabled = false;
+            createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
+            return;
+        }
+        
+        // Geocode start location
+        let startLocation = { address: startLocationInput };
+        try {
+            const geocodeResponse = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(startLocationInput)}.json?access_token=${mapboxgl.accessToken}&limit=1`);
+            const geocodeData = await geocodeResponse.json();
+            if (geocodeData.features && geocodeData.features.length > 0) {
+                startLocation.lat = geocodeData.features[0].center[1];
+                startLocation.lng = geocodeData.features[0].center[0];
+                startLocation.address = geocodeData.features[0].place_name;
+            }
+        } catch (e) {
+            console.warn('Could not geocode start location, using default');
+            startLocation.lat = 50.8503;
+            startLocation.lng = 4.3517;
+        }
+        
+        // Handle end location
+        let endLocation = null;
+        if (returnToStart) {
+            endLocation = { ...startLocation };
+        } else if (endLocationInput) {
+            try {
+                const geocodeResponse = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(endLocationInput)}.json?access_token=${mapboxgl.accessToken}&limit=1`);
+                const geocodeData = await geocodeResponse.json();
+                if (geocodeData.features && geocodeData.features.length > 0) {
+                    endLocation = {
+                        lat: geocodeData.features[0].center[1],
+                        lng: geocodeData.features[0].center[0],
+                        address: geocodeData.features[0].place_name
+                    };
+                }
+            } catch (e) {
+                console.warn('Could not geocode end location');
+            }
+        }
         
         // Prepare destinations
         const destinations = locations.map(loc => ({
@@ -1568,6 +1644,7 @@ async function createTrip() {
             start_time: tripStartTime,
             notes: tripNotes,
             start_location: startLocation,
+            end_location: endLocation,
             destinations: destinations
         };
         

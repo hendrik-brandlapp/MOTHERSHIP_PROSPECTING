@@ -2560,6 +2560,9 @@ function showCompanyDetails(companyId) {
     
     // Load invoices with new list renderer
     loadCompanyInvoicesV2(company.company_id);
+    
+    // Load trips related to this company
+    loadCompanyTrips(company.company_id);
 }
 
 // New function to render invoices as a clean list
@@ -2781,19 +2784,54 @@ async function loadCompanyTrips(companyId) {
         if (!container) return;
         
         if (data.success && data.trips && data.trips.length > 0) {
-            container.innerHTML = data.trips.map(trip => `
-                <a href="/trips" class="d-block text-decoration-none mb-2">
-                    <div class="d-flex justify-content-between align-items-center p-3 bg-white rounded border hover-shadow transition-all">
-                        <div>
-                            <div class="fw-bold text-dark small">${escapeHtml(trip.name)}</div>
-                            <div class="text-muted x-small"><i class="far fa-calendar me-1"></i>${trip.date ? new Date(trip.date).toLocaleDateString('nl-BE') : 'No date'}</div>
+            container.innerHTML = data.trips.map(trip => {
+                const tripDate = trip.date ? new Date(trip.date) : null;
+                const isPast = tripDate && tripDate < new Date();
+                const isUpcoming = tripDate && tripDate >= new Date();
+                
+                let statusClass = 'bg-secondary';
+                let statusText = trip.status || 'planned';
+                
+                if (trip.status === 'completed') {
+                    statusClass = 'bg-success';
+                    statusText = 'Completed';
+                } else if (trip.status === 'in_progress') {
+                    statusClass = 'bg-warning';
+                    statusText = 'In Progress';
+                } else if (isUpcoming) {
+                    statusClass = 'bg-info';
+                    statusText = 'Upcoming';
+                } else if (isPast && trip.status === 'planned') {
+                    statusClass = 'bg-secondary';
+                    statusText = 'Planned';
+                }
+                
+                return `
+                    <a href="/trips?trip=${trip.id}" class="d-block text-decoration-none mb-2 trip-item">
+                        <div class="d-flex justify-content-between align-items-center p-3 bg-white rounded-3 border hover-shadow transition-all">
+                            <div class="flex-grow-1">
+                                <div class="fw-bold text-dark small mb-1">${escapeHtml(trip.name)}</div>
+                                <div class="d-flex align-items-center gap-3 text-muted x-small">
+                                    <span><i class="far fa-calendar me-1"></i>${tripDate ? tripDate.toLocaleDateString('nl-BE', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date'}</span>
+                                    ${trip.stops_count ? `<span><i class="fas fa-map-marker-alt me-1"></i>${trip.stops_count} stops</span>` : ''}
+                                    ${trip.distance_km ? `<span><i class="fas fa-road me-1"></i>${trip.distance_km} km</span>` : ''}
+                                </div>
+                            </div>
+                            <span class="badge ${statusClass} rounded-pill">${statusText}</span>
                         </div>
-                        <span class="badge ${trip.status === 'completed' ? 'badge-soft-success' : 'badge-soft-secondary'}">${trip.status}</span>
-                    </div>
-                </a>
-            `).join('');
+                    </a>
+                `;
+            }).join('');
         } else {
-            container.innerHTML = '<div class="text-center p-3 bg-white rounded border border-dashed text-muted small">No recent trips found</div>';
+            container.innerHTML = `
+                <div class="text-center p-4 bg-light rounded-3 border border-dashed">
+                    <i class="fas fa-route text-muted mb-2" style="font-size: 2rem; opacity: 0.5;"></i>
+                    <div class="text-muted small">No trips scheduled for this company</div>
+                    <a href="/planning" class="btn btn-sm btn-outline-primary mt-2">
+                        <i class="fas fa-plus me-1"></i>Plan a Trip
+                    </a>
+                </div>
+            `;
         }
     } catch (error) {
         console.error('Error loading company trips:', error);

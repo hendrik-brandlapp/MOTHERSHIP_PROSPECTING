@@ -10024,18 +10024,24 @@ def api_company_trips(company_id):
         # Get unique trip IDs
         trip_ids = list(set(stop['trip_id'] for stop in stops_result.data))
         
-        # Fetch trip details
-        trips_result = supabase_client.table('trips').select('*').in_('id', trip_ids).execute()
+        # Fetch trip details with all stops count
+        trips_result = supabase_client.table('trips').select('*').in_('id', trip_ids).order('trip_date', desc=True).execute()
         
         trips = []
         for trip in trips_result.data or []:
+            # Get stops count for this trip
+            trip_stops = supabase_client.table('trip_stops').select('id').eq('trip_id', trip['id']).execute()
+            stops_count = len(trip_stops.data) if trip_stops.data else 0
+            
             trips.append({
                 'id': trip['id'],
                 'name': trip.get('name', 'Unnamed Trip'),
                 'date': trip.get('trip_date'),
                 'status': trip.get('status', 'planned'),
-                'total_distance': trip.get('total_distance_km'),
-                'total_stops': trip.get('total_stops', 0)
+                'distance_km': round(trip.get('total_distance_km', 0) or 0, 1),
+                'stops_count': stops_count,
+                'start_location': trip.get('start_location'),
+                'end_location': trip.get('end_location')
             })
         
         return jsonify({'success': True, 'trips': trips})
@@ -10178,6 +10184,7 @@ def create_trip():
                 return jsonify({'error': f'Missing required field: {field}'}), 400
         
         start_location = data['start_location']
+        end_location = data.get('end_location')  # Optional end location
         destinations = data['destinations']
         
         if not destinations or len(destinations) == 0:
@@ -10223,7 +10230,7 @@ def create_trip():
         trip_data = {
             'name': data['name'],
             'trip_date': data['trip_date'],
-            'start_location': start_location.get('name', 'Start'),
+            'start_location': start_location.get('address', start_location.get('name', 'Start')),
             'start_time': data['start_time'],
             'start_lat': start_location['lat'],
             'start_lng': start_location['lng'],
@@ -10232,6 +10239,12 @@ def create_trip():
             'estimated_duration_minutes': estimated_duration_minutes,
             'notes': data.get('notes', '')
         }
+        
+        # Add end location if provided
+        if end_location:
+            trip_data['end_location'] = end_location.get('address', end_location.get('name', 'End'))
+            trip_data['end_lat'] = end_location.get('lat')
+            trip_data['end_lng'] = end_location.get('lng')
         
         trip_response = supabase_client.table('trips').insert(trip_data).execute()
         
@@ -10480,6 +10493,78 @@ def delete_trip_stop(trip_id, stop_id):
         
     except Exception as e:
         print(f"Error deleting trip stop: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/<trip_id>/reorder', methods=['POST'])
+def reorder_trip_stops(trip_id):
+    """Reorder stops in a trip (manual drag and drop)"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+        
+        data = request.json
+        stops = data.get('stops', [])
+        
+        if not stops:
+            return jsonify({'error': 'No stops provided'}), 400
+        
+        # Verify trip exists
+        trip_response = supabase_client.table('trips').select('*').eq('id', trip_id).execute()
+        
+        if not trip_response.data:
+            return jsonify({'error': 'Trip not found'}), 404
+        
+        # Update each stop's order
+        for stop in stops:
+            stop_id = stop.get('id')
+            new_order = stop.get('order')
+            
+            if stop_id and new_order:
+                supabase_client.table('trip_stops').update({
+                    'stop_order': new_order
+                }).eq('id', stop_id).execute()
+        
+        # Recalculate total distance based on new order
+        stops_response = supabase_client.table('trip_stops').select('*').eq('trip_id', trip_id).order('stop_order').execute()
+        
+        if stops_response.data and len(stops_response.data) > 1:
+            # Calculate new distance using Haversine formula
+            total_distance = 0
+            for i in range(len(stops_response.data) - 1):
+                stop1 = stops_response.data[i]
+                stop2 = stops_response.data[i + 1]
+                
+                if stop1.get('latitude') and stop1.get('longitude') and stop2.get('latitude') and stop2.get('longitude'):
+                    from math import radians, sin, cos, sqrt, atan2
+                    
+                    lat1, lon1 = radians(float(stop1['latitude'])), radians(float(stop1['longitude']))
+                    lat2, lon2 = radians(float(stop2['latitude'])), radians(float(stop2['longitude']))
+                    
+                    dlat = lat2 - lat1
+                    dlon = lon2 - lon1
+                    
+                    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+                    c = 2 * atan2(sqrt(a), sqrt(1-a))
+                    
+                    # Earth radius in km
+                    total_distance += 6371 * c
+            
+            # Update trip with new distance
+            supabase_client.table('trips').update({
+                'total_distance_km': round(total_distance, 1)
+            }).eq('id', trip_id).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Stops reordered successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error reordering trip stops: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

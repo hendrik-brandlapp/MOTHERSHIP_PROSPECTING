@@ -168,10 +168,40 @@
         display: flex;
         gap: var(--space-sm);
         transition: all 0.2s ease;
+        background: var(--bg-surface);
     }
 
     .trip-stop-item:hover {
         background: var(--bg-hover);
+    }
+    
+    .trip-stop-item.sortable-ghost {
+        opacity: 0.4;
+        background: var(--accent-subtle);
+    }
+    
+    .trip-stop-item.sortable-drag {
+        background: var(--bg-surface);
+        box-shadow: var(--shadow-lg);
+        border-radius: var(--radius-md);
+    }
+    
+    .stop-drag-handle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        color: var(--text-muted);
+        cursor: grab;
+        flex-shrink: 0;
+    }
+    
+    .stop-drag-handle:active {
+        cursor: grabbing;
+    }
+    
+    .stop-drag-handle:hover {
+        color: var(--text-secondary);
     }
 
     .stop-number {
@@ -425,6 +455,8 @@
 {% block extra_scripts %}
 <!-- Google Maps API -->
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry"></script>
+<!-- SortableJS for drag and drop -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
 <script>
 let trips = [];
@@ -447,6 +479,14 @@ async function loadTrips() {
         if (data.success) {
             trips = data.trips;
             renderTripsList();
+            
+            // Check for trip ID in URL query params
+            const urlParams = new URLSearchParams(window.location.search);
+            const tripId = urlParams.get('trip');
+            if (tripId) {
+                // Select the trip from URL
+                selectTrip(tripId);
+            }
         } else {
             showNotification('Failed to load trips', 'error');
         }
@@ -558,6 +598,9 @@ function renderTripDetails() {
     
     const detailsSection = document.getElementById('tripDetailsSection');
     
+    // Determine if end location is different from start
+    const hasEndLocation = selectedTrip.end_location && selectedTrip.end_location !== selectedTrip.start_location;
+    
     detailsSection.innerHTML = `
         <div class="trip-details-header">
             <div>
@@ -565,8 +608,13 @@ function renderTripDetails() {
                 <small class="text-muted">
                     <i class="fas fa-calendar me-1"></i>${formatDate(selectedTrip.trip_date)}
                     <i class="fas fa-clock ms-2 me-1"></i>${selectedTrip.start_time}
-                    <i class="fas fa-map-marker-alt ms-2 me-1"></i>Starting from: ${escapeHtml(selectedTrip.start_location)}
                 </small>
+                <div class="mt-1">
+                    <small class="text-muted">
+                        <i class="fas fa-play-circle text-success me-1"></i>Start: ${escapeHtml(selectedTrip.start_location || 'Not set')}
+                        ${hasEndLocation ? `<span class="mx-2">→</span><i class="fas fa-stop-circle text-danger me-1"></i>End: ${escapeHtml(selectedTrip.end_location)}` : '<span class="mx-2">↺</span><span class="text-info">Return to start</span>'}
+                    </small>
+                </div>
             </div>
             <div class="d-flex gap-2">
                 <button class="btn btn-sm btn-outline-primary" onclick="confirmReoptimize('${selectedTrip.id}')">
@@ -618,6 +666,9 @@ function renderTripDetails() {
     
     // Initialize the map
     initializeTripMap();
+    
+    // Initialize drag and drop for stops
+    setTimeout(() => initSortable(), 100);
 }
 
 function renderStopsList() {
@@ -626,7 +677,10 @@ function renderStopsList() {
     }
     
     return selectedTrip.stops.map((stop, index) => `
-        <div class="trip-stop-item">
+        <div class="trip-stop-item" data-stop-id="${stop.id}" data-stop-order="${stop.stop_order}">
+            <div class="stop-drag-handle" title="Drag to reorder">
+                <i class="fas fa-grip-vertical"></i>
+            </div>
             <div class="stop-number">${stop.stop_order}</div>
             <div class="stop-content">
                 <a href="/data?company=${stop.company_id}&name=${encodeURIComponent(stop.company_name)}" class="stop-name-link" title="View company details">
@@ -635,12 +689,74 @@ function renderStopsList() {
                 <div class="stop-address">${escapeHtml(stop.address || 'No address')}</div>
             </div>
             <div class="stop-actions">
-                <button class="stop-action-btn delete" onclick="confirmDeleteStop('${selectedTrip.id}', '${stop.id}', '${escapeHtml(stop.company_name).replace(/'/g, "\\'")}')" title="Remove stop">
+                <button class="stop-action-btn delete" onclick="event.stopPropagation(); confirmDeleteStop('${selectedTrip.id}', '${stop.id}', '${escapeHtml(stop.company_name).replace(/'/g, "\\'")}')" title="Remove stop">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
         </div>
     `).join('');
+}
+
+let sortableInstance = null;
+
+function initSortable() {
+    const stopsList = document.getElementById('tripStopsList');
+    if (!stopsList || !selectedTrip) return;
+    
+    // Destroy existing instance
+    if (sortableInstance) {
+        sortableInstance.destroy();
+    }
+    
+    sortableInstance = new Sortable(stopsList, {
+        animation: 150,
+        handle: '.stop-drag-handle',
+        ghostClass: 'sortable-ghost',
+        dragClass: 'sortable-drag',
+        onEnd: async function(evt) {
+            if (evt.oldIndex === evt.newIndex) return;
+            
+            // Get the new order
+            const items = stopsList.querySelectorAll('.trip-stop-item');
+            const newOrder = Array.from(items).map((item, index) => ({
+                id: item.dataset.stopId,
+                order: index + 1
+            }));
+            
+            // Update the stop numbers visually
+            items.forEach((item, index) => {
+                const numberEl = item.querySelector('.stop-number');
+                if (numberEl) {
+                    numberEl.textContent = index + 1;
+                }
+            });
+            
+            // Save new order to server
+            try {
+                const response = await fetch(`/api/trips/${selectedTrip.id}/reorder`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stops: newOrder })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Stop order updated', 'success');
+                    // Reload trip to get updated route
+                    await selectTrip(selectedTrip.id);
+                } else {
+                    showNotification('Failed to update order', 'error');
+                    // Reload to restore original order
+                    await selectTrip(selectedTrip.id);
+                }
+            } catch (error) {
+                console.error('Error reordering stops:', error);
+                showNotification('Error updating order', 'error');
+                await selectTrip(selectedTrip.id);
+            }
+        }
+    });
 }
 
 function initializeTripMap() {
