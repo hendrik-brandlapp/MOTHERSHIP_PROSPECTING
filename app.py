@@ -11007,7 +11007,7 @@ def execute_ai_tool(function_name, args):
             table = f'sales_{year}'
             
             query = supabase_client.table(table).select(
-                'invoice_number, company_name, invoice_date, total_amount, is_paid'
+                'invoice_number, company_name, invoice_date, total_amount, is_paid, invoice_data'
             )
             
             if args.get('date_from'):
@@ -11019,11 +11019,37 @@ def execute_ai_tool(function_name, args):
             if args.get('company_name'):
                 query = query.ilike('company_name', f"%{args['company_name']}%")
             
+            result = query.limit(500).execute()
+            
+            # Process to get amounts from invoice_data if total_amount is null
+            processed = []
+            for r in result.data:
+                amount = r.get('total_amount')
+                if amount is None or amount == 0:
+                    invoice_data = r.get('invoice_data', {})
+                    if isinstance(invoice_data, dict):
+                        amount = invoice_data.get('payable_amount_with_financial_discount') or invoice_data.get('balance') or 0
+                
+                processed.append({
+                    'invoice_number': r.get('invoice_number'),
+                    'company_name': r.get('company_name'),
+                    'invoice_date': r.get('invoice_date'),
+                    'total_amount': float(amount) if amount else 0,
+                    'is_paid': r.get('is_paid')
+                })
+            
+            # Sort based on requested field
             order_by = args.get('order_by', 'invoice_date')
             order_desc = args.get('order_desc', True)
             
-            result = query.order(order_by, desc=order_desc).limit(limit).execute()
-            return result.data
+            if order_by == 'total_amount':
+                processed.sort(key=lambda x: x['total_amount'], reverse=order_desc)
+            elif order_by == 'invoice_date':
+                processed.sort(key=lambda x: x['invoice_date'] or '', reverse=order_desc)
+            else:
+                processed.sort(key=lambda x: x.get(order_by, ''), reverse=order_desc)
+            
+            return processed[:limit]
         
         elif function_name == "get_revenue_by_period":
             year = args.get('year', '2025')
@@ -11037,7 +11063,7 @@ def execute_ai_tool(function_name, args):
             else:
                 date_to = f"{year}-{month+1:02d}-01"
             
-            query = supabase_client.table(table).select('total_amount, company_name, invoice_date')
+            query = supabase_client.table(table).select('total_amount, company_name, invoice_date, invoice_data')
             query = query.gte('invoice_date', date_from).lt('invoice_date', date_to)
             
             if args.get('company_id'):
@@ -11045,7 +11071,16 @@ def execute_ai_tool(function_name, args):
             
             result = query.execute()
             
-            total_revenue = sum(float(r.get('total_amount') or 0) for r in result.data)
+            # Calculate revenue - use invoice_data if total_amount is null
+            total_revenue = 0
+            for r in result.data:
+                amount = r.get('total_amount')
+                if amount is None or amount == 0:
+                    invoice_data = r.get('invoice_data', {})
+                    if isinstance(invoice_data, dict):
+                        amount = invoice_data.get('payable_amount_with_financial_discount') or invoice_data.get('balance') or 0
+                total_revenue += float(amount) if amount else 0
+            
             invoice_count = len(result.data)
             
             month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June', 
@@ -11064,8 +11099,9 @@ def execute_ai_tool(function_name, args):
             limit = min(args.get('limit', 10), 50)
             table = f'sales_{year}'
             
+            # Select including invoice_data to get amounts from JSONB if needed
             query = supabase_client.table(table).select(
-                'invoice_number, company_name, invoice_date, total_amount'
+                'invoice_number, company_name, invoice_date, total_amount, invoice_data'
             )
             
             if month:
@@ -11076,8 +11112,29 @@ def execute_ai_tool(function_name, args):
                     date_to = f"{year}-{month+1:02d}-01"
                 query = query.gte('invoice_date', date_from).lt('invoice_date', date_to)
             
-            result = query.order('total_amount', desc=True).limit(limit).execute()
-            return result.data
+            # Get more results to sort properly (some might have null total_amount)
+            result = query.limit(500).execute()
+            
+            # Process results - get amount from total_amount OR from invoice_data
+            processed = []
+            for r in result.data:
+                amount = r.get('total_amount')
+                if amount is None or amount == 0:
+                    # Try to get from invoice_data JSONB
+                    invoice_data = r.get('invoice_data', {})
+                    if isinstance(invoice_data, dict):
+                        amount = invoice_data.get('payable_amount_with_financial_discount') or invoice_data.get('balance') or 0
+                
+                processed.append({
+                    'invoice_number': r.get('invoice_number'),
+                    'company_name': r.get('company_name'),
+                    'invoice_date': r.get('invoice_date'),
+                    'total_amount': float(amount) if amount else 0
+                })
+            
+            # Sort by amount descending and return top N
+            processed.sort(key=lambda x: x['total_amount'], reverse=True)
+            return processed[:limit]
         
         elif function_name == "query_distributor_sales":
             distributor = args.get('distributor')
