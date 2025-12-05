@@ -1584,7 +1584,7 @@ async function createTrip() {
                 if (company.latitude && company.longitude) {
                     locations.push({
                         type: 'company',
-                        id: company.id,
+                        id: company.company_id || company.id,  // Use company_id for linking
                         name: company.name,
                         address: getCompanyAddress(company),
                         latitude: company.latitude,
@@ -1724,7 +1724,8 @@ async function createTrip() {
             lat: loc.latitude,
             lng: loc.longitude,
             type: loc.type,
-            id: loc.id
+            id: loc.id,
+            company_id: loc.id  // Explicitly include company_id for trip_stops linking
         }));
         
         // Prepare request payload

@@ -672,29 +672,71 @@ function renderTripDetails() {
 }
 
 function renderStopsList() {
-    if (!selectedTrip || !selectedTrip.stops || selectedTrip.stops.length === 0) {
-        return '<div class="empty-state"><p>No stops in this trip</p></div>';
+    let html = '';
+    
+    // Start location
+    if (selectedTrip && selectedTrip.start_location) {
+        html += `
+            <div class="trip-stop-item start-location" style="background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-left: 4px solid #28a745;">
+                <div class="stop-number" style="background: #28a745;">
+                    <i class="fas fa-play" style="font-size: 0.7rem;"></i>
+                </div>
+                <div class="stop-content">
+                    <div class="stop-name" style="color: #155724; font-weight: 600;">
+                        <i class="fas fa-flag-checkered me-1"></i>Start
+                    </div>
+                    <div class="stop-address">${escapeHtml(selectedTrip.start_location)}</div>
+                </div>
+            </div>
+        `;
     }
     
-    return selectedTrip.stops.map((stop, index) => `
-        <div class="trip-stop-item" data-stop-id="${stop.id}" data-stop-order="${stop.stop_order}">
-            <div class="stop-drag-handle" title="Drag to reorder">
-                <i class="fas fa-grip-vertical"></i>
+    // Stops
+    if (!selectedTrip || !selectedTrip.stops || selectedTrip.stops.length === 0) {
+        html += '<div class="empty-state p-3 text-center text-muted"><p>No stops in this trip</p></div>';
+    } else {
+        html += selectedTrip.stops.map((stop, index) => `
+            <div class="trip-stop-item" data-stop-id="${stop.id}" data-stop-order="${stop.stop_order}">
+                <div class="stop-drag-handle" title="Drag to reorder">
+                    <i class="fas fa-grip-vertical"></i>
+                </div>
+                <div class="stop-number">${stop.stop_order}</div>
+                <div class="stop-content">
+                    <a href="/data?company=${stop.company_id}&name=${encodeURIComponent(stop.company_name)}" class="stop-name-link" title="View company details">
+                        ${escapeHtml(stop.company_name)}
+                    </a>
+                    <div class="stop-address">${escapeHtml(stop.address || 'No address')}</div>
+                </div>
+                <div class="stop-actions">
+                    <button class="stop-action-btn delete" onclick="event.stopPropagation(); confirmDeleteStop('${selectedTrip.id}', '${stop.id}', '${escapeHtml(stop.company_name).replace(/'/g, "\\'")}')" title="Remove stop">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
             </div>
-            <div class="stop-number">${stop.stop_order}</div>
-            <div class="stop-content">
-                <a href="/data?company=${stop.company_id}&name=${encodeURIComponent(stop.company_name)}" class="stop-name-link" title="View company details">
-                    ${escapeHtml(stop.company_name)}
-                </a>
-                <div class="stop-address">${escapeHtml(stop.address || 'No address')}</div>
+        `).join('');
+    }
+    
+    // End location
+    if (selectedTrip) {
+        const endLocation = selectedTrip.end_location || selectedTrip.start_location;
+        const isReturnToStart = !selectedTrip.end_location || selectedTrip.end_location === selectedTrip.start_location;
+        
+        html += `
+            <div class="trip-stop-item end-location" style="background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%); border-left: 4px solid #dc3545;">
+                <div class="stop-number" style="background: #dc3545;">
+                    <i class="fas fa-flag" style="font-size: 0.7rem;"></i>
+                </div>
+                <div class="stop-content">
+                    <div class="stop-name" style="color: #721c24; font-weight: 600;">
+                        <i class="fas fa-home me-1"></i>${isReturnToStart ? 'Return to Start' : 'End'}
+                    </div>
+                    <div class="stop-address">${escapeHtml(endLocation || 'Not set')}</div>
+                </div>
             </div>
-            <div class="stop-actions">
-                <button class="stop-action-btn delete" onclick="event.stopPropagation(); confirmDeleteStop('${selectedTrip.id}', '${stop.id}', '${escapeHtml(stop.company_name).replace(/'/g, "\\'")}')" title="Remove stop">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-        </div>
-    `).join('');
+        `;
+    }
+    
+    return html;
 }
 
 let sortableInstance = null;

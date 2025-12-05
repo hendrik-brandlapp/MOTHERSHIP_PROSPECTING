@@ -10013,10 +10013,20 @@ def api_company_trips(company_id):
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
         
-        # Find all trip stops for this company
+        # Find all trip stops for this company (try both int and string match)
+        # company_id in trip_stops might be stored as string or int
         stops_result = supabase_client.table('trip_stops').select(
             'trip_id, stop_order'
-        ).eq('company_id', int(company_id)).execute()
+        ).eq('company_id', company_id).execute()
+        
+        # If no results, try with integer
+        if not stops_result.data:
+            try:
+                stops_result = supabase_client.table('trip_stops').select(
+                    'trip_id, stop_order'
+                ).eq('company_id', int(company_id)).execute()
+            except:
+                pass
         
         if not stops_result.data:
             return jsonify({'success': True, 'trips': []})
@@ -10256,9 +10266,17 @@ def create_trip():
         # Create trip stops in order
         stops_data = []
         for idx, stop in enumerate(ordered_stops):
+            # Get company_id - handle both 'id' and 'company_id' fields
+            company_id_value = stop.get('company_id') or stop.get('id')
+            # Try to convert to int if possible
+            try:
+                company_id_value = int(company_id_value) if company_id_value else None
+            except (ValueError, TypeError):
+                company_id_value = str(company_id_value) if company_id_value else None
+            
             stop_data = {
                 'trip_id': trip_id,
-                'company_id': str(stop.get('id', '')),
+                'company_id': company_id_value,
                 'company_name': stop.get('name', 'Unknown'),
                 'address': stop.get('address', ''),
                 'latitude': stop.get('lat') or stop.get('latitude'),
