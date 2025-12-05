@@ -10575,60 +10575,78 @@ def reoptimize_trip(trip_id):
 # AI CHAT ENDPOINT - RAG with Database Context
 # =====================================================
 
-# Database schema for AI context
+# Database schema for AI context - ACCURATE JSONB STRUCTURE
 DATABASE_SCHEMA = """
-You have access to the following PostgreSQL tables in a Supabase database:
+IMPORTANT: Most detailed data is in JSONB columns!
 
-**companies** - Main customer/company data
-- company_id (integer): Unique company identifier
+**companies** - Customer/company master data
+Key columns:
+- company_id (integer): Unique ID
 - name (text): Company name
-- vat_number, email, phone_number, website
-- city, country_name, country_code
+- city, country_name
 - total_revenue_2024, total_revenue_2025, total_revenue_all_time (numeric)
 - invoice_count_2024, invoice_count_2025, invoice_count_all_time (integer)
-- average_invoice_value (numeric)
 - first_invoice_date, last_invoice_date (date)
 - assigned_salesperson (varchar)
-- customer_status (text): 'active', 'priority', 'at_risk', 'dormant', etc.
 
-**sales_2024** / **sales_2025** - Invoice data by year
-- invoice_id (integer), company_id (integer)
-- company_name (text), invoice_number (text)
-- invoice_date, due_date (date)
-- total_amount, balance (numeric)
+JSONB column `raw_company_data` contains:
+{
+  "id": 23073,
+  "tag": "000847",
+  "name": "Company Name",
+  "vat_number": "BE0874264958",
+  "public_name": "Display Name",
+  "invoice_address": {
+    "city": "Waregem",
+    "post_code": "8790",
+    "address_line1": "Street 14",
+    "country": {"id": 1, "name": "België"}
+  },
+  "company_categories": [
+    {"id": 12, "name": "Chain"},
+    {"id": 13, "name": "Convenience"}
+  ],
+  "sales_price_class": {"id": 51, "name": "Retail"},
+  "company_status": {"id": 1, "name": "Actief"}
+}
+
+**sales_2024** / **sales_2025** - Invoice data
+Key columns:
+- invoice_id (integer)
+- company_id (integer), company_name (text)
+- invoice_number (text)
+- invoice_date (date) - USE THIS FOR DATE FILTERING!
+- total_amount (numeric) - Invoice total in EUR
 - is_paid (boolean)
-- invoice_data (jsonb): Full invoice details including line_items
 
-**products** - Product catalog
-- id, name, sku, category_id, unit, description, is_active
+JSONB column `invoice_data` contains line items and details:
+{
+  "id": 198496,
+  "date": "2025-11-24",
+  "balance": 39026.72,
+  "company": {"id": 1324, "name": "Delhaize"},
+  "invoice_number": "202503244",
+  "invoice_line_items": [
+    {
+      "product": {"id": 880, "name": "Box Yugen Ginger Lemon Bio Cans 24x32cl"},
+      "quantity": 270,
+      "price": 41.28,
+      "revenue": 11045.30,
+      "discount": 0.009,
+      "liters": 2073.6,
+      "payable_amount": 11708.02
+    }
+  ],
+  "payable_amount_with_financial_discount": 39026.72
+}
 
-**product_categories** - Product categories
-- id, name, description
-
-**Biofresh 2022/2023/2024/2025**, **Delhaize 2022/2023/2024/2025**, **Geers 2022/2023/2024/2025**, **Inter Drinks 2023/2024/2025**, **Terroirist 2024/2025**
-These are distributor/wholesaler sales data tables with columns:
-- source, code_klant, naam_klant (customer name)
-- adres_straat_huisnr, postcode, stad, land, provincie
-- tel_nr, email, verantwoordelijke (responsible person)
-- aantal (quantity), week, maand (month), jaar (year)
+**Distributor Tables** (Biofresh/Delhaize/Geers/Inter Drinks/Terroirist + year)
+- naam_klant: customer name
+- stad: city
 - product, smaak (flavor), verpakking (packaging)
-- keten (chain), type_zaak (type of business)
-
-**trips** - Sales trip planning
-- id, name, trip_date, start_location, status
-- total_distance_km, estimated_duration_minutes
-
-**trip_stops** - Stops on sales trips
-- trip_id, company_id, company_name, address
-- latitude, longitude, stop_order, completed
-
-**prospects** - Potential customers
-- id, name, address, website, status
-- assigned_salesperson, visited_at
-
-**customer_alerts** - Automated alerts about customers
-- company_id, company_name, alert_type, priority
-- description, recommendation, status
+- aantal: quantity sold
+- maand: month, jaar: year
+- verantwoordelijke: sales rep
 """
 
 @app.route('/api/ai-chat', methods=['POST'])
@@ -10657,13 +10675,13 @@ def api_ai_chat():
                 "type": "function",
                 "function": {
                     "name": "query_companies",
-                    "description": "Query the companies table to get customer data, revenue, and invoice counts",
+                    "description": "Query the companies table to get customer data, revenue, and invoice counts. Use first_invoice_date to find NEW customers.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "order_by": {
                                 "type": "string",
-                                "enum": ["total_revenue_all_time", "total_revenue_2025", "total_revenue_2024", "invoice_count_all_time", "name", "last_invoice_date"],
+                                "enum": ["total_revenue_all_time", "total_revenue_2025", "total_revenue_2024", "invoice_count_all_time", "name", "last_invoice_date", "first_invoice_date"],
                                 "description": "Field to order results by"
                             },
                             "order_desc": {
@@ -10681,6 +10699,14 @@ def api_ai_chat():
                             "min_revenue": {
                                 "type": "number",
                                 "description": "Minimum total revenue filter"
+                            },
+                            "first_invoice_after": {
+                                "type": "string",
+                                "description": "Filter for NEW customers - first_invoice_date >= this date (YYYY-MM-DD)"
+                            },
+                            "first_invoice_before": {
+                                "type": "string",
+                                "description": "Filter for NEW customers - first_invoice_date < this date (YYYY-MM-DD)"
                             }
                         },
                         "required": ["order_by", "order_desc", "limit"]
@@ -10690,19 +10716,27 @@ def api_ai_chat():
             {
                 "type": "function",
                 "function": {
-                    "name": "query_invoices",
-                    "description": "Query sales/invoice data for 2024 or 2025",
+                    "name": "query_invoices_by_date",
+                    "description": "Query invoices filtered by date range. Use this for monthly/weekly revenue questions. Returns invoices with total_amount.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "year": {
                                 "type": "string",
                                 "enum": ["2024", "2025"],
-                                "description": "Which year to query"
+                                "description": "Which year table to query"
+                            },
+                            "date_from": {
+                                "type": "string",
+                                "description": "Start date filter YYYY-MM-DD (e.g. 2025-11-01 for November)"
+                            },
+                            "date_to": {
+                                "type": "string",
+                                "description": "End date filter YYYY-MM-DD (e.g. 2025-11-30 for end of November)"
                             },
                             "company_name": {
                                 "type": "string",
-                                "description": "Filter by company name (partial match)"
+                                "description": "Filter by company name (optional)"
                             },
                             "order_by": {
                                 "type": "string",
@@ -10715,7 +10749,58 @@ def api_ai_chat():
                             },
                             "limit": {
                                 "type": "integer",
-                                "description": "Number of results (max 50)"
+                                "description": "Number of results (max 100)"
+                            }
+                        },
+                        "required": ["year", "limit"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_revenue_by_period",
+                    "description": "Calculate total revenue for a specific month or date range. Returns SUM of total_amount.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "year": {
+                                "type": "string",
+                                "enum": ["2024", "2025"],
+                                "description": "Which year"
+                            },
+                            "month": {
+                                "type": "integer",
+                                "description": "Month number 1-12 (e.g. 11 for November)"
+                            },
+                            "company_id": {
+                                "type": "integer",
+                                "description": "Optional: filter by specific company_id"
+                            }
+                        },
+                        "required": ["year", "month"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_top_invoices",
+                    "description": "Get the largest invoices by total_amount for a period",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "year": {
+                                "type": "string",
+                                "enum": ["2024", "2025"]
+                            },
+                            "month": {
+                                "type": "integer",
+                                "description": "Month number 1-12"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Number of top invoices to return"
                             }
                         },
                         "required": ["year", "limit"]
@@ -10726,7 +10811,7 @@ def api_ai_chat():
                 "type": "function",
                 "function": {
                     "name": "query_distributor_sales",
-                    "description": "Query distributor/wholesaler sales data (Biofresh, Delhaize, Geers, Inter Drinks, Terroirist)",
+                    "description": "Query distributor/wholesaler sales data (Biofresh, Delhaize, Geers, Inter Drinks, Terroirist) - shows product sales to end customers",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -10748,6 +10833,10 @@ def api_ai_chat():
                                 "type": "string",
                                 "description": "Filter by city (stad)"
                             },
+                            "month_filter": {
+                                "type": "string",
+                                "description": "Filter by month name (e.g. 'november', 'oktober')"
+                            },
                             "limit": {
                                 "type": "integer",
                                 "description": "Number of results (max 100)"
@@ -10761,14 +10850,14 @@ def api_ai_chat():
                 "type": "function",
                 "function": {
                     "name": "get_summary_stats",
-                    "description": "Get summary statistics for companies or sales",
+                    "description": "Get summary statistics",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "stat_type": {
                                 "type": "string",
-                                "enum": ["total_companies", "total_revenue_2024", "total_revenue_2025", "total_invoices_2024", "total_invoices_2025", "avg_invoice_value", "top_cities"],
-                                "description": "Type of statistic to get"
+                                "enum": ["total_companies", "total_revenue_2024", "total_revenue_2025", "total_invoices_2024", "total_invoices_2025", "top_cities", "top_products_2025"],
+                                "description": "Type of statistic"
                             }
                         },
                         "required": ["stat_type"]
@@ -10778,20 +10867,31 @@ def api_ai_chat():
         ]
         
         # Build system prompt
-        system_prompt = f"""You are a helpful sales analytics assistant for a beverage distribution company in Belgium.
+        current_date = datetime.now()
+        current_month = current_date.month
+        current_year_num = current_date.year
+        
+        system_prompt = f"""You are a helpful sales analytics assistant for YUGEN, a Belgian kombucha beverage company.
 You help sales reps analyze their company and invoice data using the available tools.
 
-GUIDELINES:
-1. Use the provided tools to fetch data when users ask questions
-2. Keep responses concise and conversational - this is a chat interface
-3. Format currency in EUR (€) with Belgian formatting
-4. After getting data, summarize the key insights
-5. Current viewing context: {context.get('currentYear', '2025')} year, {context.get('totalCompanies', 0)} total companies
+TODAY'S DATE: {current_date.strftime('%Y-%m-%d')} (December 2025)
+Current month number: {current_month}
 
-Available data sources:
-- companies: Customer master data with revenue and invoice counts
-- sales_2024/sales_2025: Invoice-level data
-- Distributor tables (Biofresh, Delhaize, Geers, Inter Drinks, Terroirist): Detailed product sales to end customers
+IMPORTANT TOOL USAGE:
+- For "revenue this month" or "November revenue": use get_revenue_by_period with year="2025" and month=11
+- For "largest orders this month": use get_top_invoices with year="2025" and month=11
+- For "new customers this month": use query_companies with first_invoice_after="2025-11-01" and first_invoice_before="2025-12-01"
+- For "top customers": use query_companies with order_by="total_revenue_all_time" and order_desc=true
+- For product sales: use get_summary_stats with stat_type="top_products_2025"
+
+GUIDELINES:
+1. ALWAYS use the tools to fetch real data - don't make up numbers
+2. Keep responses concise and conversational 
+3. Format currency as €X.XXX,XX (Belgian format)
+4. Summarize key insights from the data
+5. If data shows errors or empty results, explain what might be wrong
+
+Current viewing context: {context.get('currentYear', '2025')} year, {context.get('totalCompanies', 0)} total companies
 """
 
         # Build messages for OpenAI
@@ -10876,7 +10976,7 @@ def execute_ai_tool(function_name, args):
             limit = min(args.get('limit', 10), 50)
             
             query = supabase_client.table('companies').select(
-                'name, city, country_name, total_revenue_all_time, total_revenue_2024, total_revenue_2025, invoice_count_all_time, average_invoice_value, last_invoice_date, assigned_salesperson'
+                'name, city, total_revenue_all_time, total_revenue_2024, total_revenue_2025, invoice_count_all_time, first_invoice_date, last_invoice_date, assigned_salesperson'
             )
             
             if args.get('city_filter'):
@@ -10885,17 +10985,30 @@ def execute_ai_tool(function_name, args):
             if args.get('min_revenue'):
                 query = query.gte('total_revenue_all_time', args['min_revenue'])
             
+            # Filter for NEW customers by first_invoice_date
+            if args.get('first_invoice_after'):
+                query = query.gte('first_invoice_date', args['first_invoice_after'])
+            
+            if args.get('first_invoice_before'):
+                query = query.lt('first_invoice_date', args['first_invoice_before'])
+            
             result = query.order(order_by, desc=order_desc).limit(limit).execute()
             return result.data
         
-        elif function_name == "query_invoices":
+        elif function_name == "query_invoices_by_date":
             year = args.get('year', '2025')
-            limit = min(args.get('limit', 20), 50)
+            limit = min(args.get('limit', 20), 100)
             table = f'sales_{year}'
             
             query = supabase_client.table(table).select(
                 'invoice_number, company_name, invoice_date, total_amount, is_paid'
             )
+            
+            if args.get('date_from'):
+                query = query.gte('invoice_date', args['date_from'])
+            
+            if args.get('date_to'):
+                query = query.lte('invoice_date', args['date_to'])
             
             if args.get('company_name'):
                 query = query.ilike('company_name', f"%{args['company_name']}%")
@@ -10904,6 +11017,60 @@ def execute_ai_tool(function_name, args):
             order_desc = args.get('order_desc', True)
             
             result = query.order(order_by, desc=order_desc).limit(limit).execute()
+            return result.data
+        
+        elif function_name == "get_revenue_by_period":
+            year = args.get('year', '2025')
+            month = args.get('month')
+            table = f'sales_{year}'
+            
+            # Build date range for the month
+            date_from = f"{year}-{month:02d}-01"
+            if month == 12:
+                date_to = f"{int(year)+1}-01-01"
+            else:
+                date_to = f"{year}-{month+1:02d}-01"
+            
+            query = supabase_client.table(table).select('total_amount, company_name, invoice_date')
+            query = query.gte('invoice_date', date_from).lt('invoice_date', date_to)
+            
+            if args.get('company_id'):
+                query = query.eq('company_id', args['company_id'])
+            
+            result = query.execute()
+            
+            total_revenue = sum(float(r.get('total_amount') or 0) for r in result.data)
+            invoice_count = len(result.data)
+            
+            month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June', 
+                          'July', 'August', 'September', 'October', 'November', 'December']
+            
+            return [{
+                "period": f"{month_names[month]} {year}",
+                "total_revenue": round(total_revenue, 2),
+                "invoice_count": invoice_count,
+                "average_invoice": round(total_revenue / invoice_count, 2) if invoice_count > 0 else 0
+            }]
+        
+        elif function_name == "get_top_invoices":
+            year = args.get('year', '2025')
+            month = args.get('month')
+            limit = min(args.get('limit', 10), 50)
+            table = f'sales_{year}'
+            
+            query = supabase_client.table(table).select(
+                'invoice_number, company_name, invoice_date, total_amount'
+            )
+            
+            if month:
+                date_from = f"{year}-{month:02d}-01"
+                if month == 12:
+                    date_to = f"{int(year)+1}-01-01"
+                else:
+                    date_to = f"{year}-{month+1:02d}-01"
+                query = query.gte('invoice_date', date_from).lt('invoice_date', date_to)
+            
+            result = query.order('total_amount', desc=True).limit(limit).execute()
             return result.data
         
         elif function_name == "query_distributor_sales":
@@ -10922,6 +11089,9 @@ def execute_ai_tool(function_name, args):
             
             if args.get('city_filter'):
                 query = query.ilike('stad', f"%{args['city_filter']}%")
+            
+            if args.get('month_filter'):
+                query = query.ilike('maand', f"%{args['month_filter']}%")
             
             result = query.limit(limit).execute()
             return result.data
@@ -10951,12 +11121,6 @@ def execute_ai_tool(function_name, args):
                 result = supabase_client.table('sales_2025').select('*', count='exact').execute()
                 return [{"total_invoices_2025": result.count}]
             
-            elif stat_type == "avg_invoice_value":
-                result = supabase_client.table('companies').select('average_invoice_value').execute()
-                values = [float(r.get('average_invoice_value') or 0) for r in result.data if r.get('average_invoice_value')]
-                avg = sum(values) / len(values) if values else 0
-                return [{"average_invoice_value": round(avg, 2)}]
-            
             elif stat_type == "top_cities":
                 result = supabase_client.table('companies').select('city, total_revenue_all_time').execute()
                 city_revenue = {}
@@ -10967,11 +11131,32 @@ def execute_ai_tool(function_name, args):
                 
                 top_cities = sorted(city_revenue.items(), key=lambda x: x[1], reverse=True)[:10]
                 return [{"city": c, "revenue": round(r, 2)} for c, r in top_cities]
+            
+            elif stat_type == "top_products_2025":
+                # Get invoices with invoice_data to extract products
+                result = supabase_client.table('sales_2025').select('invoice_data').limit(500).execute()
+                product_revenue = {}
+                
+                for r in result.data:
+                    invoice_data = r.get('invoice_data', {})
+                    if isinstance(invoice_data, dict):
+                        line_items = invoice_data.get('invoice_line_items', [])
+                        for item in line_items:
+                            if isinstance(item, dict):
+                                product = item.get('product', {})
+                                product_name = product.get('name', 'Unknown') if isinstance(product, dict) else 'Unknown'
+                                revenue = float(item.get('revenue', 0) or 0)
+                                product_revenue[product_name] = product_revenue.get(product_name, 0) + revenue
+                
+                top_products = sorted(product_revenue.items(), key=lambda x: x[1], reverse=True)[:15]
+                return [{"product": p, "revenue": round(r, 2)} for p, r in top_products]
         
         return []
         
     except Exception as e:
         print(f"Tool execution error: {e}")
+        import traceback
+        traceback.print_exc()
         return [{"error": str(e)}]
 
 
