@@ -10863,7 +10863,7 @@ def api_ai_chat():
                 "type": "function",
                 "function": {
                     "name": "get_revenue_by_period",
-                    "description": "Calculate total revenue for a specific month or date range. Returns SUM of total_amount.",
+                    "description": "Calculate NET revenue (excluding VAT) for a specific month. Uses line item 'revenue' field which is price after discounts.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -10882,6 +10882,24 @@ def api_ai_chat():
                             }
                         },
                         "required": ["year", "month"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_yearly_monthly_breakdown",
+                    "description": "Get NET revenue breakdown for ALL months in a year. Use this for 'best month', 'monthly comparison', or 'year overview'.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "year": {
+                                "type": "string",
+                                "enum": ["2024", "2025"],
+                                "description": "Which year to analyze"
+                            }
+                        },
+                        "required": ["year"]
                     }
                 }
             },
@@ -10988,12 +11006,15 @@ CRITICAL RULES:
 
 TOOL MAPPING:
 - "What is our revenue for [month]?" → get_revenue_by_period(year="2025", month=X)
+- "Best month" / "monthly breakdown" / "compare months" → get_yearly_monthly_breakdown(year="2025")
 - "Top/biggest invoices/orders" → get_top_invoices(year="2025", month=X, limit=10)
 - "New customers this month" → query_companies(first_invoice_after="2025-11-01", first_invoice_before="2025-12-01", order_by="first_invoice_date", limit=20)
 - "Top customers by revenue" → query_companies(order_by="total_revenue_all_time", order_desc=true, limit=10)
 - "Best selling products" → get_summary_stats(stat_type="top_products_2025")
 - "Total revenue 2025" → get_summary_stats(stat_type="total_revenue_2025")
 - "How many customers" → get_summary_stats(stat_type="total_companies")
+
+IMPORTANT: Revenue values are NET (after discounts, before VAT). This is calculated from invoice line items' 'revenue' field.
 
 RESPONSE FORMAT:
 - Use Belgian number format: €1.234,56
@@ -11174,15 +11195,23 @@ def execute_ai_tool(function_name, args):
             
             result = query.execute()
             
-            # Calculate revenue - use invoice_data if total_amount is null
+            # Calculate NET revenue (excluding VAT) by summing line item 'revenue' fields
+            # Revenue in line items = price after discount, before VAT
             total_revenue = 0
+            total_revenue_with_vat = 0
+            
             for r in result.data:
-                amount = r.get('total_amount')
-                if amount is None or amount == 0:
-                    invoice_data = r.get('invoice_data', {})
-                    if isinstance(invoice_data, dict):
-                        amount = invoice_data.get('payable_amount_with_financial_discount') or invoice_data.get('balance') or 0
-                total_revenue += float(amount) if amount else 0
+                invoice_data = r.get('invoice_data', {})
+                if isinstance(invoice_data, dict):
+                    line_items = invoice_data.get('invoice_line_items', [])
+                    for item in line_items:
+                        if isinstance(item, dict):
+                            # 'revenue' = net amount after discount, before VAT
+                            revenue = float(item.get('revenue') or 0)
+                            total_revenue += revenue
+                            # 'payable_amount' = amount including VAT
+                            payable = float(item.get('payable_amount') or 0)
+                            total_revenue_with_vat += payable
             
             invoice_count = len(result.data)
             
@@ -11191,9 +11220,76 @@ def execute_ai_tool(function_name, args):
             
             return [{
                 "period": f"{month_names[month]} {year}",
-                "total_revenue": round(total_revenue, 2),
+                "total_revenue_net": round(total_revenue, 2),  # Without VAT (net sales)
+                "total_revenue_with_vat": round(total_revenue_with_vat, 2),  # Including VAT
                 "invoice_count": invoice_count,
-                "average_invoice": round(total_revenue / invoice_count, 2) if invoice_count > 0 else 0
+                "average_invoice_net": round(total_revenue / invoice_count, 2) if invoice_count > 0 else 0
+            }]
+        
+        elif function_name == "get_yearly_monthly_breakdown":
+            year = args.get('year', '2025')
+            table = f'sales_{year}'
+            
+            month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June', 
+                          'July', 'August', 'September', 'October', 'November', 'December']
+            
+            # Get all invoices for the year
+            result = supabase_client.table(table).select('invoice_date, invoice_data').execute()
+            
+            # Group by month and calculate NET revenue
+            monthly_data = {m: {'revenue': 0, 'count': 0} for m in range(1, 13)}
+            
+            for r in result.data:
+                invoice_date = r.get('invoice_date')
+                if not invoice_date:
+                    continue
+                
+                # Extract month from date
+                try:
+                    month_num = int(invoice_date.split('-')[1])
+                except:
+                    continue
+                
+                invoice_data = r.get('invoice_data', {})
+                invoice_revenue = 0
+                
+                if isinstance(invoice_data, dict):
+                    line_items = invoice_data.get('invoice_line_items', [])
+                    for item in line_items:
+                        if isinstance(item, dict):
+                            # Sum 'revenue' (net after discount, before VAT)
+                            invoice_revenue += float(item.get('revenue') or 0)
+                
+                monthly_data[month_num]['revenue'] += invoice_revenue
+                monthly_data[month_num]['count'] += 1
+            
+            # Build result sorted by month
+            breakdown = []
+            total_year_revenue = 0
+            best_month = None
+            best_revenue = 0
+            
+            for m in range(1, 13):
+                data = monthly_data[m]
+                total_year_revenue += data['revenue']
+                
+                if data['revenue'] > best_revenue:
+                    best_revenue = data['revenue']
+                    best_month = month_names[m]
+                
+                breakdown.append({
+                    "month": month_names[m],
+                    "month_num": m,
+                    "revenue_net": round(data['revenue'], 2),
+                    "invoice_count": data['count']
+                })
+            
+            return [{
+                "year": year,
+                "total_year_revenue_net": round(total_year_revenue, 2),
+                "best_month": best_month,
+                "best_month_revenue": round(best_revenue, 2),
+                "monthly_breakdown": breakdown
             }]
         
         elif function_name == "get_top_invoices":
@@ -11218,25 +11314,38 @@ def execute_ai_tool(function_name, args):
             # Get more results to sort properly (some might have null total_amount)
             result = query.limit(500).execute()
             
-            # Process results - get amount from total_amount OR from invoice_data
+            # Process results - calculate NET revenue from line items
             processed = []
             for r in result.data:
-                amount = r.get('total_amount')
-                if amount is None or amount == 0:
-                    # Try to get from invoice_data JSONB
-                    invoice_data = r.get('invoice_data', {})
-                    if isinstance(invoice_data, dict):
-                        amount = invoice_data.get('payable_amount_with_financial_discount') or invoice_data.get('balance') or 0
+                invoice_data = r.get('invoice_data', {})
+                net_revenue = 0
+                gross_with_vat = 0
+                
+                if isinstance(invoice_data, dict):
+                    line_items = invoice_data.get('invoice_line_items', [])
+                    for item in line_items:
+                        if isinstance(item, dict):
+                            # Sum 'revenue' (net after discount, before VAT)
+                            net_revenue += float(item.get('revenue') or 0)
+                            # Sum 'payable_amount' (including VAT)
+                            gross_with_vat += float(item.get('payable_amount') or 0)
+                
+                # Fallback to total_amount or balance if no line items
+                if net_revenue == 0:
+                    gross_with_vat = float(invoice_data.get('payable_amount_with_financial_discount') or r.get('total_amount') or 0)
+                    # Approximate net by removing ~6% VAT (common rate)
+                    net_revenue = gross_with_vat / 1.06 if gross_with_vat > 0 else 0
                 
                 processed.append({
                     'invoice_number': r.get('invoice_number'),
                     'company_name': r.get('company_name'),
                     'invoice_date': r.get('invoice_date'),
-                    'total_amount': float(amount) if amount else 0
+                    'total_amount_net': round(net_revenue, 2),
+                    'total_amount_with_vat': round(gross_with_vat, 2)
                 })
             
-            # Sort by amount descending and return top N
-            processed.sort(key=lambda x: x['total_amount'], reverse=True)
+            # Sort by NET amount descending and return top N
+            processed.sort(key=lambda x: x['total_amount_net'], reverse=True)
             return processed[:limit]
         
         elif function_name == "query_distributor_sales":
