@@ -10286,20 +10286,26 @@ def create_trip():
             }
             stops_data.append(stop_data)
         
-        # Insert all stops
+        # Insert all stops in batches to avoid timeout
         if stops_data:
-            supabase_client.table('trip_stops').insert(stops_data).execute()
+            # Insert in smaller batches for reliability
+            batch_size = 10
+            for i in range(0, len(stops_data), batch_size):
+                batch = stops_data[i:i + batch_size]
+                supabase_client.table('trip_stops').insert(batch).execute()
         
-        # Fetch the complete trip with stops
-        complete_trip = supabase_client.table('trips').select('*').eq('id', trip_id).execute()
-        stops = supabase_client.table('trip_stops').select('*').eq('trip_id', trip_id).order('stop_order').execute()
-        
-        result = complete_trip.data[0]
-        result['stops'] = stops.data
-        
+        # Return minimal response to avoid timeout - client will fetch full details
         return jsonify({
             'success': True,
-            'trip': result,
+            'trip': {
+                'id': trip_id,
+                'name': data['name'],
+                'trip_date': data['trip_date'],
+                'start_location': trip_data.get('start_location'),
+                'total_distance_km': total_distance_km,
+                'estimated_duration_minutes': estimated_duration_minutes,
+                'stops_count': len(stops_data)
+            },
             'message': 'Trip created successfully' + (' with optimized route' if optimize_trip_route else '')
         })
         
