@@ -10226,7 +10226,7 @@ def create_trip():
             total_distance_km = 0
             estimated_duration_minutes = len(destinations) * 30
         
-        # Create trip record
+        # Create trip record (only use columns that exist in the database)
         trip_data = {
             'name': data['name'],
             'trip_date': data['trip_date'],
@@ -10240,11 +10240,8 @@ def create_trip():
             'notes': data.get('notes', '')
         }
         
-        # Add end location if provided
-        if end_location:
-            trip_data['end_location'] = end_location.get('address', end_location.get('name', 'End'))
-            trip_data['end_lat'] = end_location.get('lat')
-            trip_data['end_lng'] = end_location.get('lng')
+        # Note: end_location columns (end_lat, end_lng, end_location) are not in the current database schema
+        # If needed, run this SQL: ALTER TABLE trips ADD COLUMN end_location TEXT, ADD COLUMN end_lat NUMERIC, ADD COLUMN end_lng NUMERIC;
         
         trip_response = supabase_client.table('trips').insert(trip_data).execute()
         

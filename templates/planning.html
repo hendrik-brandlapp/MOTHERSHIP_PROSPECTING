@@ -490,7 +490,17 @@
                     </div>
                     <div class="mb-3">
                         <label for="tripStartLocation" class="form-label">Start Location <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="tripStartLocation" placeholder="e.g., Ghent, Belgium" required>
+                        <select class="form-select" id="tripStartLocation" required>
+                            <option value="">Select start location...</option>
+                            <option value="Speldenstraat 1, 9000 Gent, Belgium" data-lat="51.0543" data-lng="3.7174">🏢 Office - Speldenstraat 1, Gent</option>
+                            <option value="Brussel-Centraal, Brussels, Belgium" data-lat="50.8455" data-lng="4.3570">🚉 Brussels Central Station</option>
+                            <option value="Antwerp Central Station, Belgium" data-lat="51.2172" data-lng="4.4211">🚉 Antwerp Central Station</option>
+                            <option value="Gent-Sint-Pieters, Ghent, Belgium" data-lat="51.0359" data-lng="3.7107">🚉 Gent-Sint-Pieters Station</option>
+                            <option value="Bruges Station, Belgium" data-lat="51.1973" data-lng="3.2169">🚉 Bruges Station</option>
+                            <option value="Leuven Station, Belgium" data-lat="50.8816" data-lng="4.7157">🚉 Leuven Station</option>
+                            <option value="custom">📍 Custom location...</option>
+                        </select>
+                        <input type="text" class="form-control mt-2 d-none" id="tripStartLocationCustom" placeholder="Enter custom address...">
                         <small class="text-muted">Where does the trip begin?</small>
                     </div>
                     <div class="mb-3">
@@ -499,8 +509,18 @@
                             <input class="form-check-input" type="checkbox" id="returnToStart" checked onchange="toggleEndLocation()">
                             <label class="form-check-label" for="returnToStart">Return to start location</label>
                         </div>
-                        <input type="text" class="form-control" id="tripEndLocation" placeholder="e.g., Brussels, Belgium" disabled>
-                        <small class="text-muted">Where does the trip end? Leave unchecked to specify different end point.</small>
+                        <select class="form-select" id="tripEndLocation" disabled>
+                            <option value="">Select end location...</option>
+                            <option value="Speldenstraat 1, 9000 Gent, Belgium" data-lat="51.0543" data-lng="3.7174">🏢 Office - Speldenstraat 1, Gent</option>
+                            <option value="Brussel-Centraal, Brussels, Belgium" data-lat="50.8455" data-lng="4.3570">🚉 Brussels Central Station</option>
+                            <option value="Antwerp Central Station, Belgium" data-lat="51.2172" data-lng="4.4211">🚉 Antwerp Central Station</option>
+                            <option value="Gent-Sint-Pieters, Ghent, Belgium" data-lat="51.0359" data-lng="3.7107">🚉 Gent-Sint-Pieters Station</option>
+                            <option value="Bruges Station, Belgium" data-lat="51.1973" data-lng="3.2169">🚉 Bruges Station</option>
+                            <option value="Leuven Station, Belgium" data-lat="50.8816" data-lng="4.7157">🚉 Leuven Station</option>
+                            <option value="custom">📍 Custom location...</option>
+                        </select>
+                        <input type="text" class="form-control mt-2 d-none" id="tripEndLocationCustom" placeholder="Enter custom address...">
+                        <small class="text-muted">Where does the trip end?</small>
                     </div>
                     <div class="mb-3">
                         <label for="tripNotes" class="form-label">Notes (Optional)</label>
@@ -1459,16 +1479,43 @@ function showToast(message, type = 'info') {
 // TRIP CREATION FUNCTIONALITY
 function toggleEndLocation() {
     const returnToStart = document.getElementById('returnToStart').checked;
-    const endLocationInput = document.getElementById('tripEndLocation');
+    const endLocationSelect = document.getElementById('tripEndLocation');
+    const endLocationCustom = document.getElementById('tripEndLocationCustom');
     
     if (returnToStart) {
-        endLocationInput.disabled = true;
-        endLocationInput.value = '';
+        endLocationSelect.disabled = true;
+        endLocationSelect.value = '';
+        endLocationCustom.classList.add('d-none');
+        endLocationCustom.value = '';
     } else {
-        endLocationInput.disabled = false;
-        endLocationInput.focus();
+        endLocationSelect.disabled = false;
+        endLocationSelect.focus();
     }
 }
+
+// Handle custom location toggle for start
+document.getElementById('tripStartLocation').addEventListener('change', function() {
+    const customInput = document.getElementById('tripStartLocationCustom');
+    if (this.value === 'custom') {
+        customInput.classList.remove('d-none');
+        customInput.focus();
+    } else {
+        customInput.classList.add('d-none');
+        customInput.value = '';
+    }
+});
+
+// Handle custom location toggle for end
+document.getElementById('tripEndLocation').addEventListener('change', function() {
+    const customInput = document.getElementById('tripEndLocationCustom');
+    if (this.value === 'custom') {
+        customInput.classList.remove('d-none');
+        customInput.focus();
+    } else {
+        customInput.classList.add('d-none');
+        customInput.value = '';
+    }
+});
 
 function showCreateTripModal() {
     const totalSelected = selectedCompanies.size + selectedProspects.size;
@@ -1488,9 +1535,13 @@ function showCreateTripModal() {
     
     // Reset start/end location fields
     document.getElementById('tripStartLocation').value = '';
+    document.getElementById('tripStartLocationCustom').value = '';
+    document.getElementById('tripStartLocationCustom').classList.add('d-none');
     document.getElementById('returnToStart').checked = true;
     document.getElementById('tripEndLocation').value = '';
     document.getElementById('tripEndLocation').disabled = true;
+    document.getElementById('tripEndLocationCustom').value = '';
+    document.getElementById('tripEndLocationCustom').classList.add('d-none');
     
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('createTripModal'));
@@ -1580,50 +1631,85 @@ async function createTrip() {
         }
         
         // Get start and end locations from form
-        const startLocationInput = document.getElementById('tripStartLocation').value.trim();
+        const startLocationSelect = document.getElementById('tripStartLocation');
+        const startLocationCustom = document.getElementById('tripStartLocationCustom');
         const returnToStart = document.getElementById('returnToStart').checked;
-        const endLocationInput = document.getElementById('tripEndLocation').value.trim();
+        const endLocationSelect = document.getElementById('tripEndLocation');
+        const endLocationCustom = document.getElementById('tripEndLocationCustom');
         
-        if (!startLocationInput) {
-            showToast('Please enter a start location', 'error');
+        // Determine start location
+        let startLocationValue = startLocationSelect.value;
+        let startLocation = {};
+        
+        if (!startLocationValue) {
+            showToast('Please select a start location', 'error');
             createBtn.disabled = false;
             createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
             return;
         }
         
-        // Geocode start location
-        let startLocation = { address: startLocationInput };
-        try {
-            const geocodeResponse = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(startLocationInput)}.json?access_token=${mapboxgl.accessToken}&limit=1`);
-            const geocodeData = await geocodeResponse.json();
-            if (geocodeData.features && geocodeData.features.length > 0) {
-                startLocation.lat = geocodeData.features[0].center[1];
-                startLocation.lng = geocodeData.features[0].center[0];
-                startLocation.address = geocodeData.features[0].place_name;
+        if (startLocationValue === 'custom') {
+            // Use custom input and geocode
+            const customAddress = startLocationCustom.value.trim();
+            if (!customAddress) {
+                showToast('Please enter a custom start address', 'error');
+                createBtn.disabled = false;
+                createBtn.innerHTML = '<i class="fas fa-check me-2"></i>Create Trip';
+                return;
             }
-        } catch (e) {
-            console.warn('Could not geocode start location, using default');
-            startLocation.lat = 50.8503;
-            startLocation.lng = 4.3517;
+            startLocation = { address: customAddress };
+            try {
+                const geocodeResponse = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(customAddress)}.json?access_token=${mapboxgl.accessToken}&limit=1`);
+                const geocodeData = await geocodeResponse.json();
+                if (geocodeData.features && geocodeData.features.length > 0) {
+                    startLocation.lat = geocodeData.features[0].center[1];
+                    startLocation.lng = geocodeData.features[0].center[0];
+                    startLocation.address = geocodeData.features[0].place_name;
+                }
+            } catch (e) {
+                console.warn('Could not geocode start location, using default');
+                startLocation.lat = 51.0543;
+                startLocation.lng = 3.7174;
+            }
+        } else {
+            // Use pre-filled coordinates from dropdown
+            const selectedOption = startLocationSelect.options[startLocationSelect.selectedIndex];
+            startLocation = {
+                address: startLocationValue,
+                lat: parseFloat(selectedOption.dataset.lat),
+                lng: parseFloat(selectedOption.dataset.lng)
+            };
         }
         
-        // Handle end location
+        // Handle end location (not stored in DB, just for route calculation)
         let endLocation = null;
         if (returnToStart) {
             endLocation = { ...startLocation };
-        } else if (endLocationInput) {
-            try {
-                const geocodeResponse = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(endLocationInput)}.json?access_token=${mapboxgl.accessToken}&limit=1`);
-                const geocodeData = await geocodeResponse.json();
-                if (geocodeData.features && geocodeData.features.length > 0) {
-                    endLocation = {
-                        lat: geocodeData.features[0].center[1],
-                        lng: geocodeData.features[0].center[0],
-                        address: geocodeData.features[0].place_name
-                    };
+        } else if (endLocationSelect.value) {
+            if (endLocationSelect.value === 'custom') {
+                const customAddress = endLocationCustom.value.trim();
+                if (customAddress) {
+                    try {
+                        const geocodeResponse = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(customAddress)}.json?access_token=${mapboxgl.accessToken}&limit=1`);
+                        const geocodeData = await geocodeResponse.json();
+                        if (geocodeData.features && geocodeData.features.length > 0) {
+                            endLocation = {
+                                lat: geocodeData.features[0].center[1],
+                                lng: geocodeData.features[0].center[0],
+                                address: geocodeData.features[0].place_name
+                            };
+                        }
+                    } catch (e) {
+                        console.warn('Could not geocode end location');
+                    }
                 }
-            } catch (e) {
-                console.warn('Could not geocode end location');
+            } else {
+                const selectedOption = endLocationSelect.options[endLocationSelect.selectedIndex];
+                endLocation = {
+                    address: endLocationSelect.value,
+                    lat: parseFloat(selectedOption.dataset.lat),
+                    lng: parseFloat(selectedOption.dataset.lng)
+                };
             }
         }
         
