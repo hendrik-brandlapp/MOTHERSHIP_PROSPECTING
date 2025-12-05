@@ -10869,7 +10869,7 @@ def api_ai_chat():
                 "type": "function",
                 "function": {
                     "name": "get_revenue_by_period",
-                    "description": "Calculate NET revenue (excluding VAT) for a specific month. Uses line item 'revenue' field which is price after discounts.",
+                    "description": "Calculate total revenue for a specific month. Uses same calculation as homepage (total_amount field).",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -10895,7 +10895,7 @@ def api_ai_chat():
                 "type": "function",
                 "function": {
                     "name": "get_yearly_monthly_breakdown",
-                    "description": "Get NET revenue breakdown for ALL months in a year. Use this for 'best month', 'monthly comparison', or 'year overview'.",
+                    "description": "Get revenue breakdown for ALL months in a year. Use this for 'best month', 'monthly comparison', or 'year overview'. Returns same values as homepage.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -11020,7 +11020,7 @@ TOOL MAPPING:
 - "Total revenue 2025" → get_summary_stats(stat_type="total_revenue_2025")
 - "How many customers" → get_summary_stats(stat_type="total_companies")
 
-IMPORTANT: Revenue values are NET (after discounts, before VAT). This is calculated from invoice line items' 'revenue' field.
+Revenue values use the same calculation as the homepage dashboard (total_amount field from invoices).
 
 RESPONSE FORMAT:
 - Use Belgian number format: €1.234,56
@@ -11201,23 +11201,21 @@ def execute_ai_tool(function_name, args):
             
             result = query.execute()
             
-            # Calculate NET revenue (excluding VAT) by summing line item 'revenue' fields
-            # Revenue in line items = price after discount, before VAT
+            # Calculate revenue using SAME method as homepage: total_amount or payable_amount_with_financial_discount
             total_revenue = 0
-            total_revenue_with_vat = 0
             
             for r in result.data:
-                invoice_data = r.get('invoice_data', {})
-                if isinstance(invoice_data, dict):
-                    line_items = invoice_data.get('invoice_line_items', [])
-                    for item in line_items:
-                        if isinstance(item, dict):
-                            # 'revenue' = net amount after discount, before VAT
-                            revenue = float(item.get('revenue') or 0)
-                            total_revenue += revenue
-                            # 'payable_amount' = amount including VAT
-                            payable = float(item.get('payable_amount') or 0)
-                            total_revenue_with_vat += payable
+                # Use total_amount from sales table (same as homepage)
+                amount = float(r.get('total_amount') or 0)
+                
+                # If total_amount is 0/null, get from invoice_data
+                if amount == 0:
+                    invoice_data = r.get('invoice_data', {})
+                    if isinstance(invoice_data, dict):
+                        amount = float(invoice_data.get('payable_amount_with_financial_discount') or 
+                                      invoice_data.get('balance') or 0)
+                
+                total_revenue += amount
             
             invoice_count = len(result.data)
             
@@ -11226,10 +11224,9 @@ def execute_ai_tool(function_name, args):
             
             return [{
                 "period": f"{month_names[month]} {year}",
-                "total_revenue_net": round(total_revenue, 2),  # Without VAT (net sales)
-                "total_revenue_with_vat": round(total_revenue_with_vat, 2),  # Including VAT
+                "total_revenue": round(total_revenue, 2),
                 "invoice_count": invoice_count,
-                "average_invoice_net": round(total_revenue / invoice_count, 2) if invoice_count > 0 else 0
+                "average_invoice": round(total_revenue / invoice_count, 2) if invoice_count > 0 else 0
             }]
         
         elif function_name == "get_yearly_monthly_breakdown":
@@ -11239,10 +11236,10 @@ def execute_ai_tool(function_name, args):
             month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June', 
                           'July', 'August', 'September', 'October', 'November', 'December']
             
-            # Get all invoices for the year
-            result = supabase_client.table(table).select('invoice_date, invoice_data').execute()
+            # Get all invoices for the year - same fields as homepage uses
+            result = supabase_client.table(table).select('invoice_date, total_amount, invoice_data').execute()
             
-            # Group by month and calculate NET revenue
+            # Group by month - use SAME calculation as homepage
             monthly_data = {m: {'revenue': 0, 'count': 0} for m in range(1, 13)}
             
             for r in result.data:
@@ -11256,17 +11253,17 @@ def execute_ai_tool(function_name, args):
                 except:
                     continue
                 
-                invoice_data = r.get('invoice_data', {})
-                invoice_revenue = 0
+                # Use total_amount (same as homepage calculation)
+                amount = float(r.get('total_amount') or 0)
                 
-                if isinstance(invoice_data, dict):
-                    line_items = invoice_data.get('invoice_line_items', [])
-                    for item in line_items:
-                        if isinstance(item, dict):
-                            # Sum 'revenue' (net after discount, before VAT)
-                            invoice_revenue += float(item.get('revenue') or 0)
+                # If total_amount is 0/null, get from invoice_data
+                if amount == 0:
+                    invoice_data = r.get('invoice_data', {})
+                    if isinstance(invoice_data, dict):
+                        amount = float(invoice_data.get('payable_amount_with_financial_discount') or 
+                                      invoice_data.get('balance') or 0)
                 
-                monthly_data[month_num]['revenue'] += invoice_revenue
+                monthly_data[month_num]['revenue'] += amount
                 monthly_data[month_num]['count'] += 1
             
             # Build result sorted by month
@@ -11286,13 +11283,13 @@ def execute_ai_tool(function_name, args):
                 breakdown.append({
                     "month": month_names[m],
                     "month_num": m,
-                    "revenue_net": round(data['revenue'], 2),
+                    "revenue": round(data['revenue'], 2),
                     "invoice_count": data['count']
                 })
             
             return [{
                 "year": year,
-                "total_year_revenue_net": round(total_year_revenue, 2),
+                "total_year_revenue": round(total_year_revenue, 2),
                 "best_month": best_month,
                 "best_month_revenue": round(best_revenue, 2),
                 "monthly_breakdown": breakdown
@@ -11320,38 +11317,28 @@ def execute_ai_tool(function_name, args):
             # Get more results to sort properly (some might have null total_amount)
             result = query.limit(500).execute()
             
-            # Process results - calculate NET revenue from line items
+            # Process results - use SAME calculation as homepage
             processed = []
             for r in result.data:
-                invoice_data = r.get('invoice_data', {})
-                net_revenue = 0
-                gross_with_vat = 0
+                # Use total_amount (same as homepage)
+                amount = float(r.get('total_amount') or 0)
                 
-                if isinstance(invoice_data, dict):
-                    line_items = invoice_data.get('invoice_line_items', [])
-                    for item in line_items:
-                        if isinstance(item, dict):
-                            # Sum 'revenue' (net after discount, before VAT)
-                            net_revenue += float(item.get('revenue') or 0)
-                            # Sum 'payable_amount' (including VAT)
-                            gross_with_vat += float(item.get('payable_amount') or 0)
-                
-                # Fallback to total_amount or balance if no line items
-                if net_revenue == 0:
-                    gross_with_vat = float(invoice_data.get('payable_amount_with_financial_discount') or r.get('total_amount') or 0)
-                    # Approximate net by removing ~6% VAT (common rate)
-                    net_revenue = gross_with_vat / 1.06 if gross_with_vat > 0 else 0
+                # If total_amount is 0/null, get from invoice_data
+                if amount == 0:
+                    invoice_data = r.get('invoice_data', {})
+                    if isinstance(invoice_data, dict):
+                        amount = float(invoice_data.get('payable_amount_with_financial_discount') or 
+                                      invoice_data.get('balance') or 0)
                 
                 processed.append({
                     'invoice_number': r.get('invoice_number'),
                     'company_name': r.get('company_name'),
                     'invoice_date': r.get('invoice_date'),
-                    'total_amount_net': round(net_revenue, 2),
-                    'total_amount_with_vat': round(gross_with_vat, 2)
+                    'total_amount': round(amount, 2)
                 })
             
-            # Sort by NET amount descending and return top N
-            processed.sort(key=lambda x: x['total_amount_net'], reverse=True)
+            # Sort by amount descending and return top N
+            processed.sort(key=lambda x: x['total_amount'], reverse=True)
             return processed[:limit]
         
         elif function_name == "query_distributor_sales":
