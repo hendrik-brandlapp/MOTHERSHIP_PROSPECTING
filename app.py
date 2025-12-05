@@ -9967,6 +9967,43 @@ def api_company_notes(company_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/company-details/<company_id>', methods=['POST'])
+def api_update_company_details(company_id):
+    """
+    Update company contact details
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+        
+        data = request.get_json()
+        
+        update_data = {
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        if 'contact_person' in data:
+            update_data['contact_person_name'] = data['contact_person']
+        if 'email' in data:
+            update_data['email'] = data['email']
+        if 'phone' in data:
+            update_data['phone_number'] = data['phone']
+        if 'website' in data:
+            update_data['website'] = data['website']
+            
+        # Update in Supabase
+        result = supabase_client.table('companies').update(update_data).eq('company_id', int(company_id)).execute()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Company contact details updated successfully'
+        })
+        
+    except Exception as e:
+        print(f"Error updating company details: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/company-trips/<company_id>', methods=['GET'])
 def api_company_trips(company_id):
     """

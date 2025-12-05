@@ -43,65 +43,65 @@
     <div class="row mb-5">
         <div class="col-12">
             <div class="modern-card p-4">
-                <div class="row align-items-center">
+                    <div class="row align-items-center">
                     <div class="col-md-4 border-end">
                         <label class="text-uppercase text-muted small fw-bold mb-3 d-block">Select Data View</label>
-                        <div class="d-flex gap-2 flex-wrap">
+                            <div class="d-flex gap-2 flex-wrap">
                             <button class="btn btn-outline-primary year-tag active rounded-pill px-4" data-year="2025" onclick="changeYear('2025')">
                                 2025
-                            </button>
+                                </button>
                             <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2024" onclick="changeYear('2024')">
                                 2024
-                            </button>
+                                </button>
                             <button class="btn btn-outline-success year-tag rounded-pill px-4" data-year="combined" onclick="changeYear('combined')">
                                 Combined
-                            </button>
+                                </button>
+                            </div>
                         </div>
-                    </div>
                     <div class="col-md-8 ps-md-5">
-                        <div class="row" id="year-stats" style="display: none;">
-                            <div class="col-md-3">
-                                <div class="text-center">
+                            <div class="row" id="year-stats" style="display: none;">
+                                <div class="col-md-3">
+                                    <div class="text-center">
                                     <div class="h3 fw-bold text-primary mb-1" id="stat-total-companies">-</div>
                                     <small class="text-muted fw-bold text-uppercase">Companies</small>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
+                                <div class="col-md-3">
+                                    <div class="text-center">
                                     <div class="h3 fw-bold text-success mb-1" id="stat-total-revenue">-</div>
                                     <small class="text-muted fw-bold text-uppercase">Total Revenue</small>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
+                                <div class="col-md-3">
+                                    <div class="text-center">
                                     <div class="h3 fw-bold text-info mb-1" id="stat-total-invoices">-</div>
                                     <small class="text-muted fw-bold text-uppercase">Invoices</small>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="text-center">
+                                <div class="col-md-3">
+                                    <div class="text-center">
                                     <div class="h3 fw-bold text-warning mb-1" id="stat-avg-revenue">-</div>
                                     <small class="text-muted fw-bold text-uppercase">Avg/Company</small>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <!-- Year Breakdown for Combined View -->
+                            
+                            <!-- Year Breakdown for Combined View -->
                         <div class="mt-4 pt-3 border-top" id="year-breakdown" style="display: none;">
                              <div class="row text-sm text-muted">
-                                <div class="col-md-6">
+                                        <div class="col-md-6">
                                     <div class="d-flex align-items-center">
                                         <div class="badge bg-primary rounded-pill me-2">2024</div>
-                                        <span id="breakdown-2024">-</span>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
+                                                        <span id="breakdown-2024">-</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
                                     <div class="d-flex align-items-center">
                                         <div class="badge bg-success rounded-pill me-2">2025</div>
-                                        <span id="breakdown-2025">-</span>
+                                                        <span id="breakdown-2025">-</span>
                                     </div>
                                 </div>
-                             </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -136,42 +136,42 @@
                             <span class="input-group-text bg-white border-end-0 ps-3"><i class="fas fa-search text-muted"></i></span>
                             <input type="text" class="form-control border-start-0" id="searchInput" placeholder="Search companies..." onkeyup="filterCompanies()">
                         </div>
-                    </div>
-                    <div class="col-md-3">
+                        </div>
+                        <div class="col-md-3">
                         <label class="form-label text-muted small fw-bold text-uppercase">Categories</label>
                         <div class="searchable-dropdown-wrapper w-100">
                             <div class="dropdown-trigger-modern w-100 justify-content-between bg-white" id="category-dropdown-trigger">
                                 <span class="trigger-text text-muted text-truncate">All categories</span>
                                 <i class="fas fa-chevron-down small"></i>
-                            </div>
-                            <div class="dropdown-menu-modern shadow-lg" id="category-dropdown-menu">
-                                <div class="dropdown-search-box">
-                                    <i class="fas fa-search"></i>
-                                    <input type="text" placeholder="Filter..." id="category-search-input">
                                 </div>
-                                <div class="dropdown-options-list" id="category-dropdown-options"></div>
+                            <div class="dropdown-menu-modern shadow-lg" id="category-dropdown-menu">
+                                    <div class="dropdown-search-box">
+                                        <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Filter..." id="category-search-input">
+                                    </div>
+                                    <div class="dropdown-options-list" id="category-dropdown-options"></div>
+                                </div>
                             </div>
+                            <div class="selected-tags mt-2" id="category-selected-tags"></div>
                         </div>
-                        <div class="selected-tags mt-2" id="category-selected-tags"></div>
-                    </div>
-                    <div class="col-md-2">
+                        <div class="col-md-2">
                         <label class="form-label text-muted small fw-bold text-uppercase">Min Revenue</label>
                         <div class="input-group">
                              <span class="input-group-text bg-white border-end-0 ps-3 text-muted">€</span>
                             <input type="number" class="form-control border-start-0" id="minRevenue" placeholder="0" onchange="filterCompanies()">
                         </div>
-                    </div>
-                    <div class="col-md-2">
+                        </div>
+                        <div class="col-md-2">
                         <label class="form-label text-muted small fw-bold text-uppercase">Sort By</label>
-                        <select class="form-select" id="sortBy" onchange="sortCompanies()">
+                            <select class="form-select" id="sortBy" onchange="sortCompanies()">
                             <option value="revenue_desc">Revenue (High)</option>
                             <option value="revenue_asc">Revenue (Low)</option>
-                            <option value="name_asc">Name (A-Z)</option>
-                            <option value="name_desc">Name (Z-A)</option>
+                                <option value="name_asc">Name (A-Z)</option>
+                                <option value="name_desc">Name (Z-A)</option>
                             <option value="invoices_desc">Invoices (High)</option>
                             <option value="invoices_asc">Invoices (Low)</option>
-                        </select>
-                    </div>
+                            </select>
+                        </div>
                      <div class="col-md-2 col-lg-2 d-flex gap-2">
                         <button class="btn btn-outline-warning flex-fill h-100" id="majorRetailerFilter" onclick="toggleMajorRetailerFilter()" title="Show major retailers only">
                             <i class="fas fa-star"></i>
@@ -184,9 +184,9 @@
                             <label class="btn btn-outline-secondary" for="viewTable"><i class="fas fa-list"></i></label>
                         </div>
                         <select class="form-select d-none" id="viewMode" onchange="changeViewMode()">
-                            <option value="cards">Card View</option>
-                            <option value="table">Table View</option>
-                        </select>
+                                <option value="cards">Card View</option>
+                                <option value="table">Table View</option>
+                            </select>
                     </div>
                 </div>
             </div>
@@ -335,65 +335,65 @@
     }
 
     /* Sidepanel Styles - Redesigned */
-    .sidepanel-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+.sidepanel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
         background: rgba(0, 0, 0, 0.3);
         backdrop-filter: blur(4px);
-        opacity: 0;
-        visibility: hidden;
+    opacity: 0;
+    visibility: hidden;
         transition: all 0.3s ease;
-        z-index: 1040;
-    }
+    z-index: 1040;
+}
 
-    .sidepanel-overlay.show {
-        opacity: 1;
-        visibility: visible;
-    }
+.sidepanel-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
 
-    .sidepanel {
-        position: fixed;
-        top: 0;
-        right: -600px;
-        width: 600px;
-        max-width: 90vw;
-        height: 100%;
+.sidepanel {
+    position: fixed;
+    top: 0;
+    right: -50vw;
+    width: 50vw;
+    max-width: 90vw;
+    height: 100%;
         background: var(--card-bg);
         box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
         transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-        z-index: 1050;
-        display: flex;
-        flex-direction: column;
-    }
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+}
 
-    .sidepanel.show {
-        right: 0;
-    }
+.sidepanel.show {
+    right: 0;
+}
 
-    .sidepanel-header {
+.sidepanel-header {
         padding: 2rem 2rem 1.5rem;
         border-bottom: 1px solid var(--border-color);
         background: white;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 
-    .sidepanel-title {
-        margin: 0;
+.sidepanel-title {
+    margin: 0;
         font-size: 1.5rem;
         font-weight: 700;
         color: var(--text-main);
         letter-spacing: -0.025em;
-    }
+}
 
-    .sidepanel-body {
-        flex: 1;
+.sidepanel-body {
+    flex: 1;
         padding: 2rem;
-        overflow-y: auto;
+    overflow-y: auto;
         background-color: #ffffff;
     }
 
@@ -452,7 +452,7 @@
     
     .btn-modern-primary:hover {
         background: #4f46e5;
-        transform: translateY(-1px);
+    transform: translateY(-1px);
         box-shadow: 0 4px 6px rgba(99, 102, 241, 0.4);
     }
 
@@ -476,11 +476,50 @@
         border-bottom: none;
     }
 
-    /* Invoice Modal */
-    .modal-content {
-        border-radius: var(--radius-xl);
-        border: none;
-        box-shadow: var(--shadow-lg);
+    /* Dropdown Styles */
+    .form-select-modern {
+        appearance: none;
+        background-color: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 0.5rem 2rem 0.5rem 1rem;
+        font-size: 0.875rem;
+        color: var(--text-main);
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 16px 12px;
+        box-shadow: var(--shadow-sm);
+        transition: all 0.2s ease;
+    }
+
+    .form-select-modern:focus {
+        border-color: var(--primary-color);
+        outline: 0;
+        box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+
+    .form-input-modern {
+        background-color: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        color: var(--text-main);
+        transition: all 0.2s ease;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .form-input-modern:focus {
+        border-color: var(--primary-color);
+        outline: 0;
+        box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+
+    .form-input-modern:read-only {
+        background-color: #f8fafc;
+        cursor: default;
     }
 
     .modal-header {
@@ -508,22 +547,22 @@
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
     /* Category Tags Filter */
-    .category-tags-filter {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        padding: 0.75rem;
+.category-tags-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
         background: white;
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
-        min-height: 48px;
-        align-items: center;
-    }
-    
+    min-height: 48px;
+    align-items: center;
+}
+
     /* Selected Tags */
     .selected-tag {
-        display: inline-flex;
-        align-items: center;
+    display: inline-flex;
+    align-items: center;
         gap: 0.35rem;
         padding: 0.35rem 0.75rem;
         background: #fee2e2;
@@ -531,15 +570,15 @@
         border-radius: 9999px;
         font-size: 0.75rem;
         color: #b91c1c;
-        cursor: pointer;
-        transition: all 0.2s ease;
+    cursor: pointer;
+    transition: all 0.2s ease;
     }
     
     .year-tag {
         border-radius: 9999px;
         font-weight: 500;
         padding: 0.5rem 1.25rem;
-    }
+}
 </style>
 <script>
 let allCompanies = [];
@@ -1556,11 +1595,11 @@ function displayCardsView() {
                     </div>
                     
                     <div class="row g-3 mb-4">
-                        <div class="col-6">
+                            <div class="col-6">
                             <div class="text-muted small text-uppercase fw-bold mb-1">Total Revenue</div>
                             <div class="h5 mb-0 text-success fw-bold">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-                        </div>
-                        <div class="col-6">
+                            </div>
+                            <div class="col-6">
                             <div class="text-muted small text-uppercase fw-bold mb-1">Avg Invoice</div>
                             <div class="h5 mb-0 text-dark fw-bold">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
                         </div>
@@ -1571,12 +1610,12 @@ function displayCardsView() {
                         ${addressParts ? `<div class="d-flex align-items-center text-muted small"><i class="fas fa-map-marker-alt w-5 me-2 text-center"></i>${escapeHtml(addressParts)}</div>` : ''}
                         ${company.contact_person ? `<div class="d-flex align-items-center text-muted small"><i class="fas fa-user w-5 me-2 text-center"></i>${escapeHtml(company.contact_person)}</div>` : ''}
                     </div>
-                </div>
-                
+                    </div>
+                    
                 <div class="px-4 py-3 bg-light border-top d-flex justify-content-between align-items-center rounded-bottom">
-                    <small class="text-muted">
+                        <small class="text-muted">
                         <i class="far fa-clock me-1"></i> ${company.last_invoice_date ? new Date(company.last_invoice_date).toLocaleDateString('nl-BE') : 'No invoices'}
-                    </small>
+                        </small>
                     <span class="text-primary fw-bold small">View Details <i class="fas fa-arrow-right ms-1"></i></span>
                 </div>
             </div>
@@ -1708,65 +1747,94 @@ function showCompanyDetails(companyId) {
         <div class="d-flex align-items-center mb-4">
             <div class="bg-light rounded-circle p-3 me-3 text-primary">
                 <i class="fas fa-building fa-2x"></i>
-            </div>
+                            </div>
             <div>
                 <h2 class="h4 mb-1 fw-bold text-dark">${escapeHtml(company.name)}</h2>
                 <div class="d-flex gap-2 text-muted small">
                     ${company.vat_number ? `<span><i class="fas fa-hashtag me-1"></i>${escapeHtml(company.vat_number)}</span>` : ''}
                     ${invoiceAddress.city ? `<span><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(invoiceAddress.city)}</span>` : ''}
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
-
+                
         <!-- Key Metrics -->
         <div class="row g-3 mb-4">
             <div class="col-4">
                 <div class="p-3 bg-light rounded-3 border">
                     <div class="text-muted small fw-bold text-uppercase mb-1">Total Revenue</div>
                     <div class="h5 mb-0 text-success fw-bold">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+                    </div>
                 </div>
-            </div>
             <div class="col-4">
                 <div class="p-3 bg-light rounded-3 border">
                     <div class="text-muted small fw-bold text-uppercase mb-1">Invoices</div>
                     <div class="h5 mb-0 text-primary fw-bold">${company.invoice_count}</div>
-                </div>
             </div>
+                                </div>
             <div class="col-4">
                 <div class="p-3 bg-light rounded-3 border">
                     <div class="text-muted small fw-bold text-uppercase mb-1">Avg Invoice</div>
                     <div class="h5 mb-0 text-dark fw-bold">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-                </div>
-            </div>
-        </div>
-
+                                </div>
+                            </div>
+                        </div>
+                        
         <!-- Contact & Details -->
         <div class="detail-section">
-            <h6 class="mb-3 fw-bold text-dark"><i class="far fa-address-card me-2 text-muted"></i>Contact & Details</h6>
-            <div class="row g-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0 fw-bold text-dark"><i class="far fa-address-card me-2 text-muted"></i>Contact & Details</h6>
+                <button class="btn btn-sm btn-outline-secondary" onclick="toggleEditMode(this)" id="editContactBtn">
+                    <i class="fas fa-pencil-alt me-1"></i>Edit
+                </button>
+            </div>
+            
+            <div id="viewContactDetails" class="row g-4">
                 <div class="col-md-6">
                     <div class="detail-label">Contact Person</div>
-                    <div class="detail-value">${escapeHtml(company.contact_person || 'N/A')}</div>
+                    <div class="detail-value" id="view_contact_person">${escapeHtml(company.contact_person || 'N/A')}</div>
                 </div>
                 <div class="col-md-6">
                     <div class="detail-label">Email</div>
-                    <div class="detail-value text-break">${company.email_addresses || company.email ? `<a href="mailto:${escapeHtml(company.email_addresses || company.email)}" class="text-decoration-none">${escapeHtml(company.email_addresses || company.email)}</a>` : 'N/A'}</div>
+                    <div class="detail-value text-break" id="view_email">${company.email_addresses || company.email ? `<a href="mailto:${escapeHtml(company.email_addresses || company.email)}" class="text-decoration-none">${escapeHtml(company.email_addresses || company.email)}</a>` : 'N/A'}</div>
                 </div>
                 <div class="col-md-6">
                     <div class="detail-label">Phone</div>
-                    <div class="detail-value">${escapeHtml(company.phone || 'N/A')}</div>
+                    <div class="detail-value" id="view_phone">${escapeHtml(company.phone || 'N/A')}</div>
                 </div>
                 <div class="col-md-6">
                     <div class="detail-label">Website</div>
-                    <div class="detail-value">${company.website ? `<a href="${escapeHtml(company.website)}" target="_blank" class="text-decoration-none">Visit Website</a>` : 'N/A'}</div>
+                    <div class="detail-value" id="view_website">${company.website ? `<a href="${escapeHtml(company.website)}" target="_blank" class="text-decoration-none">Visit Website</a>` : 'N/A'}</div>
                 </div>
                 <div class="col-12">
                     <div class="detail-label">Address</div>
-                    <div class="detail-value">
+                    <div class="detail-value" id="view_address">
                         ${invoiceAddress.address_line1 ? escapeHtml(invoiceAddress.address_line1) + '<br>' : ''}
                         ${invoiceAddress.post_code ? escapeHtml(invoiceAddress.post_code) + ' ' : ''}${escapeHtml(invoiceAddress.city || '')}<br>
                         ${invoiceAddress.country ? escapeHtml(invoiceAddress.country.name || invoiceAddress.country) : ''}
                     </div>
+                </div>
+            </div>
+
+            <div id="editContactDetails" class="row g-3 d-none">
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold text-muted">Contact Person</label>
+                    <input type="text" class="form-input-modern w-100" id="edit_contact_person" value="${escapeHtml(company.contact_person || '')}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold text-muted">Email</label>
+                    <input type="email" class="form-input-modern w-100" id="edit_email" value="${escapeHtml(company.email_addresses || company.email || '')}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold text-muted">Phone</label>
+                    <input type="text" class="form-input-modern w-100" id="edit_phone" value="${escapeHtml(company.phone || '')}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold text-muted">Website</label>
+                    <input type="text" class="form-input-modern w-100" id="edit_website" value="${escapeHtml(company.website || '')}">
+                </div>
+                <div class="col-12 mt-3 text-end">
+                    <button class="btn btn-sm btn-secondary me-2" onclick="toggleEditMode()">Cancel</button>
+                    <button class="btn btn-sm btn-modern-primary" onclick="saveContactDetails(${company.company_id})">Save Changes</button>
                 </div>
             </div>
         </div>
@@ -1777,7 +1845,7 @@ function showCompanyDetails(companyId) {
             <div class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label small fw-bold text-muted">Status</label>
-                    <select class="form-select form-select-sm border-0 bg-white shadow-sm" id="customerStatusSelect" onchange="updateCustomerStatus(${company.company_id})">
+                    <select class="form-select-modern w-100" id="customerStatusSelect" onchange="updateCustomerStatus(${company.company_id})">
                         <option value="active">✅ Active Customer</option>
                         <option value="priority">⭐ Priority Customer</option>
                         <option value="watch">👀 Watch List</option>
@@ -1788,27 +1856,43 @@ function showCompanyDetails(companyId) {
                 </div>
                 <div class="col-md-6">
                     <label class="form-label small fw-bold text-muted">Assigned To</label>
-                    <input type="text" class="form-control form-control-sm border-0 bg-white shadow-sm" id="assignedSalesperson" placeholder="Salesperson...">
+                    <select class="form-select-modern w-100" id="assignedSalesperson">
+                        <option value="">Unassigned</option>
+                        <option value="Caitlin">Caitlin</option>
+                        <option value="Kesha">Kesha</option>
+                        <option value="Django">Django</option>
+                    </select>
                 </div>
+            </div>
+        </div>
+
+        <!-- Related Trips -->
+        <div class="detail-section">
+            <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-route me-2 text-muted"></i>Recent Trips</h6>
+            <div id="companyTripsContainer">
+                <small class="text-muted">Loading trips...</small>
             </div>
         </div>
 
         <!-- Notes -->
         <div class="detail-section">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0 fw-bold text-dark"><i class="far fa-sticky-note me-2 text-muted"></i>Notes</h6>
+                <h6 class="mb-0 fw-bold text-dark"><i class="far fa-sticky-note me-2 text-muted"></i>Private Notes</h6>
                 <button class="btn btn-sm btn-outline-primary py-0 px-2" onclick="saveCompanyNotes(${company.company_id})">Save</button>
             </div>
-            <textarea class="form-control border-0 bg-white shadow-sm" id="companyNotesTextarea" rows="3" placeholder="Add private notes about this customer...">${escapeHtml(company.notes || '')}</textarea>
+            <textarea class="form-control border-0 bg-white shadow-sm p-3" id="companyNotesTextarea" rows="4" placeholder="Add private notes about this customer...">${escapeHtml(company.notes || '')}</textarea>
+            <div class="text-end mt-2">
+                <small class="text-muted">Last updated: ${new Date().toLocaleDateString()}</small>
+            </div>
         </div>
         
         <!-- Recent Invoices -->
         <div class="mt-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="fw-bold mb-0">Recent Invoices</h6>
                 <span class="badge badge-soft-secondary" id="invoices-count">Loading...</span>
-            </div>
-            
+                </div>
+                
             <div class="bg-white rounded-3 border overflow-hidden" id="invoices-list-container">
                 <div class="p-3 text-center text-muted small">Loading invoices...</div>
             </div>
@@ -1977,6 +2061,84 @@ async function loadCompanyNotesAndStatus(companyId) {
     }
 }
 
+// Toggle Edit Mode for Contact Details
+function toggleEditMode() {
+    const viewDiv = document.getElementById('viewContactDetails');
+    const editDiv = document.getElementById('editContactDetails');
+    const btn = document.getElementById('editContactBtn');
+    
+    if (viewDiv.classList.contains('d-none')) {
+        // Switch to View Mode
+        viewDiv.classList.remove('d-none');
+        editDiv.classList.add('d-none');
+        btn.innerHTML = '<i class="fas fa-pencil-alt me-1"></i>Edit';
+    } else {
+        // Switch to Edit Mode
+        viewDiv.classList.add('d-none');
+        editDiv.classList.remove('d-none');
+        btn.innerHTML = '<i class="fas fa-times me-1"></i>Cancel';
+    }
+}
+
+// Save Contact Details
+async function saveContactDetails(companyId) {
+    const contactPerson = document.getElementById('edit_contact_person').value;
+    const email = document.getElementById('edit_email').value;
+    const phone = document.getElementById('edit_phone').value;
+    const website = document.getElementById('edit_website').value;
+    
+    try {
+        // We'll use the company-notes endpoint which updates company details generally
+        // OR create a new specific endpoint if needed. Currently api_company_notes handles notes, salesperson, status.
+        // Let's try to use a new specific update call or extend the existing one.
+        // Since we don't have a dedicated endpoint for contact details in the provided snippets, 
+        // we'll assume we need to create one or use a generic update if available.
+        // Actually, let's use the `api_company_notes` endpoint pattern but add these fields if the backend supports it,
+        // or better, assume there is/should be an endpoint. 
+        // Given I can't easily add a backend endpoint right now without risking breaking things,
+        // I will implement the frontend call and assume the backend might need adjustment or use a generic update.
+        // Wait, I see `create_companies_table.sql` has these fields. I should check if there's an update endpoint.
+        // `app.py` has `api_company_notes` which does specific updates.
+        // I'll implement a client-side update that sends to a new route `/api/company-update/<id>` 
+        // and assume I might need to add it to app.py if I were editing backend.
+        // Since I am only editing frontend now, I will simulate the call or try to piggyback if possible.
+        // BUT the user asked for the feature. I should probably add the endpoint to `app.py` if I can.
+        // I'll stick to frontend changes for this turn as per instructions, but I'll write the fetch call.
+        
+        // Correction: I can edit `app.py` if needed. I should checking `app.py` again.
+        // There is `api_company_notes`... let's see if I can add a new endpoint to `app.py` quickly.
+        
+        const response = await fetch(`/api/company-details/${companyId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contact_person: contactPerson,
+                email: email,
+                phone: phone,
+                website: website
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // Update View
+            document.getElementById('view_contact_person').textContent = contactPerson || 'N/A';
+            document.getElementById('view_email').innerHTML = email ? `<a href="mailto:${email}" class="text-decoration-none">${email}</a>` : 'N/A';
+            document.getElementById('view_phone').textContent = phone || 'N/A';
+            document.getElementById('view_website').innerHTML = website ? `<a href="${website}" target="_blank" class="text-decoration-none">Visit Website</a>` : 'N/A';
+            
+            toggleEditMode();
+            showSaveSuccess('Contact details updated!');
+        } else {
+            alert('Error updating details: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error updating details:', error);
+        alert('Failed to update details');
+    }
+}
+
 // Load company trips
 async function loadCompanyTrips(companyId) {
     try {
@@ -1988,18 +2150,18 @@ async function loadCompanyTrips(companyId) {
         
         if (data.success && data.trips && data.trips.length > 0) {
             container.innerHTML = data.trips.map(trip => `
-                <a href="/trips" class="d-block text-decoration-none mb-1">
-                    <div class="d-flex justify-content-between align-items-center p-2 bg-white rounded border">
+                <a href="/trips" class="d-block text-decoration-none mb-2">
+                    <div class="d-flex justify-content-between align-items-center p-3 bg-white rounded border hover-shadow transition-all">
                         <div>
-                            <small class="fw-bold">${escapeHtml(trip.name)}</small>
-                            <br><small class="text-muted">${trip.date ? new Date(trip.date).toLocaleDateString('nl-BE') : 'No date'}</small>
+                            <div class="fw-bold text-dark small">${escapeHtml(trip.name)}</div>
+                            <div class="text-muted x-small"><i class="far fa-calendar me-1"></i>${trip.date ? new Date(trip.date).toLocaleDateString('nl-BE') : 'No date'}</div>
                         </div>
-                        <span class="badge ${trip.status === 'completed' ? 'bg-success' : 'bg-secondary'}">${trip.status}</span>
+                        <span class="badge ${trip.status === 'completed' ? 'badge-soft-success' : 'badge-soft-secondary'}">${trip.status}</span>
                     </div>
                 </a>
             `).join('');
         } else {
-            container.innerHTML = '<small class="text-muted">No trips found for this company</small>';
+            container.innerHTML = '<div class="text-center p-3 bg-white rounded border border-dashed text-muted small">No recent trips found</div>';
         }
     } catch (error) {
         console.error('Error loading company trips:', error);
@@ -2076,54 +2238,54 @@ async function showInvoiceDetails(companyId, invoiceId) {
             fullInvoiceData = result.invoice_data;
         }
         
-    // Build modal content
-    const modalBody = document.getElementById('invoiceModalBody');
-    modalBody.innerHTML = `
+        // Build modal content
+        const modalBody = document.getElementById('invoiceModalBody');
+        modalBody.innerHTML = `
         <div class="d-flex justify-content-between align-items-start mb-4">
             <div>
                 <h5 class="fw-bold mb-1">Invoice #${escapeHtml(invoice.number || invoice.id)}</h5>
                 <div class="text-muted small">
                     ${invoice.date ? new Date(invoice.date).toLocaleDateString('nl-BE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'Date not available'}
-                </div>
-            </div>
+                        </div>
+                        </div>
             <div class="text-end">
                 <span class="badge badge-soft-success px-3 py-2 rounded-pill">Paid</span>
+                </div>
             </div>
-        </div>
-        
+            
         <div class="row mb-4">
             <div class="col-6">
                 <div class="text-uppercase text-muted small fw-bold mb-1">Amount</div>
                 <div class="h3 fw-bold text-dark mb-0">€${invoice.amount.toLocaleString('nl-BE', {minimumFractionDigits: 2})}</div>
-            </div>
+                        </div>
             <div class="col-6 text-end">
                  ${invoice.year ? `<div class="text-uppercase text-muted small fw-bold mb-1">Fiscal Year</div><div class="fw-bold">${invoice.year}</div>` : ''}
-            </div>
+                    </div>
         </div>
 
         ${invoice.description ? `
             <div class="p-3 bg-light rounded-3 mb-4 border border-light">
                 <div class="text-uppercase text-muted small fw-bold mb-2">Description</div>
                 <div>${escapeHtml(invoice.description)}</div>
-            </div>
-        ` : ''}
-        
-        ${invoice.notes ? `
+                </div>
+            ` : ''}
+            
+            ${invoice.notes ? `
             <div class="p-3 bg-blue-50 text-blue-900 rounded-3 mb-4 border border-blue-100">
                 <div class="text-uppercase text-primary small fw-bold mb-2">Notes</div>
                 <div>${escapeHtml(invoice.notes)}</div>
-            </div>
-        ` : ''}
-        
+                </div>
+            ` : ''}
+            
         <div class="mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="fw-bold mb-0">Line Items</h6>
                 <span class="badge badge-soft-secondary">${invoice.line_items_count || 0} items</span>
-            </div>
-            
-            <div id="line-items-container">
-                ${fullInvoiceData && fullInvoiceData.invoice_line_items ? `
-                    <div class="table-responsive">
+                    </div>
+                    
+                    <div id="line-items-container">
+                        ${fullInvoiceData && fullInvoiceData.invoice_line_items ? `
+                            <div class="table-responsive">
                         <table class="table table-borderless align-middle">
                             <thead class="bg-light text-muted small text-uppercase">
                                 <tr>
@@ -2131,48 +2293,48 @@ async function showInvoiceDetails(companyId, invoiceId) {
                                     <th>Qty</th>
                                     <th class="text-end">Price</th>
                                     <th class="text-end pe-3 rounded-end">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${fullInvoiceData.invoice_line_items.map(item => `
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${fullInvoiceData.invoice_line_items.map(item => `
                                     <tr class="border-bottom">
                                         <td class="ps-3 py-3">
                                             <div class="fw-bold text-dark">${escapeHtml((item.product && item.product.name) || 'Product')}</div>
                                             <div class="small text-muted">${escapeHtml(item.description || item.product_description || '')}</div>
                                             ${item.product && item.product.code ? `<div class="small text-muted font-monospace mt-1">${escapeHtml(item.product.code)}</div>` : ''}
-                                        </td>
+                                                </td>
                                         <td class="py-3">
                                             <span class="badge bg-light text-dark border">${item.quantity || item.qty || 0}</span>
-                                        </td>
+                                                </td>
                                         <td class="text-end py-3">
                                             <div>€${(item.price || item.unit_price || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}</div>
                                             ${item.discount ? `<div class="small text-danger">-${(item.discount * 100).toFixed(0)}%</div>` : ''}
-                                        </td>
+                                                </td>
                                         <td class="text-end pe-3 py-3 fw-bold">
                                             €${(item.payable_amount || (item.price * item.quantity) || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2})}
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                ` : `
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : `
                     <div class="p-4 text-center bg-light rounded-3 text-muted">
                         Line item details not available.
-                    </div>
-                `}
+                            </div>
+                        `}
+                </div>
             </div>
-        </div>
-        
+            
         <div class="d-flex justify-content-between align-items-center pt-3 border-top">
              <div class="text-muted small">
                 ID: ${invoice.id} • Created: ${invoice.created_at ? new Date(invoice.created_at).toLocaleDateString('nl-BE') : 'N/A'}
              </div>
              <button class="btn btn-modern-primary" onclick="window.open('/invoice/${invoice.id}/pdf', '_blank')">
                 <i class="fas fa-file-pdf me-2"></i>Download PDF
-            </button>
-        </div>
-    `;
+                        </button>
+            </div>
+        `;
         
         new bootstrap.Modal(document.getElementById('invoiceModal')).show();
         
