@@ -10634,7 +10634,7 @@ These are distributor/wholesaler sales data tables with columns:
 @app.route('/api/ai-chat', methods=['POST'])
 def api_ai_chat():
     """
-    AI Chat endpoint - Uses OpenAI to answer questions about sales data
+    AI Chat endpoint - Uses OpenAI with function calling to query sales data
     """
     if not openai_client:
         return jsonify({'success': False, 'error': 'OpenAI not configured'}), 500
@@ -10651,73 +10651,208 @@ def api_ai_chat():
         if not user_message:
             return jsonify({'success': False, 'error': 'No message provided'}), 400
         
+        # Define available tools/functions
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "query_companies",
+                    "description": "Query the companies table to get customer data, revenue, and invoice counts",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "order_by": {
+                                "type": "string",
+                                "enum": ["total_revenue_all_time", "total_revenue_2025", "total_revenue_2024", "invoice_count_all_time", "name", "last_invoice_date"],
+                                "description": "Field to order results by"
+                            },
+                            "order_desc": {
+                                "type": "boolean",
+                                "description": "Whether to order descending (highest first)"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Number of results to return (max 50)"
+                            },
+                            "city_filter": {
+                                "type": "string",
+                                "description": "Filter by city name (partial match)"
+                            },
+                            "min_revenue": {
+                                "type": "number",
+                                "description": "Minimum total revenue filter"
+                            }
+                        },
+                        "required": ["order_by", "order_desc", "limit"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "query_invoices",
+                    "description": "Query sales/invoice data for 2024 or 2025",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "year": {
+                                "type": "string",
+                                "enum": ["2024", "2025"],
+                                "description": "Which year to query"
+                            },
+                            "company_name": {
+                                "type": "string",
+                                "description": "Filter by company name (partial match)"
+                            },
+                            "order_by": {
+                                "type": "string",
+                                "enum": ["total_amount", "invoice_date", "company_name"],
+                                "description": "Field to order by"
+                            },
+                            "order_desc": {
+                                "type": "boolean",
+                                "description": "Order descending"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Number of results (max 50)"
+                            }
+                        },
+                        "required": ["year", "limit"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "query_distributor_sales",
+                    "description": "Query distributor/wholesaler sales data (Biofresh, Delhaize, Geers, Inter Drinks, Terroirist)",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "distributor": {
+                                "type": "string",
+                                "enum": ["Biofresh", "Delhaize", "Geers", "Inter Drinks", "Terroirist"],
+                                "description": "Which distributor to query"
+                            },
+                            "year": {
+                                "type": "string",
+                                "enum": ["2022", "2023", "2024", "2025"],
+                                "description": "Which year"
+                            },
+                            "product_filter": {
+                                "type": "string",
+                                "description": "Filter by product name"
+                            },
+                            "city_filter": {
+                                "type": "string",
+                                "description": "Filter by city (stad)"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Number of results (max 100)"
+                            }
+                        },
+                        "required": ["distributor", "year", "limit"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_summary_stats",
+                    "description": "Get summary statistics for companies or sales",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "stat_type": {
+                                "type": "string",
+                                "enum": ["total_companies", "total_revenue_2024", "total_revenue_2025", "total_invoices_2024", "total_invoices_2025", "avg_invoice_value", "top_cities"],
+                                "description": "Type of statistic to get"
+                            }
+                        },
+                        "required": ["stat_type"]
+                    }
+                }
+            }
+        ]
+        
         # Build system prompt
-        system_prompt = f"""You are a helpful sales analytics assistant for a beverage distribution company in Belgium. 
-You help sales reps analyze their company and invoice data.
+        system_prompt = f"""You are a helpful sales analytics assistant for a beverage distribution company in Belgium.
+You help sales reps analyze their company and invoice data using the available tools.
 
-{DATABASE_SCHEMA}
+GUIDELINES:
+1. Use the provided tools to fetch data when users ask questions
+2. Keep responses concise and conversational - this is a chat interface
+3. Format currency in EUR (€) with Belgian formatting
+4. After getting data, summarize the key insights
+5. Current viewing context: {context.get('currentYear', '2025')} year, {context.get('totalCompanies', 0)} total companies
 
-IMPORTANT GUIDELINES:
-1. When users ask about data, generate a PostgreSQL query to answer their question
-2. Return the SQL query in a special format: ```sql YOUR_QUERY ```
-3. Keep responses concise and friendly - this is a chat interface
-4. Use Belgian locale (€ for currency, nl-BE formatting)
-5. When showing numbers, format them nicely (e.g., €12,345.67)
-6. The wholesaler tables (Biofresh, Delhaize, etc.) contain detailed product sales to end customers
-7. For revenue questions, use the companies table total_revenue fields
-8. For invoice details, use sales_2024 or sales_2025 tables
-9. Current viewing context: {context.get('currentYear', '2025')} year, {context.get('totalCompanies', 0)} total companies
-
-Be conversational and helpful. If you can't answer something, say so politely.
-When generating SQL, always use double quotes for table names with spaces (e.g., "Biofresh 2024").
+Available data sources:
+- companies: Customer master data with revenue and invoice counts
+- sales_2024/sales_2025: Invoice-level data
+- Distributor tables (Biofresh, Delhaize, Geers, Inter Drinks, Terroirist): Detailed product sales to end customers
 """
 
         # Build messages for OpenAI
         messages = [{"role": "system", "content": system_prompt}]
         
-        # Add recent history
-        for msg in history[-6:]:  # Last 6 messages for context
+        # Add recent history (without function calls)
+        for msg in history[-4:]:
             if msg.get('role') in ['user', 'assistant']:
-                messages.append({"role": msg['role'], "content": msg['content']})
+                messages.append({"role": msg['role'], "content": msg['content'][:500]})  # Truncate long messages
         
-        # Add current message
         messages.append({"role": "user", "content": user_message})
         
-        # Call OpenAI
+        # First call - let the model decide if it needs tools
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
+            tools=tools,
+            tool_choice="auto",
             temperature=0.7,
             max_tokens=1500
         )
         
-        ai_response = response.choices[0].message.content
-        
-        # Check if there's a SQL query in the response
+        response_message = response.choices[0].message
         sql_data = None
-        if '```sql' in ai_response:
-            try:
-                # Extract SQL query
-                sql_start = ai_response.index('```sql') + 6
-                sql_end = ai_response.index('```', sql_start)
-                sql_query = ai_response[sql_start:sql_end].strip()
+        
+        # Check if model wants to call tools
+        if response_message.tool_calls:
+            # Execute the tool calls
+            tool_results = []
+            for tool_call in response_message.tool_calls:
+                function_name = tool_call.function.name
+                function_args = json.loads(tool_call.function.arguments)
                 
-                # Execute the query safely (read-only)
-                if sql_query.lower().startswith('select'):
-                    result = supabase_client.rpc('execute_read_query', {'query_text': sql_query}).execute()
-                    if result.data:
-                        sql_data = result.data
-                        # Remove SQL from response since we're showing the data
-                        ai_response = ai_response[:ai_response.index('```sql')].strip()
-                        if not ai_response:
-                            ai_response = "Here's what I found:"
-            except Exception as sql_error:
-                print(f"SQL execution error: {sql_error}")
-                # Try direct query as fallback for simple queries
-                try:
-                    sql_data = execute_safe_query(sql_query)
-                except Exception as e:
-                    print(f"Fallback query also failed: {e}")
+                print(f"AI calling tool: {function_name} with args: {function_args}")
+                
+                result = execute_ai_tool(function_name, function_args)
+                tool_results.append({
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "content": json.dumps(result, default=str)
+                })
+                
+                # Store the data for the frontend
+                if isinstance(result, list) and len(result) > 0:
+                    sql_data = result
+            
+            # Add the assistant message and tool results
+            messages.append(response_message)
+            messages.extend(tool_results)
+            
+            # Get final response with data context
+            final_response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            ai_response = final_response.choices[0].message.content
+        else:
+            ai_response = response_message.content
         
         return jsonify({
             'success': True,
@@ -10732,73 +10867,112 @@ When generating SQL, always use double quotes for table names with spaces (e.g.,
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-def execute_safe_query(sql_query):
-    """
-    Execute a read-only SQL query safely
-    Only allows SELECT statements
-    """
-    if not supabase_client:
-        return None
-    
-    sql_lower = sql_query.lower().strip()
-    
-    # Security: Only allow SELECT
-    if not sql_lower.startswith('select'):
-        return None
-    
-    # Security: Block dangerous keywords
-    dangerous = ['insert', 'update', 'delete', 'drop', 'alter', 'truncate', 'create', 'grant', 'revoke']
-    for word in dangerous:
-        if word in sql_lower:
-            return None
-    
+def execute_ai_tool(function_name, args):
+    """Execute an AI tool and return results"""
     try:
-        # Parse table name from query for direct Supabase query
-        # This is a simplified approach - for complex queries we'd need RPC
+        if function_name == "query_companies":
+            order_by = args.get('order_by', 'total_revenue_all_time')
+            order_desc = args.get('order_desc', True)
+            limit = min(args.get('limit', 10), 50)
+            
+            query = supabase_client.table('companies').select(
+                'name, city, country_name, total_revenue_all_time, total_revenue_2024, total_revenue_2025, invoice_count_all_time, average_invoice_value, last_invoice_date, assigned_salesperson'
+            )
+            
+            if args.get('city_filter'):
+                query = query.ilike('city', f"%{args['city_filter']}%")
+            
+            if args.get('min_revenue'):
+                query = query.gte('total_revenue_all_time', args['min_revenue'])
+            
+            result = query.order(order_by, desc=order_desc).limit(limit).execute()
+            return result.data
         
-        # Try to identify simple queries we can handle
-        if 'from companies' in sql_lower:
-            # Handle companies table queries
-            if 'order by' in sql_lower and 'total_revenue' in sql_lower:
-                if 'desc' in sql_lower:
-                    result = supabase_client.table('companies').select('name, city, total_revenue_all_time, invoice_count_all_time').order('total_revenue_all_time', desc=True).limit(10).execute()
-                else:
-                    result = supabase_client.table('companies').select('name, city, total_revenue_all_time, invoice_count_all_time').order('total_revenue_all_time').limit(10).execute()
-                return result.data
-            elif 'count' in sql_lower:
-                result = supabase_client.table('companies').select('*', count='exact').execute()
-                return [{'count': result.count}]
-        
-        # For sales tables
-        if 'from sales_2025' in sql_lower or 'from sales_2024' in sql_lower:
-            year = '2025' if '2025' in sql_lower else '2024'
+        elif function_name == "query_invoices":
+            year = args.get('year', '2025')
+            limit = min(args.get('limit', 20), 50)
             table = f'sales_{year}'
             
-            if 'sum' in sql_lower and 'total_amount' in sql_lower:
-                # Get total revenue
-                result = supabase_client.table(table).select('total_amount').execute()
-                total = sum(float(r.get('total_amount', 0) or 0) for r in result.data)
-                return [{'total_revenue': total}]
+            query = supabase_client.table(table).select(
+                'invoice_number, company_name, invoice_date, total_amount, is_paid'
+            )
+            
+            if args.get('company_name'):
+                query = query.ilike('company_name', f"%{args['company_name']}%")
+            
+            order_by = args.get('order_by', 'invoice_date')
+            order_desc = args.get('order_desc', True)
+            
+            result = query.order(order_by, desc=order_desc).limit(limit).execute()
+            return result.data
         
-        # For distributor tables - return sample data
-        distributor_tables = ['Biofresh', 'Delhaize', 'Geers', 'Inter Drinks', 'Terroirist']
-        for dist in distributor_tables:
-            if dist.lower() in sql_lower:
-                year = None
-                for y in ['2025', '2024', '2023', '2022']:
-                    if y in sql_lower:
-                        year = y
-                        break
-                if year:
-                    table_name = f'{dist} {year}'
-                    result = supabase_client.table(table_name).select('*').limit(10).execute()
-                    return result.data
+        elif function_name == "query_distributor_sales":
+            distributor = args.get('distributor')
+            year = args.get('year')
+            limit = min(args.get('limit', 20), 100)
+            
+            table_name = f'{distributor} {year}'
+            
+            query = supabase_client.table(table_name).select(
+                'naam_klant, stad, product, smaak, aantal, maand, verantwoordelijke'
+            )
+            
+            if args.get('product_filter'):
+                query = query.ilike('product', f"%{args['product_filter']}%")
+            
+            if args.get('city_filter'):
+                query = query.ilike('stad', f"%{args['city_filter']}%")
+            
+            result = query.limit(limit).execute()
+            return result.data
         
-        return None
+        elif function_name == "get_summary_stats":
+            stat_type = args.get('stat_type')
+            
+            if stat_type == "total_companies":
+                result = supabase_client.table('companies').select('*', count='exact').execute()
+                return [{"total_companies": result.count}]
+            
+            elif stat_type == "total_revenue_2024":
+                result = supabase_client.table('companies').select('total_revenue_2024').execute()
+                total = sum(float(r.get('total_revenue_2024') or 0) for r in result.data)
+                return [{"total_revenue_2024": round(total, 2)}]
+            
+            elif stat_type == "total_revenue_2025":
+                result = supabase_client.table('companies').select('total_revenue_2025').execute()
+                total = sum(float(r.get('total_revenue_2025') or 0) for r in result.data)
+                return [{"total_revenue_2025": round(total, 2)}]
+            
+            elif stat_type == "total_invoices_2024":
+                result = supabase_client.table('sales_2024').select('*', count='exact').execute()
+                return [{"total_invoices_2024": result.count}]
+            
+            elif stat_type == "total_invoices_2025":
+                result = supabase_client.table('sales_2025').select('*', count='exact').execute()
+                return [{"total_invoices_2025": result.count}]
+            
+            elif stat_type == "avg_invoice_value":
+                result = supabase_client.table('companies').select('average_invoice_value').execute()
+                values = [float(r.get('average_invoice_value') or 0) for r in result.data if r.get('average_invoice_value')]
+                avg = sum(values) / len(values) if values else 0
+                return [{"average_invoice_value": round(avg, 2)}]
+            
+            elif stat_type == "top_cities":
+                result = supabase_client.table('companies').select('city, total_revenue_all_time').execute()
+                city_revenue = {}
+                for r in result.data:
+                    city = r.get('city') or 'Unknown'
+                    revenue = float(r.get('total_revenue_all_time') or 0)
+                    city_revenue[city] = city_revenue.get(city, 0) + revenue
+                
+                top_cities = sorted(city_revenue.items(), key=lambda x: x[1], reverse=True)[:10]
+                return [{"city": c, "revenue": round(r, 2)} for c, r in top_cities]
+        
+        return []
         
     except Exception as e:
-        print(f"Safe query execution error: {e}")
-        return None
+        print(f"Tool execution error: {e}")
+        return [{"error": str(e)}]
 
 
 # =====================================================

@@ -126,67 +126,78 @@
     <div id="sync-results" style="display: none;"></div>
 
     <!-- Filters and Search -->
-    <div class="row mb-5">
+    <div class="row mb-4">
         <div class="col-12">
-            <div class="modern-card p-4">
-                <div class="row g-4 align-items-end">
-                    <div class="col-md-4 col-lg-3">
-                        <label class="form-label text-muted small fw-bold text-uppercase">Search</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0 ps-3"><i class="fas fa-search text-muted"></i></span>
-                            <input type="text" class="form-control border-start-0" id="searchInput" placeholder="Search companies..." onkeyup="filterCompanies()">
+            <div class="filter-card">
+                <div class="filter-grid">
+                    <!-- Search -->
+                    <div class="filter-item filter-search">
+                        <label class="filter-label">Search</label>
+                        <div class="filter-input-wrapper">
+                            <i class="fas fa-search filter-input-icon"></i>
+                            <input type="text" class="filter-input" id="searchInput" placeholder="Search companies..." onkeyup="filterCompanies()">
                         </div>
-                        </div>
-                        <div class="col-md-3">
-                        <label class="form-label text-muted small fw-bold text-uppercase">Categories</label>
-                        <div class="searchable-dropdown-wrapper w-100">
-                            <div class="dropdown-trigger-modern w-100 justify-content-between bg-white" id="category-dropdown-trigger">
-                                <span class="trigger-text text-muted text-truncate">All categories</span>
-                                <i class="fas fa-chevron-down small"></i>
-                                </div>
-                            <div class="dropdown-menu-modern shadow-lg" id="category-dropdown-menu">
-                                    <div class="dropdown-search-box">
-                                        <i class="fas fa-search"></i>
-                                    <input type="text" placeholder="Filter..." id="category-search-input">
-                                    </div>
-                                    <div class="dropdown-options-list" id="category-dropdown-options"></div>
-                                </div>
+                    </div>
+                    
+                    <!-- Categories -->
+                    <div class="filter-item filter-categories">
+                        <label class="filter-label">Categories</label>
+                        <div class="searchable-dropdown-wrapper">
+                            <div class="filter-dropdown-trigger" id="category-dropdown-trigger">
+                                <span class="trigger-text">All categories</span>
+                                <i class="fas fa-chevron-down"></i>
                             </div>
-                            <div class="selected-tags mt-2" id="category-selected-tags"></div>
+                            <div class="filter-dropdown-menu" id="category-dropdown-menu">
+                                <div class="dropdown-search-box">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Filter..." id="category-search-input">
+                                </div>
+                                <div class="dropdown-options-list" id="category-dropdown-options"></div>
+                            </div>
                         </div>
-                        <div class="col-md-2">
-                        <label class="form-label text-muted small fw-bold text-uppercase">Min Revenue</label>
-                        <div class="input-group">
-                             <span class="input-group-text bg-white border-end-0 ps-3 text-muted">€</span>
-                            <input type="number" class="form-control border-start-0" id="minRevenue" placeholder="0" onchange="filterCompanies()">
+                        <div class="selected-tags mt-2" id="category-selected-tags"></div>
+                    </div>
+                    
+                    <!-- Min Revenue -->
+                    <div class="filter-item filter-revenue">
+                        <label class="filter-label">Min Revenue</label>
+                        <div class="filter-input-wrapper">
+                            <span class="filter-input-icon">€</span>
+                            <input type="number" class="filter-input" id="minRevenue" placeholder="0" onchange="filterCompanies()">
                         </div>
-                        </div>
-                        <div class="col-md-2">
-                        <label class="form-label text-muted small fw-bold text-uppercase">Sort By</label>
-                            <select class="form-select" id="sortBy" onchange="sortCompanies()">
-                            <option value="revenue_desc">Revenue (High)</option>
-                            <option value="revenue_asc">Revenue (Low)</option>
-                                <option value="name_asc">Name (A-Z)</option>
-                                <option value="name_desc">Name (Z-A)</option>
-                            <option value="invoices_desc">Invoices (High)</option>
-                            <option value="invoices_asc">Invoices (Low)</option>
+                    </div>
+                    
+                    <!-- Sort By -->
+                    <div class="filter-item filter-sort">
+                        <label class="filter-label">Sort By</label>
+                        <select class="filter-select" id="sortBy" onchange="sortCompanies()">
+                            <option value="revenue_desc">Revenue ↓</option>
+                            <option value="revenue_asc">Revenue ↑</option>
+                            <option value="name_asc">Name A-Z</option>
+                            <option value="name_desc">Name Z-A</option>
+                            <option value="invoices_desc">Invoices ↓</option>
+                            <option value="invoices_asc">Invoices ↑</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div class="filter-item filter-actions">
+                        <label class="filter-label">&nbsp;</label>
+                        <div class="filter-actions-row">
+                            <button class="filter-btn filter-btn-star" id="majorRetailerFilter" onclick="toggleMajorRetailerFilter()" title="Major retailers">
+                                <i class="fas fa-star"></i>
+                            </button>
+                            <div class="filter-view-toggle">
+                                <input type="radio" name="viewMode" id="viewCard" checked onchange="document.getElementById('viewMode').value='cards'; changeViewMode();">
+                                <label for="viewCard" title="Card view"><i class="fas fa-th-large"></i></label>
+                                <input type="radio" name="viewMode" id="viewTable" onchange="document.getElementById('viewMode').value='table'; changeViewMode();">
+                                <label for="viewTable" title="Table view"><i class="fas fa-list"></i></label>
+                            </div>
+                            <select class="d-none" id="viewMode" onchange="changeViewMode()">
+                                <option value="cards">Cards</option>
+                                <option value="table">Table</option>
                             </select>
                         </div>
-                     <div class="col-md-2 col-lg-2 d-flex gap-2">
-                        <button class="btn btn-outline-warning flex-fill h-100" id="majorRetailerFilter" onclick="toggleMajorRetailerFilter()" title="Show major retailers only">
-                            <i class="fas fa-star"></i>
-                        </button>
-                        <div class="btn-group flex-fill" role="group">
-                             <input type="radio" class="btn-check" name="viewMode" id="viewCard" autocomplete="off" checked onchange="document.getElementById('viewMode').value='cards'; changeViewMode();">
-                            <label class="btn btn-outline-secondary" for="viewCard"><i class="fas fa-th-large"></i></label>
-
-                            <input type="radio" class="btn-check" name="viewMode" id="viewTable" autocomplete="off" onchange="document.getElementById('viewMode').value='table'; changeViewMode();">
-                            <label class="btn btn-outline-secondary" for="viewTable"><i class="fas fa-list"></i></label>
-                        </div>
-                        <select class="form-select d-none" id="viewMode" onchange="changeViewMode()">
-                                <option value="cards">Card View</option>
-                                <option value="table">Table View</option>
-                            </select>
                     </div>
                 </div>
             </div>
@@ -608,56 +619,134 @@
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-    /* Filter Bar Fixes - Prevent overflow */
-    .modern-card.p-4 .row.g-4 {
-        margin: 0 !important;
-    }
-    
-    .modern-card.p-4 .row.g-4 > [class*="col-"] {
-        padding-left: 0.75rem;
-        padding-right: 0.75rem;
-    }
-
-    /* Category Tags Filter */
-.category-tags-filter {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.75rem;
+    /* =====================================================
+       FILTER CARD - Clean Grid Layout
+       ===================================================== */
+    .filter-card {
         background: white;
+        border-radius: var(--radius-lg);
+        padding: 1.25rem 1.5rem;
+        box-shadow: var(--shadow-sm);
         border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-    min-height: 48px;
-    align-items: center;
-}
-
-    /* Searchable Dropdown Fix - Proper containment */
-    .searchable-dropdown-wrapper {
-        position: relative;
-        width: 100%;
     }
     
-    .searchable-dropdown-wrapper .dropdown-trigger-modern {
+    .filter-grid {
+        display: grid;
+        grid-template-columns: 2fr 1.5fr 1fr 1fr auto;
+        gap: 1rem;
+        align-items: end;
+    }
+    
+    @media (max-width: 1200px) {
+        .filter-grid {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+        .filter-search { grid-column: span 2; }
+        .filter-actions { grid-column: span 1; }
+    }
+    
+    @media (max-width: 768px) {
+        .filter-grid {
+            grid-template-columns: 1fr;
+        }
+        .filter-search, .filter-categories, .filter-revenue, 
+        .filter-sort, .filter-actions { grid-column: span 1; }
+    }
+    
+    .filter-item {
         display: flex;
-    align-items: center;
-        justify-content: space-between;
-        padding: 0.5rem 1rem;
-        background: white;
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all 0.2s ease;
-        font-size: 0.875rem;
-        color: var(--text-muted);
-        min-height: 38px;
+        flex-direction: column;
+        gap: 0.5rem;
     }
     
-    .searchable-dropdown-wrapper .dropdown-trigger-modern:hover {
+    .filter-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+    }
+    
+    .filter-input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    
+    .filter-input-icon {
+        position: absolute;
+        left: 0.875rem;
+        color: var(--text-muted);
+        font-size: 0.875rem;
+        pointer-events: none;
+    }
+    
+    .filter-input {
+        width: 100%;
+        padding: 0.625rem 0.875rem 0.625rem 2.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        background: white;
+        transition: all 0.2s ease;
+    }
+    
+    .filter-input:focus {
+        outline: none;
         border-color: var(--primary-color);
         box-shadow: 0 0 0 3px var(--primary-soft);
     }
     
-    .searchable-dropdown-wrapper .dropdown-menu-modern {
+    .filter-select {
+        width: 100%;
+        padding: 0.625rem 2rem 0.625rem 0.875rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        background: white url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") no-repeat right 0.75rem center/12px 12px;
+        appearance: none;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .filter-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+    
+    /* Filter Dropdown */
+    .filter-dropdown-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.625rem 0.875rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: white;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        transition: all 0.2s ease;
+    }
+    
+    .filter-dropdown-trigger:hover {
+        border-color: var(--primary-color);
+    }
+    
+    .filter-dropdown-trigger .trigger-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .filter-dropdown-trigger i {
+        font-size: 0.625rem;
+        margin-left: 0.5rem;
+        flex-shrink: 0;
+    }
+    
+    .filter-dropdown-menu {
         position: absolute;
         top: calc(100% + 4px);
         left: 0;
@@ -672,7 +761,7 @@
         display: none;
     }
     
-    .searchable-dropdown-wrapper .dropdown-menu-modern.show {
+    .filter-dropdown-menu.show {
         display: block;
         animation: dropdownSlideIn 0.2s ease;
     }
@@ -680,6 +769,10 @@
     @keyframes dropdownSlideIn {
         from { opacity: 0; transform: translateY(-8px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .searchable-dropdown-wrapper {
+        position: relative;
     }
     
     .dropdown-search-box {
@@ -691,9 +784,7 @@
         background: #f8fafc;
     }
     
-    .dropdown-search-box i {
-        color: var(--text-muted);
-    }
+    .dropdown-search-box i { color: var(--text-muted); }
     
     .dropdown-search-box input {
         flex: 1;
@@ -720,25 +811,11 @@
         font-size: 0.875rem;
     }
     
-    .dropdown-option-item:hover {
-        background: var(--surface-bg);
-    }
-    
-    .dropdown-option-item.included {
-        background: var(--success-soft);
-    }
-    
-    .dropdown-option-item.included .option-checkbox {
-        color: var(--success-color);
-    }
-    
-    .dropdown-option-item.excluded {
-        background: #fee2e2;
-    }
-    
-    .dropdown-option-item.excluded .option-checkbox {
-        color: #dc2626;
-    }
+    .dropdown-option-item:hover { background: var(--surface-bg); }
+    .dropdown-option-item.included { background: var(--success-soft); }
+    .dropdown-option-item.included .option-checkbox { color: var(--success-color); }
+    .dropdown-option-item.excluded { background: #fee2e2; }
+    .dropdown-option-item.excluded .option-checkbox { color: #dc2626; }
     
     .option-checkbox {
         width: 20px;
@@ -746,6 +823,70 @@
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+    
+    /* Filter Actions */
+    .filter-actions-row {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    
+    .filter-btn {
+        padding: 0.625rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .filter-btn:hover {
+        background: var(--surface-bg);
+    }
+    
+    .filter-btn-star {
+        color: var(--text-muted);
+    }
+    
+    .filter-btn-star.active {
+        background: var(--warning-soft);
+        border-color: var(--warning-color);
+        color: var(--warning-color);
+    }
+    
+    .filter-view-toggle {
+        display: flex;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+    }
+    
+    .filter-view-toggle input {
+        display: none;
+    }
+    
+    .filter-view-toggle label {
+        padding: 0.625rem 0.875rem;
+        cursor: pointer;
+        background: white;
+        color: var(--text-muted);
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .filter-view-toggle label:first-of-type {
+        border-right: 1px solid var(--border-color);
+    }
+    
+    .filter-view-toggle input:checked + label {
+        background: var(--primary-color);
+        color: white;
     }
 
     /* AI Chat Widget Styles */
@@ -792,11 +933,11 @@
         position: fixed;
         bottom: 100px;
         right: 24px;
-        width: 420px;
+        width: 520px;
         max-width: calc(100vw - 48px);
-        height: 600px;
+        height: 700px;
         max-height: calc(100vh - 140px);
-    background: white;
+        background: white;
         border-radius: var(--radius-xl);
         box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         display: flex;
