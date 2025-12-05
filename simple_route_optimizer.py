@@ -192,8 +192,14 @@ def optimize_trip_route(
         # Improve with 2-opt
         route_indices = two_opt_improvement(route_indices, distance_matrix)
         
-        # Calculate total distance
+        # Calculate total distance (including return to start)
         total_distance = calculate_route_distance(route_indices, distance_matrix)
+        
+        # Add return distance to start location
+        if len(route_indices) > 1:
+            last_stop_idx = route_indices[-1]
+            return_distance = distance_matrix[last_stop_idx][0]  # Distance from last stop back to start (index 0)
+            total_distance += return_distance
         
         # Build ordered stops (exclude start location)
         ordered_stops = []

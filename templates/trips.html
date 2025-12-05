@@ -851,6 +851,34 @@ function initializeTripMap() {
     });
     markers.push(startMarker);
     
+    // Add end location marker (if different from start)
+    const endLat = selectedTrip.end_lat ? parseFloat(selectedTrip.end_lat) : startLat;
+    const endLng = selectedTrip.end_lng ? parseFloat(selectedTrip.end_lng) : startLng;
+    const isReturnToStart = !selectedTrip.end_lat || (endLat === startLat && endLng === startLng);
+    
+    if (!isReturnToStart) {
+        // Show separate end marker only if different from start
+        const endMarker = new google.maps.Marker({
+            position: { lat: endLat, lng: endLng },
+            map: map,
+            title: selectedTrip.end_location || 'End',
+            label: {
+                text: 'E',
+                color: 'white',
+                fontWeight: 'bold'
+            },
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 12,
+                fillColor: '#EF4444',
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 2
+            }
+        });
+        markers.push(endMarker);
+    }
+    
     // Add stop markers
     selectedTrip.stops.forEach((stop, index) => {
         const marker = new google.maps.Marker({
@@ -934,6 +962,18 @@ function drawRoute() {
             lng: parseFloat(selectedTrip.start_lng)
         };
         
+        // Determine end location - use end_lat/end_lng if available, otherwise return to start
+        let endLocation;
+        if (selectedTrip.end_lat && selectedTrip.end_lng) {
+            endLocation = {
+                lat: parseFloat(selectedTrip.end_lat),
+                lng: parseFloat(selectedTrip.end_lng)
+            };
+        } else {
+            // Return to start
+            endLocation = startLocation;
+        }
+        
         // Google Maps Directions API allows max 25 waypoints (23 + origin + destination)
         // If more waypoints, we need to split the request or use alternative approach
         const maxWaypoints = Math.min(waypoints.length, 23);
@@ -941,8 +981,8 @@ function drawRoute() {
         
         directionsService.route({
             origin: startLocation,
-            destination: waypoints[waypoints.length - 1].location, // End at last stop
-            waypoints: waypointsToUse.slice(0, -1), // All stops except the last
+            destination: endLocation, // Return to start or end location
+            waypoints: waypointsToUse, // All stops as waypoints
             travelMode: google.maps.TravelMode.DRIVING,
             optimizeWaypoints: false // Already optimized by our TSP algorithm
         }, (result, status) => {
