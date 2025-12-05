@@ -10572,6 +10572,236 @@ def reoptimize_trip(trip_id):
 
 
 # =====================================================
+# AI CHAT ENDPOINT - RAG with Database Context
+# =====================================================
+
+# Database schema for AI context
+DATABASE_SCHEMA = """
+You have access to the following PostgreSQL tables in a Supabase database:
+
+**companies** - Main customer/company data
+- company_id (integer): Unique company identifier
+- name (text): Company name
+- vat_number, email, phone_number, website
+- city, country_name, country_code
+- total_revenue_2024, total_revenue_2025, total_revenue_all_time (numeric)
+- invoice_count_2024, invoice_count_2025, invoice_count_all_time (integer)
+- average_invoice_value (numeric)
+- first_invoice_date, last_invoice_date (date)
+- assigned_salesperson (varchar)
+- customer_status (text): 'active', 'priority', 'at_risk', 'dormant', etc.
+
+**sales_2024** / **sales_2025** - Invoice data by year
+- invoice_id (integer), company_id (integer)
+- company_name (text), invoice_number (text)
+- invoice_date, due_date (date)
+- total_amount, balance (numeric)
+- is_paid (boolean)
+- invoice_data (jsonb): Full invoice details including line_items
+
+**products** - Product catalog
+- id, name, sku, category_id, unit, description, is_active
+
+**product_categories** - Product categories
+- id, name, description
+
+**Biofresh 2022/2023/2024/2025**, **Delhaize 2022/2023/2024/2025**, **Geers 2022/2023/2024/2025**, **Inter Drinks 2023/2024/2025**, **Terroirist 2024/2025**
+These are distributor/wholesaler sales data tables with columns:
+- source, code_klant, naam_klant (customer name)
+- adres_straat_huisnr, postcode, stad, land, provincie
+- tel_nr, email, verantwoordelijke (responsible person)
+- aantal (quantity), week, maand (month), jaar (year)
+- product, smaak (flavor), verpakking (packaging)
+- keten (chain), type_zaak (type of business)
+
+**trips** - Sales trip planning
+- id, name, trip_date, start_location, status
+- total_distance_km, estimated_duration_minutes
+
+**trip_stops** - Stops on sales trips
+- trip_id, company_id, company_name, address
+- latitude, longitude, stop_order, completed
+
+**prospects** - Potential customers
+- id, name, address, website, status
+- assigned_salesperson, visited_at
+
+**customer_alerts** - Automated alerts about customers
+- company_id, company_name, alert_type, priority
+- description, recommendation, status
+"""
+
+@app.route('/api/ai-chat', methods=['POST'])
+def api_ai_chat():
+    """
+    AI Chat endpoint - Uses OpenAI to answer questions about sales data
+    """
+    if not openai_client:
+        return jsonify({'success': False, 'error': 'OpenAI not configured'}), 500
+    
+    if not supabase_client:
+        return jsonify({'success': False, 'error': 'Database not configured'}), 500
+    
+    try:
+        data = request.get_json()
+        user_message = data.get('message', '')
+        history = data.get('history', [])
+        context = data.get('context', {})
+        
+        if not user_message:
+            return jsonify({'success': False, 'error': 'No message provided'}), 400
+        
+        # Build system prompt
+        system_prompt = f"""You are a helpful sales analytics assistant for a beverage distribution company in Belgium. 
+You help sales reps analyze their company and invoice data.
+
+{DATABASE_SCHEMA}
+
+IMPORTANT GUIDELINES:
+1. When users ask about data, generate a PostgreSQL query to answer their question
+2. Return the SQL query in a special format: ```sql YOUR_QUERY ```
+3. Keep responses concise and friendly - this is a chat interface
+4. Use Belgian locale (€ for currency, nl-BE formatting)
+5. When showing numbers, format them nicely (e.g., €12,345.67)
+6. The wholesaler tables (Biofresh, Delhaize, etc.) contain detailed product sales to end customers
+7. For revenue questions, use the companies table total_revenue fields
+8. For invoice details, use sales_2024 or sales_2025 tables
+9. Current viewing context: {context.get('currentYear', '2025')} year, {context.get('totalCompanies', 0)} total companies
+
+Be conversational and helpful. If you can't answer something, say so politely.
+When generating SQL, always use double quotes for table names with spaces (e.g., "Biofresh 2024").
+"""
+
+        # Build messages for OpenAI
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add recent history
+        for msg in history[-6:]:  # Last 6 messages for context
+            if msg.get('role') in ['user', 'assistant']:
+                messages.append({"role": msg['role'], "content": msg['content']})
+        
+        # Add current message
+        messages.append({"role": "user", "content": user_message})
+        
+        # Call OpenAI
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1500
+        )
+        
+        ai_response = response.choices[0].message.content
+        
+        # Check if there's a SQL query in the response
+        sql_data = None
+        if '```sql' in ai_response:
+            try:
+                # Extract SQL query
+                sql_start = ai_response.index('```sql') + 6
+                sql_end = ai_response.index('```', sql_start)
+                sql_query = ai_response[sql_start:sql_end].strip()
+                
+                # Execute the query safely (read-only)
+                if sql_query.lower().startswith('select'):
+                    result = supabase_client.rpc('execute_read_query', {'query_text': sql_query}).execute()
+                    if result.data:
+                        sql_data = result.data
+                        # Remove SQL from response since we're showing the data
+                        ai_response = ai_response[:ai_response.index('```sql')].strip()
+                        if not ai_response:
+                            ai_response = "Here's what I found:"
+            except Exception as sql_error:
+                print(f"SQL execution error: {sql_error}")
+                # Try direct query as fallback for simple queries
+                try:
+                    sql_data = execute_safe_query(sql_query)
+                except Exception as e:
+                    print(f"Fallback query also failed: {e}")
+        
+        return jsonify({
+            'success': True,
+            'response': ai_response,
+            'data': sql_data
+        })
+        
+    except Exception as e:
+        print(f"AI Chat error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def execute_safe_query(sql_query):
+    """
+    Execute a read-only SQL query safely
+    Only allows SELECT statements
+    """
+    if not supabase_client:
+        return None
+    
+    sql_lower = sql_query.lower().strip()
+    
+    # Security: Only allow SELECT
+    if not sql_lower.startswith('select'):
+        return None
+    
+    # Security: Block dangerous keywords
+    dangerous = ['insert', 'update', 'delete', 'drop', 'alter', 'truncate', 'create', 'grant', 'revoke']
+    for word in dangerous:
+        if word in sql_lower:
+            return None
+    
+    try:
+        # Parse table name from query for direct Supabase query
+        # This is a simplified approach - for complex queries we'd need RPC
+        
+        # Try to identify simple queries we can handle
+        if 'from companies' in sql_lower:
+            # Handle companies table queries
+            if 'order by' in sql_lower and 'total_revenue' in sql_lower:
+                if 'desc' in sql_lower:
+                    result = supabase_client.table('companies').select('name, city, total_revenue_all_time, invoice_count_all_time').order('total_revenue_all_time', desc=True).limit(10).execute()
+                else:
+                    result = supabase_client.table('companies').select('name, city, total_revenue_all_time, invoice_count_all_time').order('total_revenue_all_time').limit(10).execute()
+                return result.data
+            elif 'count' in sql_lower:
+                result = supabase_client.table('companies').select('*', count='exact').execute()
+                return [{'count': result.count}]
+        
+        # For sales tables
+        if 'from sales_2025' in sql_lower or 'from sales_2024' in sql_lower:
+            year = '2025' if '2025' in sql_lower else '2024'
+            table = f'sales_{year}'
+            
+            if 'sum' in sql_lower and 'total_amount' in sql_lower:
+                # Get total revenue
+                result = supabase_client.table(table).select('total_amount').execute()
+                total = sum(float(r.get('total_amount', 0) or 0) for r in result.data)
+                return [{'total_revenue': total}]
+        
+        # For distributor tables - return sample data
+        distributor_tables = ['Biofresh', 'Delhaize', 'Geers', 'Inter Drinks', 'Terroirist']
+        for dist in distributor_tables:
+            if dist.lower() in sql_lower:
+                year = None
+                for y in ['2025', '2024', '2023', '2022']:
+                    if y in sql_lower:
+                        year = y
+                        break
+                if year:
+                    table_name = f'{dist} {year}'
+                    result = supabase_client.table(table_name).select('*').limit(10).execute()
+                    return result.data
+        
+        return None
+        
+    except Exception as e:
+        print(f"Safe query execution error: {e}")
+        return None
+
+
+# =====================================================
 # DEBUG ENDPOINTS
 # =====================================================
 
