@@ -5599,8 +5599,8 @@ def recalculate_company_metrics_from_invoices(company_ids=None, max_companies=99
 @app.route('/api/sync-2025-invoices', methods=['POST'])
 def api_sync_2025_invoices():
     """
-    Sync recent 2025 sales invoices to Supabase.
-    Fetches invoices from last 14 days and stores them in the sales_2025 table.
+    Sync 2025 sales invoices to Supabase since last update.
+    Processes in batches - call multiple times if needed.
     Admin only - requires DUANO authentication.
     """
     if not is_admin():
@@ -5613,20 +5613,31 @@ def api_sync_2025_invoices():
         print("🚀 Starting 2025 invoice sync...")
         sync_start = time_module.time()
         
-        # Only fetch last 14 days of invoices to avoid timeout
-        # For full historical sync, use the database directly
-        today = datetime.now()
-        start_date = (today - timedelta(days=14)).strftime('%Y-%m-%d')
-        end_date = today.strftime('%Y-%m-%d')
+        # Get last sync date from database (most recent invoice date)
+        last_invoice = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=True).limit(1).execute()
         
-        print(f"📅 Syncing invoices from {start_date} to {end_date}")
+        if last_invoice.data and last_invoice.data[0].get('invoice_date'):
+            # Start from day before last invoice to catch any missed
+            last_date = last_invoice.data[0]['invoice_date']
+            start_date = (datetime.strptime(last_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+        else:
+            # No data - start from beginning of 2025
+            start_date = '2025-01-01'
+        
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        
+        # Get page from request for continuation
+        request_page = request.json.get('page', 1) if request.is_json else 1
+        
+        print(f"📅 Syncing invoices from {start_date} to {end_date}, starting page {request_page}")
         
         all_invoices = []
-        page = 1
-        per_page = 50  # Smaller batches for faster response
-        max_pages = 5  # Limit pages to prevent timeout
+        page = request_page
+        per_page = 50
+        pages_fetched = 0
+        max_pages_per_batch = 3  # Process 3 pages per call (~150 invoices)
         
-        while page <= max_pages:
+        while pages_fetched < max_pages_per_batch:
             params = {
                 'per_page': per_page,
                 'page': page,
@@ -5684,17 +5695,24 @@ def api_sync_2025_invoices():
             last_page = data.get('result', {}).get('last_page', page)
             
             if current_page >= last_page:
+                # All pages done
+                next_page = None
                 break
             
             page += 1
+            pages_fetched += 1
             
-            # Check if we're running out of time (max 20 seconds for fetching)
-            if time_module.time() - sync_start > 20:
-                print(f"⏱️ Stopping fetch early to avoid timeout")
+            # Check if we're running out of time (max 15 seconds for fetching)
+            if time_module.time() - sync_start > 15:
+                print(f"⏱️ Stopping fetch early to avoid timeout, next page: {page}")
+                next_page = page
                 break
+        else:
+            # Loop completed without break - more pages available
+            next_page = page + 1 if pages_fetched >= max_pages_per_batch else None
         
         if not all_invoices:
-            return jsonify({'message': 'No new invoices found', 'count': 0, 'success': True})
+            return jsonify({'message': 'No new invoices found', 'count': 0, 'success': True, 'complete': True})
         
         print(f"✅ Total invoices fetched: {len(all_invoices)}")
         
@@ -5750,17 +5768,22 @@ def api_sync_2025_invoices():
                 print(f"⏱️ Stopping save early at {batch_start + len(batch)} invoices to avoid timeout")
                 break
         
+        # Determine if more pages to process
+        is_complete = next_page is None
+        
         result = {
             'success': True,
             'total_fetched': len(all_invoices),
             'saved': saved_count,
             'errors': error_count,
             'date_range': f'{start_date} to {end_date}',
-            'message': f'Synced {saved_count} invoices from last 14 days'
+            'complete': is_complete,
+            'next_page': next_page,
+            'message': f'Synced {saved_count} invoices' + ('' if is_complete else f' (continue from page {next_page})')
         }
         
         elapsed = time_module.time() - sync_start
-        print(f"✅ Sync complete in {elapsed:.1f}s: {result}")
+        print(f"✅ Sync batch complete in {elapsed:.1f}s: {result}")
         
         return jsonify(result)
         

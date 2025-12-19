@@ -142,21 +142,21 @@
                     <!-- Categories -->
                     <div class="filter-item filter-categories">
                         <label class="filter-label">Categories</label>
-                        <div class="searchable-dropdown-wrapper">
+                            <div class="searchable-dropdown-wrapper">
                             <div class="filter-dropdown-trigger" id="category-dropdown-trigger">
                                 <span class="trigger-text">All categories</span>
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                            <div class="filter-dropdown-menu" id="category-dropdown-menu">
-                                <div class="dropdown-search-box">
-                                    <i class="fas fa-search"></i>
-                                    <input type="text" placeholder="Filter..." id="category-search-input">
+                                    <i class="fas fa-chevron-down"></i>
                                 </div>
-                                <div class="dropdown-options-list" id="category-dropdown-options"></div>
+                            <div class="filter-dropdown-menu" id="category-dropdown-menu">
+                                    <div class="dropdown-search-box">
+                                        <i class="fas fa-search"></i>
+                                    <input type="text" placeholder="Filter..." id="category-search-input">
+                                    </div>
+                                    <div class="dropdown-options-list" id="category-dropdown-options"></div>
+                                </div>
                             </div>
+                            <div class="selected-tags mt-2" id="category-selected-tags"></div>
                         </div>
-                        <div class="selected-tags mt-2" id="category-selected-tags"></div>
-                    </div>
                     
                     <!-- Min Revenue -->
                     <div class="filter-item filter-revenue">
@@ -165,7 +165,7 @@
                             <span class="filter-input-icon">€</span>
                             <input type="number" class="filter-input" id="minRevenue" placeholder="0" onchange="filterCompanies()">
                         </div>
-                    </div>
+                        </div>
                     
                     <!-- Sort By -->
                     <div class="filter-item filter-sort">
@@ -177,8 +177,8 @@
                             <option value="name_desc">Name Z-A</option>
                             <option value="invoices_desc">Invoices ↓</option>
                             <option value="invoices_asc">Invoices ↑</option>
-                        </select>
-                    </div>
+                            </select>
+                        </div>
                     
                     <!-- Actions -->
                     <div class="filter-item filter-actions">
@@ -531,9 +531,9 @@
 
     /* Invoice List in Sidepanel */
     .invoice-item {
-        display: flex;
+    display: flex;
         justify-content: space-between;
-        align-items: center;
+    align-items: center;
         padding: 1rem;
         border-bottom: 1px solid var(--border-color);
         transition: background 0.2s;
@@ -558,13 +558,13 @@
         padding: 0.5rem 2rem 0.5rem 1rem;
         font-size: 0.875rem;
         color: var(--text-main);
-        cursor: pointer;
+    cursor: pointer;
         background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
         background-repeat: no-repeat;
         background-position: right 0.75rem center;
         background-size: 16px 12px;
         box-shadow: var(--shadow-sm);
-        transition: all 0.2s ease;
+    transition: all 0.2s ease;
     }
 
     .form-select-modern:focus {
@@ -623,7 +623,7 @@
        FILTER CARD - Clean Grid Layout
        ===================================================== */
     .filter-card {
-        background: white;
+    background: white;
         border-radius: var(--radius-lg);
         padding: 1.25rem 1.5rem;
         box-shadow: var(--shadow-sm);
@@ -661,7 +661,7 @@
     
     .filter-label {
         font-size: 0.7rem;
-        font-weight: 600;
+    font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--text-muted);
@@ -688,9 +688,9 @@
         border-radius: var(--radius-md);
         font-size: 0.875rem;
         background: white;
-        transition: all 0.2s ease;
-    }
-    
+    transition: all 0.2s ease;
+}
+
     .filter-input:focus {
         outline: none;
         border-color: var(--primary-color);
@@ -706,9 +706,9 @@
         background: white url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") no-repeat right 0.75rem center/12px 12px;
         appearance: none;
         cursor: pointer;
-        transition: all 0.2s ease;
-    }
-    
+    transition: all 0.2s ease;
+}
+
     .filter-select:focus {
         outline: none;
         border-color: var(--primary-color);
@@ -717,7 +717,7 @@
     
     /* Filter Dropdown */
     .filter-dropdown-trigger {
-        display: flex;
+    display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 0.625rem 0.875rem;
@@ -776,10 +776,10 @@
     }
     
     .dropdown-search-box {
-        padding: 0.75rem;
+    padding: 0.75rem;
         border-bottom: 1px solid var(--border-color);
         display: flex;
-        align-items: center;
+    align-items: center;
         gap: 0.5rem;
         background: #f8fafc;
     }
@@ -802,8 +802,8 @@
     
     .dropdown-option-item {
         display: flex;
-        align-items: center;
-        gap: 0.5rem;
+    align-items: center;
+    gap: 0.5rem;
         padding: 0.5rem 0.75rem;
         border-radius: var(--radius-md);
         cursor: pointer;
@@ -837,8 +837,8 @@
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
         background: white;
-        cursor: pointer;
-        transition: all 0.2s ease;
+    cursor: pointer;
+    transition: all 0.2s ease;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -989,9 +989,9 @@
     
     .ai-chat-header small {
         opacity: 0.8;
-        font-size: 0.75rem;
-    }
-    
+    font-size: 0.75rem;
+}
+
     .ai-chat-close {
         background: rgba(255, 255, 255, 0.2);
         border: none;
@@ -1548,22 +1548,33 @@ async function syncLatestData() {
     try {
         document.getElementById('sync-status').style.display = 'block';
         document.getElementById('sync-results').style.display = 'none';
-        document.getElementById('sync-message').innerHTML = 'Fetching latest invoices from DUANO...<br><small class="text-muted">This may take 30-60 seconds depending on the number of invoices</small>';
         
         // Handle combined view - sync 2025 by default
         const yearToSync = currentYear === 'combined' ? '2025' : currentYear;
         
         console.log(`Starting sync for year: ${yearToSync}`);
         
+        let totalFetched = 0;
+        let totalSaved = 0;
+        let totalErrors = 0;
+        let currentPage = 1;
+        let batchCount = 0;
+        const maxBatches = 20; // Safety limit
+        
+        // Loop through batches until complete
+        while (batchCount < maxBatches) {
+            batchCount++;
+            document.getElementById('sync-message').innerHTML = `Syncing invoices from DUANO...<br><small class="text-muted">Batch ${batchCount} - ${totalSaved} invoices synced so far</small>`;
+        
         const response = await fetch(`/api/sync-${yearToSync}-invoices`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
-            }
+                },
+                body: JSON.stringify({ page: currentPage })
         });
         
         if (!response.ok) {
-            // Try to parse error message
             let errorData;
             try {
                 errorData = await response.json();
@@ -1571,7 +1582,6 @@ async function syncLatestData() {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
-            // Handle authentication errors
             if (response.status === 401) {
                 document.getElementById('sync-status').style.display = 'none';
                 document.getElementById('sync-results').style.display = 'block';
@@ -1593,55 +1603,57 @@ async function syncLatestData() {
         }
         
         const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.error || result.message || 'Sync failed');
+            }
+            
+            totalFetched += result.total_fetched || 0;
+            totalSaved += result.saved || 0;
+            totalErrors += result.errors || 0;
+            
+            console.log(`Batch ${batchCount}: fetched=${result.total_fetched}, saved=${result.saved}, complete=${result.complete}, next=${result.next_page}`);
+            
+            // Check if sync is complete
+            if (result.complete || !result.next_page) {
+                break;
+            }
+            
+            // Continue with next page
+            currentPage = result.next_page;
+            
+            // Small delay between batches
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
         
         document.getElementById('sync-status').style.display = 'none';
         document.getElementById('sync-results').style.display = 'block';
         
-        if (result.success) {
             document.getElementById('sync-results').innerHTML = `
                 <div class="alert alert-success">
-                    <h5><i class="fas fa-check-circle me-2"></i>Daily Sync Completed!</h5>
+                <h5><i class="fas fa-check-circle me-2"></i>Sync Completed!</h5>
                     <div class="row mt-3">
-                        <div class="col-md-3">
-                            <strong>Total Fetched:</strong> ${result.total_fetched}
+                    <div class="col-md-4">
+                        <strong>Batches:</strong> ${batchCount}
                         </div>
-                        <div class="col-md-3">
-                            <strong>New Records:</strong> <span class="text-success">${result.saved}</span>
+                    <div class="col-md-4">
+                        <strong>Invoices Synced:</strong> <span class="text-success">${totalSaved}</span>
                         </div>
-                        <div class="col-md-3">
-                            <strong>Updated:</strong> <span class="text-info">${result.updated}</span>
+                    <div class="col-md-4">
+                        <strong>Errors:</strong> <span class="text-danger">${totalErrors}</span>
                         </div>
-                        <div class="col-md-3">
-                            <strong>Errors:</strong> <span class="text-danger">${result.errors}</span>
                         </div>
-                    </div>
-                    ${result.saved > 0 || result.updated > 0 ? `
+                ${totalSaved > 0 ? `
                         <p class="mt-2 mb-0">
-                            <strong>${result.saved} new invoices</strong> have been added to the database!<br>
-                            <i class="fas fa-calculator me-1"></i><small class="text-muted">Company metrics are being automatically updated...</small>
+                        <strong>${totalSaved} invoices</strong> have been synced to the database!
                         </p>
                     ` : '<p class="mt-2 mb-0">Database is up to date - no new invoices found.</p>'}
                 </div>
             `;
             
             // Clear cache and refresh data after sync
-            clearCache(); // Clear all year caches since invoices may affect all views
+        clearCache();
             setTimeout(() => loadData(true), 2000);
-        } else {
-            document.getElementById('sync-results').innerHTML = `
-                <div class="alert alert-danger">
-                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Sync Failed</h5>
-                    <p class="mb-2"><strong>${result.error || result.message || 'Unknown error'}</strong></p>
-                    ${result.error_type ? `<p class="mb-1"><small><strong>Error Type:</strong> ${result.error_type}</small></p>` : ''}
-                    ${result.details ? `
-                        <details class="mt-2">
-                            <summary class="cursor-pointer text-muted small">Technical Details (click to expand)</summary>
-                            <pre class="mt-2 p-2 bg-light border rounded small" style="max-height: 200px; overflow-y: auto;">${escapeHtml(result.details)}</pre>
-                        </details>
-                    ` : ''}
-                </div>
-            `;
-        }
         
     } catch (error) {
         console.error('Sync error:', error);
@@ -2815,11 +2827,11 @@ async function loadCompanyTrips(companyId) {
                                     <span><i class="far fa-calendar me-1"></i>${tripDate ? tripDate.toLocaleDateString('nl-BE', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No date'}</span>
                                     ${trip.stops_count ? `<span><i class="fas fa-map-marker-alt me-1"></i>${trip.stops_count} stops</span>` : ''}
                                     ${trip.distance_km ? `<span><i class="fas fa-road me-1"></i>${trip.distance_km} km</span>` : ''}
-                                </div>
+                        </div>
                             </div>
                             <span class="badge ${statusClass} rounded-pill">${statusText}</span>
-                        </div>
-                    </a>
+                    </div>
+                </a>
                 `;
             }).join('');
         } else {
