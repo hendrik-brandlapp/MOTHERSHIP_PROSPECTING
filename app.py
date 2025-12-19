@@ -5613,7 +5613,7 @@ def api_sync_2025_invoices():
         print("🚀 Starting 2025 invoice sync...")
         sync_start = time_module.time()
         
-        # Check if full sync requested
+        # Check sync options
         request_data = request.json if request.is_json else {}
         full_sync = request_data.get('full_sync', False)
         
@@ -5622,13 +5622,33 @@ def api_sync_2025_invoices():
             start_date = '2025-01-01'
             print("📅 FULL SYNC requested - syncing all 2025 invoices")
         else:
-            # Incremental sync - get last sync date from database
-            last_invoice = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=True).limit(1).execute()
+            # Incremental sync - check for gaps by looking at invoice dates
+            # Get the earliest date that might have gaps (look for the oldest "recent" batch)
+            recent_invoices = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=True).limit(100).execute()
             
-            if last_invoice.data and last_invoice.data[0].get('invoice_date'):
-                # Start from day before last invoice to catch any missed
-                last_date = last_invoice.data[0]['invoice_date']
-                start_date = (datetime.strptime(last_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+            if recent_invoices.data:
+                # Find the oldest date in recent records - this is likely where the last sync stopped
+                dates = sorted(set(r.get('invoice_date') for r in recent_invoices.data if r.get('invoice_date')))
+                
+                if dates:
+                    # Check for gaps - find where dates jump by more than 3 days
+                    gap_start = None
+                    for i in range(len(dates) - 1):
+                        d1 = datetime.strptime(dates[i], '%Y-%m-%d')
+                        d2 = datetime.strptime(dates[i + 1], '%Y-%m-%d')
+                        if (d2 - d1).days > 5:  # Gap of more than 5 days indicates missing data
+                            gap_start = dates[i]
+                            print(f"🔍 Found gap in data: {dates[i]} -> {dates[i+1]}")
+                            break
+                    
+                    if gap_start:
+                        # Start from the gap
+                        start_date = gap_start
+                    else:
+                        # No gap, start from oldest recent date minus 1 day
+                        start_date = (datetime.strptime(dates[0], '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                else:
+                    start_date = '2025-01-01'
             else:
                 # No data - start from beginning of 2025
                 start_date = '2025-01-01'
