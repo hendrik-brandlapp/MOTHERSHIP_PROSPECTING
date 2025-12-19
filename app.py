@@ -5622,8 +5622,7 @@ def api_sync_2025_invoices():
             start_date = '2025-01-01'
             print("📅 FULL SYNC requested - syncing all 2025 invoices")
         else:
-            # Incremental sync - check for gaps by looking at ALL unique invoice dates
-            # Use a larger sample to catch gaps further back
+            # Incremental sync - check for gaps AND missing early data
             all_dates_result = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=False).limit(5000).execute()
             
             if all_dates_result.data:
@@ -5631,30 +5630,40 @@ def api_sync_2025_invoices():
                 dates = sorted(set(r.get('invoice_date') for r in all_dates_result.data if r.get('invoice_date')))
                 
                 if dates:
-                    # Check for gaps - find where dates jump by more than 5 days
-                    gap_start = None
-                    for i in range(len(dates) - 1):
-                        d1 = datetime.strptime(dates[i], '%Y-%m-%d')
-                        d2 = datetime.strptime(dates[i + 1], '%Y-%m-%d')
-                        gap_days = (d2 - d1).days
-                        if gap_days > 5:  # Gap of more than 5 days indicates missing data
-                            gap_start = dates[i]
-                            print(f"🔍 Found gap in data: {dates[i]} -> {dates[i+1]} ({gap_days} days)")
-                            break
+                    oldest_date = dates[0]
+                    most_recent = dates[-1]
                     
-                    if gap_start:
-                        # Start from the gap date
-                        start_date = gap_start
-                        print(f"📅 Starting sync from gap: {start_date}")
+                    # FIRST: Check if we're missing early 2025 data (before oldest date)
+                    oldest_dt = datetime.strptime(oldest_date, '%Y-%m-%d')
+                    year_start = datetime(2025, 1, 1)
+                    days_from_start = (oldest_dt - year_start).days
+                    
+                    if days_from_start > 14:  # More than 2 weeks missing from start of year
+                        start_date = '2025-01-01'
+                        print(f"🔍 Missing early 2025 data! Oldest invoice: {oldest_date}")
+                        print(f"📅 Starting sync from beginning: {start_date}")
                     else:
-                        # No gap found - sync from most recent date minus 1 day
-                        most_recent = dates[-1]
-                        start_date = (datetime.strptime(most_recent, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
-                        print(f"📅 No gap found, syncing from: {start_date}")
+                        # Check for gaps between dates
+                        gap_start = None
+                        for i in range(len(dates) - 1):
+                            d1 = datetime.strptime(dates[i], '%Y-%m-%d')
+                            d2 = datetime.strptime(dates[i + 1], '%Y-%m-%d')
+                            gap_days = (d2 - d1).days
+                            if gap_days > 5:  # Gap of more than 5 days
+                                gap_start = dates[i]
+                                print(f"🔍 Found gap in data: {dates[i]} -> {dates[i+1]} ({gap_days} days)")
+                                break
+                        
+                        if gap_start:
+                            start_date = gap_start
+                            print(f"📅 Starting sync from gap: {start_date}")
+                        else:
+                            # No gap - just sync recent
+                            start_date = (datetime.strptime(most_recent, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                            print(f"📅 Data looks complete, syncing from: {start_date}")
                 else:
                     start_date = '2025-01-01'
             else:
-                # No data - start from beginning of 2025
                 start_date = '2025-01-01'
         
         end_date = datetime.now().strftime('%Y-%m-%d')
