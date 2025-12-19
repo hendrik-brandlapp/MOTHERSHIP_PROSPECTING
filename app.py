@@ -5599,32 +5599,39 @@ def recalculate_company_metrics_from_invoices(company_ids=None, max_companies=99
 @app.route('/api/sync-2025-invoices', methods=['POST'])
 def api_sync_2025_invoices():
     """
-    Sync all 2025 sales invoices to Supabase.
-    Fetches all invoices from 2025 and stores them in the sales_2025 table.
+    Sync recent 2025 sales invoices to Supabase.
+    Fetches invoices from last 14 days and stores them in the sales_2025 table.
     Admin only - requires DUANO authentication.
     """
     if not is_admin():
         return jsonify({'error': 'Admin access required', 'success': False}), 403
     
     try:
-        from datetime import datetime
+        from datetime import datetime, timedelta
         import time as time_module
         
         print("🚀 Starting 2025 invoice sync...")
         sync_start = time_module.time()
         
-        # Fetch only NEW invoices since last sync (2025-11-06)
-        # This is much faster than fetching all 3000+ invoices
+        # Only fetch last 14 days of invoices to avoid timeout
+        # For full historical sync, use the database directly
+        today = datetime.now()
+        start_date = (today - timedelta(days=14)).strftime('%Y-%m-%d')
+        end_date = today.strftime('%Y-%m-%d')
+        
+        print(f"📅 Syncing invoices from {start_date} to {end_date}")
+        
         all_invoices = []
         page = 1
-        per_page = 100  # Can use larger batches now
+        per_page = 50  # Smaller batches for faster response
+        max_pages = 5  # Limit pages to prevent timeout
         
-        while True:
+        while page <= max_pages:
             params = {
                 'per_page': per_page,
                 'page': page,
-                'filter_by_start_date': '2025-11-06',  # Last sync date
-                'filter_by_end_date': '2025-12-31',
+                'filter_by_start_date': start_date,
+                'filter_by_end_date': end_date,
                 'order_by_date': 'desc'
             }
             
@@ -5680,9 +5687,14 @@ def api_sync_2025_invoices():
                 break
             
             page += 1
+            
+            # Check if we're running out of time (max 20 seconds for fetching)
+            if time_module.time() - sync_start > 20:
+                print(f"⏱️ Stopping fetch early to avoid timeout")
+                break
         
         if not all_invoices:
-            return jsonify({'message': 'No invoices found for 2025', 'count': 0})
+            return jsonify({'message': 'No new invoices found', 'count': 0, 'success': True})
         
         print(f"✅ Total invoices fetched: {len(all_invoices)}")
         
@@ -5694,15 +5706,12 @@ def api_sync_2025_invoices():
         updated_count = 0
         error_count = 0
         
-        for idx, invoice in enumerate(all_invoices):
-            # Add small delay every 50 invoices to prevent resource exhaustion
-            if idx > 0 and idx % 50 == 0:
-                time.sleep(0.1)
+        # Process in batches of 10 to speed up
+        batch_size = 10
+        for batch_start in range(0, len(all_invoices), batch_size):
+            batch = all_invoices[batch_start:batch_start + batch_size]
             
-            max_retries = 3
-            retry_count = 0
-            
-            while retry_count < max_retries:
+            for invoice in batch:
                 try:
                     # Extract key fields
                     company = invoice.get('company', {})
@@ -5726,53 +5735,39 @@ def api_sync_2025_invoices():
                         'is_paid': invoice.get('balance', 0) == 0
                     }
                     
-                    # Check if record exists
-                    existing = supabase_client.table('sales_2025').select('id').eq('invoice_id', record['invoice_id']).execute()
-                    
-                    if existing.data:
-                        # Update
-                        record['updated_at'] = datetime.now().isoformat()
-                        supabase_client.table('sales_2025').update(record).eq('invoice_id', record['invoice_id']).execute()
-                        updated_count += 1
-                    else:
-                        # Insert
-                        supabase_client.table('sales_2025').insert(record).execute()
-                        saved_count += 1
-                    
-                    break  # Success, exit retry loop
+                    # Upsert - insert or update on conflict
+                    supabase_client.table('sales_2025').upsert(record, on_conflict='invoice_id').execute()
+                    saved_count += 1
                     
                 except Exception as e:
-                    retry_count += 1
-                    if retry_count >= max_retries:
-                        error_count += 1
-                        # Only print non-resource errors after all retries
-                        if "Resource temporarily unavailable" not in str(e):
-                            print(f"❌ Error saving invoice {invoice.get('id')} after {max_retries} retries: {e}")
-                        break
-                    # Exponential backoff
-                    time.sleep(0.05 * (2 ** retry_count))
+                    error_count += 1
+                    if "Resource temporarily unavailable" not in str(e):
+                        print(f"❌ Error saving invoice {invoice.get('id')}: {e}")
+            
+            # Check time - stop if running long to avoid timeout
+            elapsed = time_module.time() - sync_start
+            if elapsed > 25:
+                print(f"⏱️ Stopping save early at {batch_start + len(batch)} invoices to avoid timeout")
+                break
         
         result = {
             'success': True,
             'total_fetched': len(all_invoices),
             'saved': saved_count,
-            'updated': updated_count,
             'errors': error_count,
-            'message': f'Successfully synced {saved_count + updated_count} invoices (since Nov 6, 2025)'
+            'date_range': f'{start_date} to {end_date}',
+            'message': f'Synced {saved_count} invoices from last 14 days'
         }
         
-        print(f"✅ Sync complete: {result}")
-        
-        # Skip automatic metrics recalculation - it takes too long (1010 companies)
-        # Use the "Recalculate Metrics" button separately if needed
-        # if saved_count > 0 or updated_count > 0:
-        #     print("📊 Updating company metrics...")
-        #     recalculate_company_metrics_from_invoices()
+        elapsed = time_module.time() - sync_start
+        print(f"✅ Sync complete in {elapsed:.1f}s: {result}")
         
         return jsonify(result)
         
     except Exception as e:
+        import traceback
         print(f"❌ Error in sync: {e}")
+        traceback.print_exc()
         return jsonify({'error': str(e), 'success': False}), 500
 
 
