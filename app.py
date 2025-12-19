@@ -5622,31 +5622,35 @@ def api_sync_2025_invoices():
             start_date = '2025-01-01'
             print("📅 FULL SYNC requested - syncing all 2025 invoices")
         else:
-            # Incremental sync - check for gaps by looking at invoice dates
-            # Get the earliest date that might have gaps (look for the oldest "recent" batch)
-            recent_invoices = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=True).limit(100).execute()
+            # Incremental sync - check for gaps by looking at ALL unique invoice dates
+            # Use a larger sample to catch gaps further back
+            all_dates_result = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=False).limit(5000).execute()
             
-            if recent_invoices.data:
-                # Find the oldest date in recent records - this is likely where the last sync stopped
-                dates = sorted(set(r.get('invoice_date') for r in recent_invoices.data if r.get('invoice_date')))
+            if all_dates_result.data:
+                # Get unique dates sorted
+                dates = sorted(set(r.get('invoice_date') for r in all_dates_result.data if r.get('invoice_date')))
                 
                 if dates:
-                    # Check for gaps - find where dates jump by more than 3 days
+                    # Check for gaps - find where dates jump by more than 5 days
                     gap_start = None
                     for i in range(len(dates) - 1):
                         d1 = datetime.strptime(dates[i], '%Y-%m-%d')
                         d2 = datetime.strptime(dates[i + 1], '%Y-%m-%d')
-                        if (d2 - d1).days > 5:  # Gap of more than 5 days indicates missing data
+                        gap_days = (d2 - d1).days
+                        if gap_days > 5:  # Gap of more than 5 days indicates missing data
                             gap_start = dates[i]
-                            print(f"🔍 Found gap in data: {dates[i]} -> {dates[i+1]}")
+                            print(f"🔍 Found gap in data: {dates[i]} -> {dates[i+1]} ({gap_days} days)")
                             break
                     
                     if gap_start:
-                        # Start from the gap
+                        # Start from the gap date
                         start_date = gap_start
+                        print(f"📅 Starting sync from gap: {start_date}")
                     else:
-                        # No gap, start from oldest recent date minus 1 day
-                        start_date = (datetime.strptime(dates[0], '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                        # No gap found - sync from most recent date minus 1 day
+                        most_recent = dates[-1]
+                        start_date = (datetime.strptime(most_recent, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                        print(f"📅 No gap found, syncing from: {start_date}")
                 else:
                     start_date = '2025-01-01'
             else:
@@ -7421,13 +7425,23 @@ def api_companies_from_db():
         invoices_2024_count = 0
         
         if year_filter in ['2025', 'combined']:
-            # Fetch all 2025 invoices in batches
+            # Fetch all 2025 invoices in batches with retry logic
             offset = 0
             batch_size = 1000
+            max_retries = 3
             while True:
-                result = supabase_client.table('sales_2025').select(
-                    'company_id, company_name, total_amount, invoice_date, invoice_data'
-                ).range(offset, offset + batch_size - 1).execute()
+                for retry in range(max_retries):
+                    try:
+                        result = supabase_client.table('sales_2025').select(
+                            'company_id, company_name, total_amount, invoice_date, invoice_data'
+                        ).range(offset, offset + batch_size - 1).execute()
+                        break  # Success
+                    except Exception as e:
+                        if retry < max_retries - 1:
+                            print(f"  ⚠️ Retry {retry + 1} for 2025 batch at offset {offset}: {e}")
+                            time.sleep(0.5 * (retry + 1))  # Exponential backoff
+                        else:
+                            raise
                 if not result.data:
                     break
                 batch_count = len(result.data)
@@ -7439,15 +7453,26 @@ def api_companies_from_db():
                 if batch_count < batch_size:
                     break
                 offset += batch_size
+                time.sleep(0.1)  # Small delay between batches
         
         if year_filter in ['2024', 'combined']:
-            # Fetch all 2024 invoices in batches
+            # Fetch all 2024 invoices in batches with retry logic
             offset = 0
             batch_size = 1000
+            max_retries = 3
             while True:
-                result = supabase_client.table('sales_2024').select(
-                    'company_id, company_name, total_amount, invoice_date, invoice_data'
-                ).range(offset, offset + batch_size - 1).execute()
+                for retry in range(max_retries):
+                    try:
+                        result = supabase_client.table('sales_2024').select(
+                            'company_id, company_name, total_amount, invoice_date, invoice_data'
+                        ).range(offset, offset + batch_size - 1).execute()
+                        break  # Success
+                    except Exception as e:
+                        if retry < max_retries - 1:
+                            print(f"  ⚠️ Retry {retry + 1} for 2024 batch at offset {offset}: {e}")
+                            time.sleep(0.5 * (retry + 1))
+                        else:
+                            raise
                 if not result.data:
                     break
                 batch_count = len(result.data)
