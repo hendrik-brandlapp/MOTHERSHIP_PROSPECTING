@@ -5782,6 +5782,21 @@ def api_sync_2025_invoices():
                         company_id = None
                         company_name = None
                     
+                    # Get the amount - try multiple fields to avoid NULL
+                    amount = (
+                        invoice.get('payable_amount_without_financial_discount') or
+                        invoice.get('payable_amount_with_financial_discount') or
+                        invoice.get('total_amount') or
+                        invoice.get('balance') or
+                        0
+                    )
+                    
+                    # If still 0, try to calculate from line items
+                    if amount == 0:
+                        line_items = invoice.get('invoice_line_items', [])
+                        if line_items:
+                            amount = sum(float(item.get('payable_amount') or item.get('revenue') or 0) for item in line_items)
+                    
                     record = {
                         'invoice_id': invoice.get('id'),
                         'invoice_data': invoice,
@@ -5790,7 +5805,7 @@ def api_sync_2025_invoices():
                         'invoice_number': invoice.get('invoice_number') or invoice.get('number'),
                         'invoice_date': invoice.get('date'),
                         'due_date': invoice.get('due_date'),
-                        'total_amount': invoice.get('payable_amount_without_financial_discount') or invoice.get('total_amount'),
+                        'total_amount': amount if amount else None,
                         'balance': invoice.get('balance'),
                         'is_paid': invoice.get('balance', 0) == 0
                     }
@@ -6728,6 +6743,21 @@ def api_sync_2024_invoices():
                         company_id = None
                         company_name = None
                     
+                    # Get the amount - try multiple fields to avoid NULL
+                    amount = (
+                        invoice.get('payable_amount_without_financial_discount') or
+                        invoice.get('payable_amount_with_financial_discount') or
+                        invoice.get('total_amount') or
+                        invoice.get('balance') or
+                        0
+                    )
+                    
+                    # If still 0, try to calculate from line items
+                    if amount == 0:
+                        line_items = invoice.get('invoice_line_items', [])
+                        if line_items:
+                            amount = sum(float(item.get('payable_amount') or item.get('revenue') or 0) for item in line_items)
+                    
                     record = {
                         'invoice_id': invoice.get('id'),
                         'invoice_data': invoice,
@@ -6736,7 +6766,7 @@ def api_sync_2024_invoices():
                         'invoice_number': invoice.get('invoice_number') or invoice.get('number'),
                         'invoice_date': invoice.get('date'),
                         'due_date': invoice.get('due_date'),
-                        'total_amount': invoice.get('payable_amount_without_financial_discount') or invoice.get('total_amount'),
+                        'total_amount': amount if amount else None,
                         'balance': invoice.get('balance'),
                         'is_paid': invoice.get('balance', 0) == 0
                     }
@@ -11530,6 +11560,66 @@ def api_test_sync():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/fix-null-amounts', methods=['POST'])
+def api_fix_null_amounts():
+    """Fix invoices that have NULL total_amount by calculating from invoice_data"""
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    try:
+        # Get all invoices with NULL total_amount
+        null_invoices = supabase_client.table('sales_2025').select(
+            'id, invoice_id, invoice_data, company_name'
+        ).is_('total_amount', 'null').limit(500).execute()
+        
+        if not null_invoices.data:
+            return jsonify({'success': True, 'message': 'No NULL invoices found', 'fixed': 0})
+        
+        fixed_count = 0
+        errors = []
+        
+        for inv in null_invoices.data:
+            try:
+                invoice_data = inv.get('invoice_data') or {}
+                
+                # Try to get amount from invoice_data
+                amount = (
+                    invoice_data.get('payable_amount_without_financial_discount') or
+                    invoice_data.get('payable_amount_with_financial_discount') or
+                    invoice_data.get('total_amount') or
+                    invoice_data.get('balance') or
+                    0
+                )
+                
+                # If still 0, calculate from line items
+                if amount == 0:
+                    line_items = invoice_data.get('invoice_line_items', [])
+                    if line_items:
+                        amount = sum(float(item.get('payable_amount') or item.get('revenue') or 0) for item in line_items)
+                
+                if amount > 0:
+                    # Update the invoice
+                    supabase_client.table('sales_2025').update({
+                        'total_amount': amount
+                    }).eq('id', inv['id']).execute()
+                    fixed_count += 1
+                else:
+                    errors.append(f"Invoice {inv.get('invoice_id')}: could not calculate amount")
+                    
+            except Exception as e:
+                errors.append(f"Invoice {inv.get('invoice_id')}: {str(e)}")
+        
+        return jsonify({
+            'success': True,
+            'total_null': len(null_invoices.data),
+            'fixed': fixed_count,
+            'errors': errors[:10] if errors else []
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/diagnose-sync', methods=['GET'])
