@@ -11532,6 +11532,73 @@ def api_test_sync():
         }), 500
 
 
+@app.route('/api/diagnose-sync', methods=['GET'])
+def api_diagnose_sync():
+    """Diagnose why invoice counts/amounts don't match between DUANO and database"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    try:
+        results = {'success': True}
+        
+        # 1. Get DUANO invoice count for 2025
+        headers = {
+            'Authorization': f"Bearer {session['access_token']}",
+            'Content-Type': 'application/json'
+        }
+        
+        # Get just page 1 to see total count
+        params = {'per_page': 1, 'page': 1, 'filter_by_start_date': '2025-01-01', 'filter_by_end_date': '2025-12-31'}
+        resp = requests.get(f"{DOUANO_CONFIG['base_url']}/api/public/v1/trade/sales-invoices", 
+                           headers=headers, params=params, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            result_data = data.get('result', {})
+            results['duano_total_invoices'] = result_data.get('total', 'unknown')
+            results['duano_last_page'] = result_data.get('last_page', 'unknown')
+            results['duano_per_page'] = result_data.get('per_page', 'unknown')
+        else:
+            results['duano_error'] = f'API returned {resp.status_code}'
+        
+        # 2. Get database invoice count for 2025
+        db_count = supabase_client.table('sales_2025').select('id', count='exact').execute()
+        results['database_invoice_count'] = db_count.count if hasattr(db_count, 'count') else len(db_count.data)
+        
+        # 3. Get database total amount
+        db_amounts = supabase_client.table('sales_2025').select('total_amount').limit(5000).execute()
+        if db_amounts.data:
+            results['database_total_amount'] = round(sum(float(r.get('total_amount') or 0) for r in db_amounts.data), 2)
+        
+        # 4. Check for NULLs or zeros
+        null_check = supabase_client.table('sales_2025').select('id').is_('total_amount', 'null').execute()
+        results['invoices_with_null_amount'] = len(null_check.data)
+        
+        zero_check = supabase_client.table('sales_2025').select('id').eq('total_amount', 0).execute()
+        results['invoices_with_zero_amount'] = len(zero_check.data)
+        
+        # 5. Get date range in database
+        oldest = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=False).limit(1).execute()
+        newest = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=True).limit(1).execute()
+        
+        if oldest.data:
+            results['database_oldest_invoice'] = oldest.data[0].get('invoice_date')
+        if newest.data:
+            results['database_newest_invoice'] = newest.data[0].get('invoice_date')
+        
+        # 6. Compare
+        if 'duano_total_invoices' in results and 'database_invoice_count' in results:
+            duano_count = results['duano_total_invoices']
+            if isinstance(duano_count, int):
+                results['missing_invoices'] = duano_count - results['database_invoice_count']
+        
+        return jsonify(results)
+        
+    except Exception as e:
+        import traceback
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
+
+
 @app.route('/api/test-duano-speed', methods=['GET'])
 def api_test_duano_speed():
     """Test how fast DUANO API responds"""
