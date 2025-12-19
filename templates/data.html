@@ -1544,7 +1544,17 @@ function updateStats(data) {
     }
 }
 
-async function syncLatestData() {
+async function syncLatestData(fullSync = false) {
+    // If not specified, ask user
+    if (!fullSync) {
+        const choice = confirm(
+            "Choose sync type:\n\n" +
+            "OK = Full Sync (all 2025 invoices - takes longer)\n" +
+            "Cancel = Quick Sync (only new invoices since last sync)"
+        );
+        fullSync = choice;
+    }
+    
     try {
         document.getElementById('sync-status').style.display = 'block';
         document.getElementById('sync-results').style.display = 'none';
@@ -1552,26 +1562,26 @@ async function syncLatestData() {
         // Handle combined view - sync 2025 by default
         const yearToSync = currentYear === 'combined' ? '2025' : currentYear;
         
-        console.log(`Starting sync for year: ${yearToSync}`);
+        console.log(`Starting ${fullSync ? 'FULL' : 'incremental'} sync for year: ${yearToSync}`);
         
         let totalFetched = 0;
         let totalSaved = 0;
         let totalErrors = 0;
         let currentPage = 1;
         let batchCount = 0;
-        const maxBatches = 20; // Safety limit
+        const maxBatches = fullSync ? 100 : 20; // More batches for full sync
         
         // Loop through batches until complete
         while (batchCount < maxBatches) {
             batchCount++;
-            document.getElementById('sync-message').innerHTML = `Syncing invoices from DUANO...<br><small class="text-muted">Batch ${batchCount} - ${totalSaved} invoices synced so far</small>`;
+            document.getElementById('sync-message').innerHTML = `${fullSync ? 'Full sync' : 'Syncing'} invoices from DUANO...<br><small class="text-muted">Batch ${batchCount} - ${totalSaved} invoices synced so far</small>`;
         
         const response = await fetch(`/api/sync-${yearToSync}-invoices`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ page: currentPage })
+                body: JSON.stringify({ page: currentPage, full_sync: fullSync })
         });
         
         if (!response.ok) {

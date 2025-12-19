@@ -5613,21 +5613,30 @@ def api_sync_2025_invoices():
         print("🚀 Starting 2025 invoice sync...")
         sync_start = time_module.time()
         
-        # Get last sync date from database (most recent invoice date)
-        last_invoice = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=True).limit(1).execute()
+        # Check if full sync requested
+        request_data = request.json if request.is_json else {}
+        full_sync = request_data.get('full_sync', False)
         
-        if last_invoice.data and last_invoice.data[0].get('invoice_date'):
-            # Start from day before last invoice to catch any missed
-            last_date = last_invoice.data[0]['invoice_date']
-            start_date = (datetime.strptime(last_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
-        else:
-            # No data - start from beginning of 2025
+        if full_sync:
+            # Full sync from beginning of year
             start_date = '2025-01-01'
+            print("📅 FULL SYNC requested - syncing all 2025 invoices")
+        else:
+            # Incremental sync - get last sync date from database
+            last_invoice = supabase_client.table('sales_2025').select('invoice_date').order('invoice_date', desc=True).limit(1).execute()
+            
+            if last_invoice.data and last_invoice.data[0].get('invoice_date'):
+                # Start from day before last invoice to catch any missed
+                last_date = last_invoice.data[0]['invoice_date']
+                start_date = (datetime.strptime(last_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+            else:
+                # No data - start from beginning of 2025
+                start_date = '2025-01-01'
         
         end_date = datetime.now().strftime('%Y-%m-%d')
         
         # Get page from request for continuation
-        request_page = request.json.get('page', 1) if request.is_json else 1
+        request_page = request_data.get('page', 1)
         
         print(f"📅 Syncing invoices from {start_date} to {end_date}, starting page {request_page}")
         
