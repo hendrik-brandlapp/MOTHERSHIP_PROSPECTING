@@ -5851,6 +5851,198 @@ def api_sync_2025_invoices():
         return jsonify({'error': str(e), 'success': False}), 500
 
 
+@app.route('/api/sync-invoices', methods=['POST'])
+def api_sync_invoices():
+    """
+    Unified invoice sync endpoint - auto-detects year from invoice dates.
+    Routes invoices to sales_2024, sales_2025, or sales_2026 based on invoice_date.
+    """
+    if not is_admin():
+        return jsonify({'error': 'Admin access required', 'success': False}), 403
+
+    try:
+        from datetime import datetime, timedelta
+        import time as time_module
+
+        print("🚀 Starting unified invoice sync...")
+        sync_start = time_module.time()
+
+        request_data = request.json if request.is_json else {}
+        full_sync = request_data.get('full_sync', False)
+
+        # For full sync, start from beginning of current year
+        # For incremental, sync last 7 days
+        if full_sync:
+            start_date = '2026-01-01'
+            print("📅 FULL SYNC requested - syncing all 2026 invoices")
+        else:
+            start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+            print(f"📅 Incremental sync from: {start_date}")
+
+        end_date = datetime.now().strftime('%Y-%m-%d')
+        request_page = request_data.get('page', 1)
+
+        print(f"📅 Syncing invoices from {start_date} to {end_date}, starting page {request_page}")
+
+        all_invoices = []
+        page = request_page
+        per_page = 50
+        pages_fetched = 0
+        max_pages_per_batch = 3
+
+        while pages_fetched < max_pages_per_batch:
+            params = {
+                'per_page': per_page,
+                'page': page,
+                'filter_by_start_date': start_date,
+                'filter_by_end_date': end_date,
+                'order_by_date': 'desc'
+            }
+
+            print(f"📡 Fetching page {page}...")
+
+            headers = {
+                'Authorization': f"Bearer {session['access_token']}",
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/trade/sales-invoices"
+
+            try:
+                response = requests.get(url, headers=headers, params=params, timeout=30)
+
+                if response.status_code != 200:
+                    return jsonify({
+                        'error': f'DUANO API error: {response.status_code}',
+                        'success': False
+                    }), 500
+
+                data = response.json()
+            except requests.exceptions.Timeout:
+                return jsonify({
+                    'error': 'DUANO API timeout',
+                    'success': False,
+                    'page': page
+                }), 500
+
+            invoices = data.get('result', {}).get('data', [])
+
+            if not invoices:
+                break
+
+            all_invoices.extend(invoices)
+            print(f"📄 Page {page}: {len(invoices)} invoices (Total: {len(all_invoices)})")
+
+            current_page = data.get('result', {}).get('current_page', page)
+            last_page = data.get('result', {}).get('last_page', page)
+
+            if current_page >= last_page:
+                next_page = None
+                break
+
+            page += 1
+            pages_fetched += 1
+
+            if time_module.time() - sync_start > 15:
+                next_page = page
+                break
+        else:
+            next_page = page + 1 if pages_fetched >= max_pages_per_batch else None
+
+        if not all_invoices:
+            return jsonify({'message': 'No new invoices found', 'count': 0, 'success': True, 'complete': True})
+
+        print(f"✅ Total invoices fetched: {len(all_invoices)}")
+
+        # Save to Supabase - auto-route by year
+        saved_by_year = {'2024': 0, '2025': 0, '2026': 0}
+        error_count = 0
+
+        for invoice in all_invoices:
+            try:
+                # Determine year from invoice_date
+                invoice_date = invoice.get('date', '')
+                if invoice_date:
+                    year = invoice_date[:4]
+                else:
+                    year = '2026'  # Default to current year
+
+                # Only handle 2024, 2025, 2026
+                if year not in ['2024', '2025', '2026']:
+                    continue
+
+                table_name = f'sales_{year}'
+
+                # Extract data
+                company = invoice.get('company', {})
+                if isinstance(company, dict):
+                    company_id = company.get('id')
+                    company_name = company.get('name') or company.get('public_name')
+                else:
+                    company_id = None
+                    company_name = None
+
+                amount = (
+                    invoice.get('payable_amount_without_financial_discount') or
+                    invoice.get('payable_amount_with_financial_discount') or
+                    invoice.get('total_amount') or
+                    invoice.get('balance') or
+                    0
+                )
+
+                if amount == 0:
+                    line_items = invoice.get('invoice_line_items', [])
+                    if line_items:
+                        amount = sum(float(item.get('payable_amount') or item.get('revenue') or 0) for item in line_items)
+
+                record = {
+                    'invoice_id': invoice.get('id'),
+                    'invoice_data': invoice,
+                    'company_id': company_id,
+                    'company_name': company_name,
+                    'invoice_number': invoice.get('invoice_number') or invoice.get('number'),
+                    'invoice_date': invoice_date,
+                    'due_date': invoice.get('due_date'),
+                    'total_amount': amount if amount else None,
+                    'balance': invoice.get('balance'),
+                    'is_paid': True  # Always true - not tracking payment status
+                }
+
+                supabase_client.table(table_name).upsert(record, on_conflict='invoice_id').execute()
+                saved_by_year[year] += 1
+
+            except Exception as e:
+                error_count += 1
+                print(f"❌ Error saving invoice {invoice.get('id')}: {e}")
+
+            if time_module.time() - sync_start > 25:
+                break
+
+        is_complete = next_page is None
+        total_saved = sum(saved_by_year.values())
+
+        result = {
+            'success': True,
+            'total_fetched': len(all_invoices),
+            'saved': total_saved,
+            'saved_by_year': saved_by_year,
+            'errors': error_count,
+            'date_range': f'{start_date} to {end_date}',
+            'complete': is_complete,
+            'next_page': next_page,
+            'message': f'Synced {total_saved} invoices (2024: {saved_by_year["2024"]}, 2025: {saved_by_year["2025"]}, 2026: {saved_by_year["2026"]})'
+        }
+
+        print(f"✅ Sync complete: {result}")
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        print(f"❌ Error in sync: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'success': False}), 500
+
+
 # =====================================================
 # PRODUCT & PRICING SYNC ENDPOINTS
 # =====================================================
@@ -7455,14 +7647,46 @@ def api_companies_from_db():
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
         
-        year_filter = request.args.get('year', '2025')
+        year_filter = request.args.get('year', '2026')
         print(f"📊 Loading companies from invoices for year: {year_filter}")
-        
+
         # Step 1: Fetch ALL invoices from the database (fast - data already there)
         all_invoices = []
+        invoices_2026_count = 0
         invoices_2025_count = 0
         invoices_2024_count = 0
-        
+
+        if year_filter in ['2026', 'combined']:
+            # Fetch all 2026 invoices in batches with retry logic
+            offset = 0
+            batch_size = 1000
+            max_retries = 3
+            while True:
+                for retry in range(max_retries):
+                    try:
+                        result = supabase_client.table('sales_2026').select(
+                            'company_id, company_name, total_amount, invoice_date, invoice_data'
+                        ).range(offset, offset + batch_size - 1).execute()
+                        break  # Success
+                    except Exception as e:
+                        if retry < max_retries - 1:
+                            print(f"  ⚠️ Retry {retry + 1} for 2026 batch at offset {offset}: {e}")
+                            time.sleep(0.5 * (retry + 1))
+                        else:
+                            raise
+                if not result.data:
+                    break
+                batch_count = len(result.data)
+                invoices_2026_count += batch_count
+                for inv in result.data:
+                    inv['year'] = '2026'
+                all_invoices.extend(result.data)
+                print(f"  📄 Fetched 2026 batch: {batch_count} invoices (total: {invoices_2026_count})")
+                if batch_count < batch_size:
+                    break
+                offset += batch_size
+                time.sleep(0.1)
+
         if year_filter in ['2025', 'combined']:
             # Fetch all 2025 invoices in batches with retry logic
             offset = 0
@@ -7524,7 +7748,7 @@ def api_companies_from_db():
                     break
                 offset += batch_size
         
-        print(f"✅ Total invoices loaded: {len(all_invoices)} (2024: {invoices_2024_count}, 2025: {invoices_2025_count})")
+        print(f"✅ Total invoices loaded: {len(all_invoices)} (2024: {invoices_2024_count}, 2025: {invoices_2025_count}, 2026: {invoices_2026_count})")
         
         # Debug: Check first invoice for revenue calculation
         if all_invoices:
@@ -7559,6 +7783,8 @@ def api_companies_from_db():
                     'count_2024': 0,
                     'revenue_2025': 0.0,
                     'count_2025': 0,
+                    'revenue_2026': 0.0,
+                    'count_2026': 0,
                 }
             
             # Get the amount - DUANO's "Omzet" is the sum of line item revenues (ex-VAT)
@@ -7577,12 +7803,16 @@ def api_companies_from_db():
             company_metrics[cid]['invoices'].append(inv.get('invoice_date'))
             
             # Track by year
-            if inv.get('year') == '2024':
+            inv_year = inv.get('year')
+            if inv_year == '2024':
                 company_metrics[cid]['revenue_2024'] += amount
                 company_metrics[cid]['count_2024'] += 1
-            else:
+            elif inv_year == '2025':
                 company_metrics[cid]['revenue_2025'] += amount
                 company_metrics[cid]['count_2025'] += 1
+            else:
+                company_metrics[cid]['revenue_2026'] += amount
+                company_metrics[cid]['count_2026'] += 1
         
         # Step 3: Try to enrich with company details from companies table (optional)
         company_details = {}
@@ -7619,6 +7849,9 @@ def api_companies_from_db():
             elif year_filter == '2025':
                 revenue = metrics['revenue_2025']
                 invoice_count = metrics['count_2025']
+            elif year_filter == '2026':
+                revenue = metrics['revenue_2026']
+                invoice_count = metrics['count_2026']
             else:
                 revenue = metrics['total_revenue']
                 invoice_count = metrics['invoice_count']
@@ -7668,6 +7901,10 @@ def api_companies_from_db():
                     '2025': {
                         'total_revenue': round(metrics['revenue_2025'], 2),
                         'invoice_count': metrics['count_2025']
+                    },
+                    '2026': {
+                        'total_revenue': round(metrics['revenue_2026'], 2),
+                        'invoice_count': metrics['count_2026']
                     }
                 }
             
@@ -7706,29 +7943,29 @@ def api_company_invoices(company_id):
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
         
-        year_filter = request.args.get('year', '2025')
+        year_filter = request.args.get('year', '2026')
         invoices = []
-        
+
         # Fetch invoices based on year filter
         if year_filter == 'combined':
-            # Get from both years
-            for year in ['2024', '2025']:
+            # Get from all years
+            for year in ['2024', '2025', '2026']:
                 result = supabase_client.table(f'sales_{year}').select('*').eq('company_id', company_id).execute()
                 for invoice in result.data:
                     invoice['year'] = int(year)
                     invoices.append(invoice)
         else:
             # Get from specific year
-            if year_filter in ['2024', '2025']:
+            if year_filter in ['2024', '2025', '2026']:
                 result = supabase_client.table(f'sales_{year_filter}').select('*').eq('company_id', company_id).execute()
                 for invoice in result.data:
                     invoice['year'] = int(year_filter)
                     invoices.append(invoice)
             else:
-                # Default to 2025 if invalid year
-                result = supabase_client.table('sales_2025').select('*').eq('company_id', company_id).execute()
+                # Default to 2026 if invalid year
+                result = supabase_client.table('sales_2026').select('*').eq('company_id', company_id).execute()
                 for invoice in result.data:
-                    invoice['year'] = 2025
+                    invoice['year'] = 2026
                     invoices.append(invoice)
         
         # Process invoices for frontend
@@ -7745,7 +7982,7 @@ def api_company_invoices(company_id):
                 'amount': float(total_amount) if total_amount is not None else 0.0,
                 'balance': float(balance) if balance is not None else 0.0,
                 'is_paid': invoice.get('is_paid', True),
-                'year': invoice.get('year', 2025)
+                'year': invoice.get('year', 2026)
             })
         
         # Sort by date descending

@@ -1,32 +1,29 @@
--- Mark all 2025 invoices as paid
--- These are outgoing invoices sent to customers that have been paid
+-- Mark all invoices as paid in both 2024 and 2025 tables
+-- Payment status is not synced from Duano, so we're setting all to paid
 
--- Update all invoices to mark them as paid
-UPDATE public.sales_2025 
-SET 
-    is_paid = TRUE,
-    balance = 0.00,
+-- Update sales_2024
+UPDATE public.sales_2024
+SET is_paid = true,
     updated_at = NOW()
-WHERE is_paid = FALSE;
+WHERE is_paid = false;
 
--- Verify the update
-SELECT 
-    'Update completed!' as status,
-    COUNT(*) as total_invoices,
-    SUM(CASE WHEN is_paid = TRUE THEN 1 ELSE 0 END) as paid_invoices,
-    SUM(CASE WHEN is_paid = FALSE THEN 1 ELSE 0 END) as unpaid_invoices,
-    SUM(total_amount) as total_revenue,
-    SUM(balance) as total_outstanding
+-- Update sales_2025
+UPDATE public.sales_2025
+SET is_paid = true,
+    updated_at = NOW()
+WHERE is_paid = false;
+
+-- Verify the updates
+SELECT
+    'sales_2024' as table_name,
+    COUNT(*) as total,
+    SUM(CASE WHEN is_paid THEN 1 ELSE 0 END) as paid,
+    SUM(CASE WHEN NOT is_paid THEN 1 ELSE 0 END) as unpaid
+FROM public.sales_2024
+UNION ALL
+SELECT
+    'sales_2025' as table_name,
+    COUNT(*) as total,
+    SUM(CASE WHEN is_paid THEN 1 ELSE 0 END) as paid,
+    SUM(CASE WHEN NOT is_paid THEN 1 ELSE 0 END) as unpaid
 FROM public.sales_2025;
-
--- Show a sample of updated records
-SELECT 
-    invoice_number,
-    company_name,
-    total_amount,
-    balance,
-    is_paid,
-    updated_at
-FROM public.sales_2025
-ORDER BY updated_at DESC
-LIMIT 10;

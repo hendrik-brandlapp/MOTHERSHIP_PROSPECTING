@@ -47,7 +47,10 @@
                     <div class="col-md-4 border-end">
                         <label class="text-uppercase text-muted small fw-bold mb-3 d-block">Select Data View</label>
                             <div class="d-flex gap-2 flex-wrap">
-                            <button class="btn btn-outline-primary year-tag active rounded-pill px-4" data-year="2025" onclick="changeYear('2025')">
+                            <button class="btn btn-outline-primary year-tag active rounded-pill px-4" data-year="2026" onclick="changeYear('2026')">
+                                2026
+                                </button>
+                            <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2025" onclick="changeYear('2025')">
                                 2025
                                 </button>
                             <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2024" onclick="changeYear('2024')">
@@ -89,18 +92,24 @@
                             <!-- Year Breakdown for Combined View -->
                         <div class="mt-4 pt-3 border-top" id="year-breakdown" style="display: none;">
                              <div class="row text-sm text-muted">
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                     <div class="d-flex align-items-center">
-                                        <div class="badge bg-primary rounded-pill me-2">2024</div>
-                                                        <span id="breakdown-2024">-</span>
+                                        <div class="badge bg-info rounded-pill me-2">2026</div>
+                                                        <span id="breakdown-2026">-</span>
                                             </div>
                                         </div>
-                                        <div class="col-md-6">
+                                        <div class="col-md-4">
                                     <div class="d-flex align-items-center">
                                         <div class="badge bg-success rounded-pill me-2">2025</div>
                                                         <span id="breakdown-2025">-</span>
                                     </div>
                                 </div>
+                                        <div class="col-md-4">
+                                    <div class="d-flex align-items-center">
+                                        <div class="badge bg-primary rounded-pill me-2">2024</div>
+                                                        <span id="breakdown-2024">-</span>
+                                            </div>
+                                        </div>
                             </div>
                         </div>
                     </div>
@@ -1216,7 +1225,7 @@
 let allCompanies = [];
 let filteredCompanies = [];
 let currentViewMode = 'cards';
-let currentYear = '2025';
+let currentYear = '2026';
 let categoryStates = {}; // Track category filter states: 'included', 'excluded', or null (removed)
 let showOnlyMajorRetailers = false; // Filter for major retailers
 
@@ -1422,7 +1431,7 @@ async function changeYear(year) {
     // Update current year display
     const currentYearSpan = document.getElementById('current-year');
     if (currentYearSpan) {
-        currentYearSpan.textContent = year === 'combined' ? '2024 & 2025' : year;
+        currentYearSpan.textContent = year === 'combined' ? '2024-2026' : year;
     }
     
     loadData();
@@ -1528,16 +1537,21 @@ function updateStats(data) {
     // Show year breakdown for combined view
     if (currentYear === 'combined' && data.year_breakdown) {
         document.getElementById('year-breakdown').style.display = 'block';
-        
-        const breakdown2024 = data.year_breakdown['2024'];
-        const breakdown2025 = data.year_breakdown['2025'];
-        
+
+        const breakdown2024 = data.year_breakdown['2024'] || {companies: 0, invoices: 0, revenue: 0};
+        const breakdown2025 = data.year_breakdown['2025'] || {companies: 0, invoices: 0, revenue: 0};
+        const breakdown2026 = data.year_breakdown['2026'] || {companies: 0, invoices: 0, revenue: 0};
+
         document.getElementById('breakdown-2024').innerHTML = `
             ${breakdown2024.companies} companies, ${breakdown2024.invoices} invoices, €${breakdown2024.revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
         `;
-        
+
         document.getElementById('breakdown-2025').innerHTML = `
             ${breakdown2025.companies} companies, ${breakdown2025.invoices} invoices, €${breakdown2025.revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
+        `;
+
+        document.getElementById('breakdown-2026').innerHTML = `
+            ${breakdown2026.companies} companies, ${breakdown2026.invoices} invoices, €${breakdown2026.revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
         `;
     } else {
         document.getElementById('year-breakdown').style.display = 'none';
@@ -1549,18 +1563,18 @@ async function syncLatestData(fullSync = false) {
     if (!fullSync) {
         const choice = confirm(
             "Choose sync type:\n\n" +
-            "OK = Full Sync (all 2025 invoices - takes longer)\n" +
+            "OK = Full Sync (all invoices - takes longer)\n" +
             "Cancel = Quick Sync (only new invoices since last sync)"
         );
         fullSync = choice;
     }
-    
+
     try {
         document.getElementById('sync-status').style.display = 'block';
         document.getElementById('sync-results').style.display = 'none';
-        
-        // Handle combined view - sync 2025 by default
-        const yearToSync = currentYear === 'combined' ? '2025' : currentYear;
+
+        // Use unified sync endpoint - it auto-detects year from invoice dates
+        const yearToSync = 'invoices';
         
         console.log(`Starting ${fullSync ? 'FULL' : 'incremental'} sync for year: ${yearToSync}`);
         
@@ -1909,37 +1923,53 @@ function updateFilteredStats() {
     
     // Update year breakdown if in combined view
     if (currentYear === 'combined') {
-        const year2024Companies = filteredCompanies.filter(c => c.years_data && c.years_data['2024']);
-        const year2025Companies = filteredCompanies.filter(c => c.years_data && c.years_data['2025']);
-        
+        const year2024Companies = filteredCompanies.filter(c => c.years_data && c.years_data['2024'] && c.years_data['2024'].invoice_count > 0);
+        const year2025Companies = filteredCompanies.filter(c => c.years_data && c.years_data['2025'] && c.years_data['2025'].invoice_count > 0);
+        const year2026Companies = filteredCompanies.filter(c => c.years_data && c.years_data['2026'] && c.years_data['2026'].invoice_count > 0);
+
         const revenue2024 = filteredCompanies.reduce((sum, c) => {
             return sum + (c.years_data && c.years_data['2024'] ? c.years_data['2024'].total_revenue || 0 : 0);
         }, 0);
-        
+
         const revenue2025 = filteredCompanies.reduce((sum, c) => {
             return sum + (c.years_data && c.years_data['2025'] ? c.years_data['2025'].total_revenue || 0 : 0);
         }, 0);
-        
+
+        const revenue2026 = filteredCompanies.reduce((sum, c) => {
+            return sum + (c.years_data && c.years_data['2026'] ? c.years_data['2026'].total_revenue || 0 : 0);
+        }, 0);
+
         const invoices2024 = filteredCompanies.reduce((sum, c) => {
             return sum + (c.years_data && c.years_data['2024'] ? c.years_data['2024'].invoice_count || 0 : 0);
         }, 0);
-        
+
         const invoices2025 = filteredCompanies.reduce((sum, c) => {
             return sum + (c.years_data && c.years_data['2025'] ? c.years_data['2025'].invoice_count || 0 : 0);
         }, 0);
-        
+
+        const invoices2026 = filteredCompanies.reduce((sum, c) => {
+            return sum + (c.years_data && c.years_data['2026'] ? c.years_data['2026'].invoice_count || 0 : 0);
+        }, 0);
+
         const breakdown2024Element = document.getElementById('breakdown-2024');
         const breakdown2025Element = document.getElementById('breakdown-2025');
-        
+        const breakdown2026Element = document.getElementById('breakdown-2026');
+
         if (breakdown2024Element) {
             breakdown2024Element.innerHTML = `
                 ${year2024Companies.length} companies, ${invoices2024} invoices, €${revenue2024.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
             `;
         }
-        
+
         if (breakdown2025Element) {
             breakdown2025Element.innerHTML = `
                 ${year2025Companies.length} companies, ${invoices2025} invoices, €${revenue2025.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
+            `;
+        }
+
+        if (breakdown2026Element) {
+            breakdown2026Element.innerHTML = `
+                ${year2026Companies.length} companies, ${invoices2026} invoices, €${revenue2026.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
             `;
         }
     }
