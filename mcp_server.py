@@ -573,23 +573,32 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             else:
                 years_to_query = [year_arg]
 
-            # Fetch data from all requested years
+            # Fetch data from all requested years (with pagination to get ALL invoices)
             all_data = []
             for yr in years_to_query:
                 table = f'sales_{yr}'
                 try:
-                    result = supabase.table(table).select('company_id, company_name, invoice_date, total_amount, invoice_data').execute()
-                    for inv in result.data:
-                        inv['year'] = yr
-                        # Calculate revenue from line items (ex-VAT) like DUANO "Omzet"
-                        invoice_data = inv.get('invoice_data') or {}
-                        line_items = invoice_data.get('invoice_line_items') or []
-                        revenue = sum(float(item.get('revenue') or 0) for item in line_items)
-                        # Fallback to total_amount if no line items
-                        if revenue == 0:
-                            revenue = float(inv.get('total_amount') or 0)
-                        inv['revenue'] = revenue
-                    all_data.extend(result.data)
+                    # Paginate through all data
+                    offset = 0
+                    batch_size = 1000
+                    while True:
+                        result = supabase.table(table).select('company_id, company_name, invoice_date, total_amount, invoice_data').range(offset, offset + batch_size - 1).execute()
+                        if not result.data:
+                            break
+                        for inv in result.data:
+                            inv['year'] = yr
+                            # Calculate revenue from line items (ex-VAT) like DUANO "Omzet"
+                            invoice_data = inv.get('invoice_data') or {}
+                            line_items = invoice_data.get('invoice_line_items') or []
+                            revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                            # Fallback to total_amount if no line items
+                            if revenue == 0:
+                                revenue = float(inv.get('total_amount') or 0)
+                            inv['revenue'] = revenue
+                        all_data.extend(result.data)
+                        if len(result.data) < batch_size:
+                            break
+                        offset += batch_size
                 except Exception as e:
                     print(f"Could not fetch {table}: {e}")
 
@@ -630,7 +639,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 }
 
             year_label = 'all years (2024-2026)' if year_arg == 'all' else year_arg
-            return format_response(analytics, f"Sales analytics for {year_label}")
+            total_invoices = len(all_data)
+            return format_response(analytics, f"Sales analytics for {year_label} ({total_invoices} total invoices)")
 
         elif name == "update_company":
             company_id = arguments.pop('company_id')
