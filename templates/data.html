@@ -1574,23 +1574,21 @@ async function syncLatestData(fullSync = false) {
         document.getElementById('sync-results').style.display = 'none';
 
         // Use unified sync endpoint - it auto-detects year from invoice dates
-        const yearToSync = 'invoices';
-        
-        console.log(`Starting ${fullSync ? 'FULL' : 'incremental'} sync for year: ${yearToSync}`);
-        
+        console.log(`Starting ${fullSync ? 'FULL' : 'incremental'} sync`);
+
         let totalFetched = 0;
         let totalSaved = 0;
         let totalErrors = 0;
         let currentPage = 1;
         let batchCount = 0;
         const maxBatches = fullSync ? 100 : 20; // More batches for full sync
-        
+
         // Loop through batches until complete
         while (batchCount < maxBatches) {
             batchCount++;
             document.getElementById('sync-message').innerHTML = `${fullSync ? 'Full sync' : 'Syncing'} invoices from DUANO...<br><small class="text-muted">Batch ${batchCount} - ${totalSaved} invoices synced so far</small>`;
-        
-        const response = await fetch(`/api/sync-${yearToSync}-invoices`, {
+
+        const response = await fetch('/api/sync-invoices', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
