@@ -138,11 +138,11 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_sales_analytics",
-            description="Get sales analytics and summary statistics",
+            description="Get sales analytics and summary statistics. Use year='all' to compare all years. Returns revenue by month or company.",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "year": {"type": "integer", "description": "Year to analyze (2024, 2025, or 2026)"},
+                    "year": {"type": "string", "description": "Year to analyze: '2024', '2025', '2026', or 'all' for comparison"},
                     "group_by": {"type": "string", "description": "Group by dimension", "enum": ["company", "month", "day"]},
                     "top_n": {"type": "integer", "description": "Top N results for company grouping", "default": 10}
                 }
@@ -563,44 +563,74 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             return format_response(result.data, f"Found {len(result.data)} invoices")
 
         elif name == "get_sales_analytics":
-            year = arguments.get('year', 2026)
-            table = f'sales_{year}'
+            year_arg = str(arguments.get('year', '2025'))
             group_by = arguments.get('group_by', 'company')
             top_n = arguments.get('top_n', 10)
 
-            result = supabase.table(table).select('company_id, company_name, invoice_date, total_amount, is_paid').execute()
-            data = result.data
+            # Determine which years to query
+            if year_arg == 'all':
+                years_to_query = ['2024', '2025', '2026']
+            else:
+                years_to_query = [year_arg]
+
+            # Fetch data from all requested years
+            all_data = []
+            for yr in years_to_query:
+                table = f'sales_{yr}'
+                try:
+                    result = supabase.table(table).select('company_id, company_name, invoice_date, total_amount, invoice_data').execute()
+                    for inv in result.data:
+                        inv['year'] = yr
+                        # Calculate revenue from line items (ex-VAT) like DUANO "Omzet"
+                        invoice_data = inv.get('invoice_data') or {}
+                        line_items = invoice_data.get('invoice_line_items') or []
+                        revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                        # Fallback to total_amount if no line items
+                        if revenue == 0:
+                            revenue = float(inv.get('total_amount') or 0)
+                        inv['revenue'] = revenue
+                    all_data.extend(result.data)
+                except Exception as e:
+                    print(f"Could not fetch {table}: {e}")
 
             if group_by == 'company':
                 # Aggregate by company
                 company_totals = {}
-                for inv in data:
+                for inv in all_data:
                     cid = inv['company_id']
                     if cid not in company_totals:
-                        company_totals[cid] = {'company_name': inv['company_name'], 'total': 0, 'count': 0, 'paid': 0}
-                    company_totals[cid]['total'] += float(inv['total_amount'] or 0)
-                    company_totals[cid]['count'] += 1
-                    if inv['is_paid']:
-                        company_totals[cid]['paid'] += 1
+                        company_totals[cid] = {'company_name': inv['company_name'], 'total_revenue': 0, 'invoice_count': 0}
+                    company_totals[cid]['total_revenue'] += inv['revenue']
+                    company_totals[cid]['invoice_count'] += 1
 
-                sorted_companies = sorted(company_totals.items(), key=lambda x: x[1]['total'], reverse=True)[:top_n]
-                analytics = [{'company_id': k, **v} for k, v in sorted_companies]
+                sorted_companies = sorted(company_totals.items(), key=lambda x: x[1]['total_revenue'], reverse=True)[:top_n]
+                analytics = [{'company_id': k, 'company_name': v['company_name'], 'total_revenue': round(v['total_revenue'], 2), 'invoice_count': v['invoice_count']} for k, v in sorted_companies]
 
             elif group_by == 'month':
-                # Aggregate by month
+                # Aggregate by month (YYYY-MM format)
                 month_totals = {}
-                for inv in data:
-                    month = inv['invoice_date'][:7] if inv['invoice_date'] else 'unknown'
-                    if month not in month_totals:
-                        month_totals[month] = {'total': 0, 'count': 0}
-                    month_totals[month]['total'] += float(inv['total_amount'] or 0)
-                    month_totals[month]['count'] += 1
+                for inv in all_data:
+                    month_key = inv['invoice_date'][:7] if inv['invoice_date'] else 'unknown'
+                    if month_key not in month_totals:
+                        month_totals[month_key] = {'revenue': 0, 'invoice_count': 0}
+                    month_totals[month_key]['revenue'] += inv['revenue']
+                    month_totals[month_key]['invoice_count'] += 1
 
-                analytics = [{'month': k, **v} for k, v in sorted(month_totals.items())]
+                # Sort by month chronologically
+                sorted_months = sorted(month_totals.items(), key=lambda x: x[0])
+                analytics = [{'month': k, 'revenue': round(v['revenue'], 2), 'invoice_count': v['invoice_count']} for k, v in sorted_months]
+
             else:
-                analytics = {'total_invoices': len(data), 'total_revenue': sum(float(i['total_amount'] or 0) for i in data)}
+                # Summary
+                total_revenue = sum(inv['revenue'] for inv in all_data)
+                analytics = {
+                    'years': years_to_query,
+                    'total_invoices': len(all_data),
+                    'total_revenue': round(total_revenue, 2)
+                }
 
-            return format_response(analytics, f"Sales analytics for {year}")
+            year_label = 'all years (2024-2026)' if year_arg == 'all' else year_arg
+            return format_response(analytics, f"Sales analytics for {year_label}")
 
         elif name == "update_company":
             company_id = arguments.pop('company_id')
