@@ -39,83 +39,13 @@
         </div>
     </div>
 
-    <!-- Year Selection and Summary Stats -->
-    <div class="row mb-5">
+    <!-- Company Count Stats -->
+    <div class="row mb-4">
         <div class="col-12">
-            <div class="modern-card p-4">
-                    <div class="row align-items-center">
-                    <div class="col-md-4 border-end">
-                        <label class="text-uppercase text-muted small fw-bold mb-3 d-block">Select Data View</label>
-                            <div class="d-flex gap-2 flex-wrap align-items-center">
-                            <button class="btn btn-outline-primary year-tag active rounded-pill px-4" data-year="2026" onclick="changeYear('2026', event)">
-                                2026
-                                </button>
-                            <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2025" onclick="changeYear('2025', event)">
-                                2025
-                                </button>
-                            <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2024" onclick="changeYear('2024', event)">
-                                2024
-                                </button>
-                            <button class="btn btn-outline-success year-tag rounded-pill px-4" data-year="combined" onclick="changeYear('combined', event)">
-                                All Years
-                                </button>
-                            <small class="text-muted ms-2" title="Hold Ctrl/Cmd to select multiple years"><i class="fas fa-info-circle"></i> Ctrl+click for multi-select</small>
-                            </div>
-                        </div>
-                    <div class="col-md-8 ps-md-5">
-                            <div class="row" id="year-stats" style="display: none;">
-                                <div class="col-md-3">
-                                    <div class="text-center">
-                                    <div class="h3 fw-bold text-primary mb-1" id="stat-total-companies">-</div>
-                                    <small class="text-muted fw-bold text-uppercase">Companies</small>
-                                    </div>
-                                </div>
-                                {% if session.user_role == 'admin' %}
-                                <div class="col-md-3">
-                                    <div class="text-center">
-                                    <div class="h3 fw-bold text-success mb-1" id="stat-total-revenue">-</div>
-                                    <small class="text-muted fw-bold text-uppercase">Total Revenue</small>
-                                    </div>
-                                </div>
-                                <div class="col-md-3">
-                                    <div class="text-center">
-                                    <div class="h3 fw-bold text-info mb-1" id="stat-total-invoices">-</div>
-                                    <small class="text-muted fw-bold text-uppercase">Invoices</small>
-                                    </div>
-                                </div>
-                                <div class="col-md-3">
-                                    <div class="text-center">
-                                    <div class="h3 fw-bold text-warning mb-1" id="stat-avg-revenue">-</div>
-                                    <small class="text-muted fw-bold text-uppercase">Avg/Company</small>
-                                    </div>
-                                </div>
-                                {% endif %}
-                            </div>
-                            
-                            <!-- Year Breakdown for Combined View -->
-                        <div class="mt-4 pt-3 border-top" id="year-breakdown" style="display: none;">
-                             <div class="row text-sm text-muted">
-                                        <div class="col-md-4">
-                                    <div class="d-flex align-items-center">
-                                        <div class="badge bg-info rounded-pill me-2">2026</div>
-                                                        <span id="breakdown-2026">-</span>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4">
-                                    <div class="d-flex align-items-center">
-                                        <div class="badge bg-success rounded-pill me-2">2025</div>
-                                                        <span id="breakdown-2025">-</span>
-                                    </div>
-                                </div>
-                                        <div class="col-md-4">
-                                    <div class="d-flex align-items-center">
-                                        <div class="badge bg-primary rounded-pill me-2">2024</div>
-                                                        <span id="breakdown-2024">-</span>
-                                            </div>
-                                        </div>
-                            </div>
-                        </div>
-                    </div>
+            <div class="d-flex align-items-center gap-3" id="year-stats" style="display: none;">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="h4 fw-bold text-primary mb-0" id="stat-total-companies">-</div>
+                    <span class="text-muted">companies</span>
                 </div>
             </div>
         </div>
@@ -1101,8 +1031,7 @@
 let allCompanies = [];
 let filteredCompanies = [];
 let currentViewMode = 'cards';
-let selectedYears = ['2026']; // Multi-select years
-let currentYear = '2026'; // Computed from selectedYears for API compatibility
+let currentYear = 'combined'; // Always load all companies
 let categoryStates = {}; // Track category filter states: 'included', 'excluded', or null (removed)
 let showOnlyMajorRetailers = false; // Filter for major retailers
 
@@ -1294,66 +1223,6 @@ function checkUrlForCompany() {
     }
 }
 
-async function changeYear(year, event) {
-    // If it's the 'combined' option, select all years
-    if (year === 'combined') {
-        selectedYears = ['2024', '2025', '2026'];
-    } else {
-        // Multi-select with Ctrl/Cmd click, otherwise single select
-        const isMultiSelect = event && (event.ctrlKey || event.metaKey);
-
-        if (isMultiSelect) {
-            // Toggle year in selection
-            const index = selectedYears.indexOf(year);
-            if (index > -1) {
-                // Remove if already selected (but keep at least one)
-                if (selectedYears.length > 1) {
-                    selectedYears.splice(index, 1);
-                }
-            } else {
-                selectedYears.push(year);
-            }
-        } else {
-            // Single select
-            selectedYears = [year];
-        }
-    }
-
-    // Sort years for consistent display
-    selectedYears.sort();
-
-    // Compute currentYear for API: use 'combined' if multiple years, otherwise single year
-    currentYear = selectedYears.length > 1 ? 'combined' : selectedYears[0];
-
-    // Update active buttons
-    document.querySelectorAll('.year-tag').forEach(btn => {
-        btn.classList.remove('active');
-        const btnYear = btn.dataset.year;
-        if (btnYear === 'combined') {
-            // Combined is active when all 3 years are selected
-            if (selectedYears.length === 3 && selectedYears.includes('2024') && selectedYears.includes('2025') && selectedYears.includes('2026')) {
-                btn.classList.add('active');
-            }
-        } else if (selectedYears.includes(btnYear)) {
-            btn.classList.add('active');
-        }
-    });
-
-    // Update current year display
-    const currentYearSpan = document.getElementById('current-year');
-    if (currentYearSpan) {
-        if (selectedYears.length === 3) {
-            currentYearSpan.textContent = '2024-2026';
-        } else if (selectedYears.length > 1) {
-            currentYearSpan.textContent = selectedYears.join(', ');
-        } else {
-            currentYearSpan.textContent = selectedYears[0];
-        }
-    }
-
-    loadData();
-}
-
 async function loadData(forceRefresh = false) {
     try {
         document.getElementById('error-message').style.display = 'none';
@@ -1445,45 +1314,6 @@ function forceRefreshData() {
 function updateStats(data) {
     document.getElementById('year-stats').style.display = 'flex';
     document.getElementById('stat-total-companies').textContent = data.total_companies || 0;
-
-    // These elements only exist for admin users
-    const revenueEl = document.getElementById('stat-total-revenue');
-    const invoicesEl = document.getElementById('stat-total-invoices');
-    const avgRevenueEl = document.getElementById('stat-avg-revenue');
-
-    if (revenueEl) {
-        revenueEl.textContent = '€' + (data.total_revenue || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2});
-    }
-    if (invoicesEl) {
-        invoicesEl.textContent = data.total_invoices || 0;
-    }
-    if (avgRevenueEl) {
-        const avgRevenue = data.total_companies > 0 ? (data.total_revenue / data.total_companies) : 0;
-        avgRevenueEl.textContent = '€' + avgRevenue.toLocaleString('nl-BE', {minimumFractionDigits: 2});
-    }
-    
-    // Show year breakdown for combined view
-    if (currentYear === 'combined' && data.year_breakdown) {
-        document.getElementById('year-breakdown').style.display = 'block';
-
-        const breakdown2024 = data.year_breakdown['2024'] || {companies: 0, invoices: 0, revenue: 0};
-        const breakdown2025 = data.year_breakdown['2025'] || {companies: 0, invoices: 0, revenue: 0};
-        const breakdown2026 = data.year_breakdown['2026'] || {companies: 0, invoices: 0, revenue: 0};
-
-        document.getElementById('breakdown-2024').innerHTML = `
-            ${breakdown2024.companies} companies, ${breakdown2024.invoices} invoices, €${breakdown2024.revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
-        `;
-
-        document.getElementById('breakdown-2025').innerHTML = `
-            ${breakdown2025.companies} companies, ${breakdown2025.invoices} invoices, €${breakdown2025.revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
-        `;
-
-        document.getElementById('breakdown-2026').innerHTML = `
-            ${breakdown2026.companies} companies, ${breakdown2026.invoices} invoices, €${breakdown2026.revenue.toLocaleString('nl-BE', {minimumFractionDigits: 2})}
-        `;
-    } else {
-        document.getElementById('year-breakdown').style.display = 'none';
-    }
 }
 
 async function syncLatestData(fullSync = false) {
@@ -2451,17 +2281,17 @@ function showCompanyDetails(companyId) {
                 </div>
             </div>
 
-            <!-- Key Metrics -->
+            <!-- Key Metrics (All Time) -->
             <div class="row g-3 mb-4">
                 <div class="col-4">
                     <div class="p-3 bg-light rounded-3 border text-center">
-                        <div class="text-muted small fw-bold text-uppercase mb-1">Revenue</div>
+                        <div class="text-muted small fw-bold text-uppercase mb-1">Total Revenue</div>
                         <div class="h5 mb-0 text-success fw-bold">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
                     </div>
                 </div>
                 <div class="col-4">
                     <div class="p-3 bg-light rounded-3 border text-center">
-                        <div class="text-muted small fw-bold text-uppercase mb-1">Orders</div>
+                        <div class="text-muted small fw-bold text-uppercase mb-1">Total Orders</div>
                         <div class="h5 mb-0 text-primary fw-bold">${company.invoice_count}</div>
                     </div>
                 </div>
@@ -2472,6 +2302,23 @@ function showCompanyDetails(companyId) {
                     </div>
                 </div>
             </div>
+
+            <!-- Year Breakdown -->
+            ${company.years_data ? `
+            <div class="mb-4">
+                <div class="d-flex gap-2 flex-wrap mb-3">
+                    <span class="badge bg-light text-dark border px-3 py-2">
+                        <strong class="text-info">2026:</strong> €${(company.years_data['2026']?.total_revenue || 0).toLocaleString('nl-BE')} (${company.years_data['2026']?.invoice_count || 0} orders)
+                    </span>
+                    <span class="badge bg-light text-dark border px-3 py-2">
+                        <strong class="text-success">2025:</strong> €${(company.years_data['2025']?.total_revenue || 0).toLocaleString('nl-BE')} (${company.years_data['2025']?.invoice_count || 0} orders)
+                    </span>
+                    <span class="badge bg-light text-dark border px-3 py-2">
+                        <strong class="text-primary">2024:</strong> €${(company.years_data['2024']?.total_revenue || 0).toLocaleString('nl-BE')} (${company.years_data['2024']?.invoice_count || 0} orders)
+                    </span>
+                </div>
+            </div>
+            ` : ''}
                         
             <!-- Contact & Details -->
             <div class="detail-section">
@@ -2555,8 +2402,16 @@ function showCompanyDetails(companyId) {
             <!-- Recent Invoices -->
             <div class="mt-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="fw-bold mb-0">Recent Orders</h6>
-                    <span class="badge badge-soft-secondary" id="invoices-count">Loading...</span>
+                    <h6 class="fw-bold mb-0">Orders</h6>
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="btn-group btn-group-sm" role="group" id="invoices-year-filter">
+                            <button type="button" class="btn btn-outline-secondary active" onclick="filterInvoicesByYear(${company.company_id}, 'all')">All</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="filterInvoicesByYear(${company.company_id}, '2026')">2026</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="filterInvoicesByYear(${company.company_id}, '2025')">2025</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="filterInvoicesByYear(${company.company_id}, '2024')">2024</button>
+                        </div>
+                        <span class="badge badge-soft-secondary" id="invoices-count">Loading...</span>
+                    </div>
                 </div>
 
                 <div class="bg-white rounded-3 border overflow-hidden" id="invoices-list-container">
@@ -2593,17 +2448,33 @@ function showCompanyDetails(companyId) {
     // Show sidepanel
     openCompanyPanel();
     
-    // Load invoices with new list renderer
-    loadCompanyInvoicesV2(company.company_id);
+    // Load invoices with new list renderer (all years by default)
+    loadCompanyInvoicesV2(company.company_id, 'combined');
     
     // Load trips related to this company
     loadCompanyTrips(company.company_id);
 }
 
+// Filter invoices by year in sidepanel
+function filterInvoicesByYear(companyId, year) {
+    // Update active button
+    const filterGroup = document.getElementById('invoices-year-filter');
+    if (filterGroup) {
+        filterGroup.querySelectorAll('button').forEach(btn => {
+            btn.classList.remove('active');
+            if ((year === 'all' && btn.textContent === 'All') || btn.textContent === year) {
+                btn.classList.add('active');
+            }
+        });
+    }
+    // Load invoices for selected year
+    loadCompanyInvoicesV2(companyId, year === 'all' ? 'combined' : year);
+}
+
 // New function to render invoices as a clean list
-async function loadCompanyInvoicesV2(companyId) {
+async function loadCompanyInvoicesV2(companyId, year = 'combined') {
     try {
-        const response = await fetch(`/api/company-invoices/${companyId}?year=${currentYear}`);
+        const response = await fetch(`/api/company-invoices/${companyId}?year=${year}`);
         const data = await response.json();
         
         if (data.invoices) {
