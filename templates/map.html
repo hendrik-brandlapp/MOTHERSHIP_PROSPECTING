@@ -591,14 +591,22 @@
             return company.address.city;
         }
 
-        // Try geocoded_address (can be object or JSON string)
+        // Try geocoded_address - format: "Street, City, PostalCode, Country"
         if (company.geocoded_address) {
             let geo = company.geocoded_address;
             if (typeof geo === 'string') {
+                // Check if it's a comma-separated address string
+                // Format: "Brusselsesteenweg 347, Asse, 1730, België"
+                const parts = geo.split(',').map(p => p.trim());
+                if (parts.length >= 2) {
+                    // City is typically the second part
+                    return parts[1];
+                }
+                // If only one part, try JSON parse
                 try {
                     geo = JSON.parse(geo);
                 } catch (e) {
-                    // If it's a plain string, it might be the city itself
+                    // Single value string, might be the city itself
                     if (geo.trim()) return geo.trim();
                 }
             }
