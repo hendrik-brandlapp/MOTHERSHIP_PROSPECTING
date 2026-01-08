@@ -91,6 +91,15 @@
         font-size: 0.875rem;
         background: white;
         transition: all 0.15s ease;
+        appearance: menulist;
+        -webkit-appearance: menulist;
+        -moz-appearance: menulist;
+        cursor: pointer;
+    }
+
+    .filter-select option {
+        padding: 0.5rem;
+        font-size: 0.875rem;
     }
 
     .filter-select:focus {
@@ -422,7 +431,7 @@
             <!-- Area (City) Filter -->
             <div class="filter-group">
                 <label class="filter-label">Area</label>
-                <select class="filter-select" id="areaFilter" onchange="applyFilters()">
+                <select class="filter-select no-custom" id="areaFilter" onchange="applyFilters()">
                     <option value="">All areas</option>
                     <!-- Populated by JS -->
                 </select>
@@ -431,7 +440,7 @@
             <!-- Category Filter -->
             <div class="filter-group">
                 <label class="filter-label">Category</label>
-                <select class="filter-select" id="categoryFilter" onchange="applyFilters()">
+                <select class="filter-select no-custom" id="categoryFilter" onchange="applyFilters()">
                     <option value="">All categories</option>
                     <!-- Populated by JS -->
                 </select>
@@ -440,7 +449,7 @@
             <!-- Assigned Salesperson Filter -->
             <div class="filter-group">
                 <label class="filter-label">Assigned Salesperson</label>
-                <select class="filter-select" id="salespersonFilter" onchange="applyFilters()">
+                <select class="filter-select no-custom" id="salespersonFilter" onchange="applyFilters()">
                     <option value="">All salespersons</option>
                     <!-- Populated by JS -->
                 </select>
