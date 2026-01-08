@@ -115,15 +115,21 @@
                         <div class="selected-tags mt-2" id="flavour-selected-tags"></div>
                     </div>
 
-                    <!-- Min Revenue -->
-                    <div class="filter-item filter-revenue">
-                        <label class="filter-label">Min Revenue</label>
-                        <div class="filter-input-wrapper">
-                            <span class="filter-input-icon">€</span>
-                            <input type="number" class="filter-input" id="minRevenue" placeholder="0" onchange="filterCompanies()">
-                        </div>
-                        </div>
-                    
+                    <!-- Alert Filter -->
+                    <div class="filter-item filter-alerts">
+                        <label class="filter-label">Alerts</label>
+                        <select class="filter-select" id="alertFilter" onchange="filterCompanies()">
+                            <option value="">All companies</option>
+                            <option value="any">Has any alert</option>
+                            <option value="PATTERN_DISRUPTION">Pattern Break</option>
+                            <option value="HIGH_VALUE_AT_RISK">High Value Risk</option>
+                            <option value="DORMANT_CUSTOMER">Dormant</option>
+                            <option value="DECLINING_VALUE">Declining</option>
+                            <option value="INCREASING_GAP">Less Frequent</option>
+                            <option value="ONE_TIME_CUSTOMER">One-Timer</option>
+                        </select>
+                    </div>
+
                     <!-- Sort By -->
                     <div class="filter-item filter-sort">
                         <label class="filter-label">Sort By</label>
@@ -134,27 +140,7 @@
                             <option value="name_desc">Name Z-A</option>
                             <option value="invoices_desc">Invoices ↓</option>
                             <option value="invoices_asc">Invoices ↑</option>
-                            </select>
-                        </div>
-                    
-                    <!-- Actions -->
-                    <div class="filter-item filter-actions">
-                        <label class="filter-label">&nbsp;</label>
-                        <div class="filter-actions-row">
-                            <button class="filter-btn filter-btn-star" id="majorRetailerFilter" onclick="toggleMajorRetailerFilter()" title="Major retailers">
-                                <i class="fas fa-star"></i>
-                            </button>
-                            <div class="filter-view-toggle">
-                                <input type="radio" name="viewMode" id="viewCard" checked onchange="document.getElementById('viewMode').value='cards'; changeViewMode();">
-                                <label for="viewCard" title="Card view"><i class="fas fa-th-large"></i></label>
-                                <input type="radio" name="viewMode" id="viewTable" onchange="document.getElementById('viewMode').value='table'; changeViewMode();">
-                                <label for="viewTable" title="Table view"><i class="fas fa-list"></i></label>
-                            </div>
-                            <select class="d-none" id="viewMode" onchange="changeViewMode()">
-                                <option value="cards">Cards</option>
-                                <option value="table">Table</option>
-                            </select>
-                        </div>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -964,6 +950,81 @@
         font-size: 0.625rem;
     }
 
+    /* Alert Detail Cards for Sidepanel */
+    .alert-details-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .alert-detail-card {
+        padding: 0.875rem;
+        border-radius: var(--radius-md);
+        border-left: 4px solid;
+    }
+
+    .alert-detail-card.alert-high {
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        border-left-color: #dc2626;
+    }
+
+    .alert-detail-card.alert-medium {
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        border-left-color: #d97706;
+    }
+
+    .alert-detail-card.alert-low {
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        border-left-color: #2563eb;
+    }
+
+    .alert-detail-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .alert-detail-icon {
+        font-size: 1rem;
+    }
+
+    .alert-detail-title {
+        font-weight: 600;
+        font-size: 0.875rem;
+        flex: 1;
+    }
+
+    .alert-detail-priority {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        padding: 0.125rem 0.5rem;
+        border-radius: 999px;
+        text-transform: uppercase;
+    }
+
+    .badge-high {
+        background: #dc2626;
+        color: white;
+    }
+
+    .badge-medium {
+        background: #d97706;
+        color: white;
+    }
+
+    .badge-low {
+        background: #2563eb;
+        color: white;
+    }
+
+    .alert-detail-description {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin: 0;
+        line-height: 1.5;
+    }
+
     .company-name {
         font-size: 1rem;
         font-weight: 600;
@@ -1711,25 +1772,20 @@ function toggleMajorRetailerFilter() {
 
 function filterCompanies() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-    const minRevenue = parseFloat(document.getElementById('minRevenue').value) || 0;
-    
+    const alertFilter = document.getElementById('alertFilter').value;
+
     filteredCompanies = allCompanies.filter(company => {
-        // Major retailer filter
-        if (showOnlyMajorRetailers && !isMajorRetailer(company.company_id)) {
-            return false;
-        }
-        
         // Category filtering
         const companyCategories = getCompanyCategories(company);
         const excludedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'excluded');
         const includedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'included');
-        
+
         // First, check if company has any excluded categories - if so, filter it out
         if (excludedCategories.length > 0) {
             const hasExcludedCategory = companyCategories.some(cat => excludedCategories.includes(cat));
             if (hasExcludedCategory) return false; // Exclude this company
         }
-        
+
         // If there are included categories specified, company must have at least one
         if (includedCategories.length > 0 && includedCategories.length < Object.keys(categoryStates).length) {
             // Not all categories are included, so filter
@@ -1744,6 +1800,17 @@ function filterCompanies() {
             if (!hasSelectedFlavour) return false;
         }
 
+        // Alert filtering
+        if (alertFilter) {
+            const companyAlerts = company.alerts || [];
+            if (alertFilter === 'any') {
+                if (companyAlerts.length === 0) return false;
+            } else {
+                const hasAlertType = companyAlerts.some(a => a.type === alertFilter);
+                if (!hasAlertType) return false;
+            }
+        }
+
         // Search term filtering
         if (searchTerm && searchTerm.trim() !== '') {
             const searchableText = [
@@ -1754,19 +1821,16 @@ function filterCompanies() {
                 company.address?.city || '',
                 company.address?.country || ''
             ].join(' ').toLowerCase();
-            
+
             if (!searchableText.includes(searchTerm)) return false;
         }
-        
-        // Revenue filter
-        if (company.total_revenue < minRevenue) return false;
-        
+
         return true;
     });
-    
+
     // Update statistics based on filtered companies
     updateFilteredStats();
-    
+
     sortCompanies();
 }
 
@@ -2337,24 +2401,70 @@ function getStatusColor(status) {
     return colors[status] || 'secondary';
 }
 
+// Alert type definitions
+const ALERT_DEFINITIONS = {
+    'PATTERN_DISRUPTION': {
+        icon: '<i class="fas fa-chart-line text-danger"></i>',
+        label: 'Pattern Break',
+        description: 'This customer has broken their usual ordering pattern. They may have stopped ordering or significantly changed their behavior.'
+    },
+    'HIGH_VALUE_AT_RISK': {
+        icon: '<i class="fas fa-gem text-warning"></i>',
+        label: 'High Value Risk',
+        description: 'A high-value customer showing signs of reduced engagement. Immediate attention recommended to prevent churn.'
+    },
+    'DORMANT_CUSTOMER': {
+        icon: '<i class="fas fa-moon text-secondary"></i>',
+        label: 'Dormant',
+        description: 'This customer has not placed an order in an extended period. Consider reaching out to re-engage them.'
+    },
+    'DECLINING_VALUE': {
+        icon: '<i class="fas fa-arrow-trend-down text-danger"></i>',
+        label: 'Declining',
+        description: 'Order values from this customer have been decreasing over recent orders. May indicate dissatisfaction or competitive pressure.'
+    },
+    'INCREASING_GAP': {
+        icon: '<i class="fas fa-clock text-warning"></i>',
+        label: 'Less Frequent',
+        description: 'The time between orders is increasing. This customer is ordering less frequently than before.'
+    },
+    'ONE_TIME_CUSTOMER': {
+        icon: '<i class="fas fa-user text-info"></i>',
+        label: 'One-Timer',
+        description: 'This customer has only placed one order. Follow up to convert them into a repeat customer.'
+    }
+};
+
+// Get alert icon HTML
+function getAlertIcon(type) {
+    return ALERT_DEFINITIONS[type]?.icon || '<i class="fas fa-exclamation text-muted"></i>';
+}
+
+// Get alert label
+function getAlertLabel(type) {
+    return ALERT_DEFINITIONS[type]?.label || type;
+}
+
+// Get alert description
+function getAlertDescription(type) {
+    return ALERT_DEFINITIONS[type]?.description || 'No description available.';
+}
+
 // Build alert tags HTML from alerts array
 function buildAlertTags(alerts) {
     if (!alerts || alerts.length === 0) return '';
 
-    const alertLabels = {
-        'PATTERN_DISRUPTION': { icon: 'fa-chart-line', label: 'Pattern Break' },
-        'HIGH_VALUE_AT_RISK': { icon: 'fa-gem', label: 'High Value Risk' },
-        'DORMANT_CUSTOMER': { icon: 'fa-moon', label: 'Dormant' },
-        'DECLINING_VALUE': { icon: 'fa-arrow-trend-down', label: 'Declining' },
-        'INCREASING_GAP': { icon: 'fa-clock', label: 'Less Frequent' },
-        'ONE_TIME_CUSTOMER': { icon: 'fa-user', label: 'One-Timer' }
-    };
-
     return alerts.map(alert => {
-        const info = alertLabels[alert.type] || { icon: 'fa-exclamation', label: alert.type };
+        const info = ALERT_DEFINITIONS[alert.type] || { icon: '<i class="fas fa-exclamation"></i>', label: alert.type };
         const priorityClass = (alert.priority || 'medium').toLowerCase();
-        return `<span class="alert-tag ${priorityClass}" title="${escapeHtml(alert.description || '')}">
-            <i class="fas ${info.icon}"></i>
+        const iconClass = alert.type === 'PATTERN_DISRUPTION' ? 'fa-chart-line' :
+                         alert.type === 'HIGH_VALUE_AT_RISK' ? 'fa-gem' :
+                         alert.type === 'DORMANT_CUSTOMER' ? 'fa-moon' :
+                         alert.type === 'DECLINING_VALUE' ? 'fa-arrow-trend-down' :
+                         alert.type === 'INCREASING_GAP' ? 'fa-clock' :
+                         alert.type === 'ONE_TIME_CUSTOMER' ? 'fa-user' : 'fa-exclamation';
+        return `<span class="alert-tag ${priorityClass}" title="${escapeHtml(alert.description || getAlertDescription(alert.type))}">
+            <i class="fas ${iconClass}"></i>
             ${info.label}
         </span>`;
     }).join('');
@@ -2533,6 +2643,25 @@ function showCompanyDetails(companyId) {
                     </a>
                 </div>
             </div>
+
+            <!-- Active Alerts -->
+            ${company.alerts && company.alerts.length > 0 ? `
+            <div class="mb-4">
+                <h6 class="fw-bold text-muted small text-uppercase mb-2"><i class="fas fa-bell me-2"></i>Active Alerts</h6>
+                <div class="alert-details-list">
+                    ${company.alerts.map(alert => `
+                        <div class="alert-detail-card alert-${(alert.priority || 'medium').toLowerCase()}">
+                            <div class="alert-detail-header">
+                                <span class="alert-detail-icon">${getAlertIcon(alert.type)}</span>
+                                <span class="alert-detail-title">${getAlertLabel(alert.type)}</span>
+                                <span class="alert-detail-priority badge-${(alert.priority || 'medium').toLowerCase()}">${alert.priority || 'Medium'}</span>
+                            </div>
+                            <p class="alert-detail-description">${escapeHtml(alert.description || getAlertDescription(alert.type))}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
 
             <!-- Current Flavours (from latest invoice) -->
             ${company.current_flavours && company.current_flavours.length > 0 ? `
