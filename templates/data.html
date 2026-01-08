@@ -99,7 +99,22 @@
                             </div>
                             <div class="selected-tags mt-2" id="category-selected-tags"></div>
                         </div>
-                    
+
+                    <!-- Flavours Filter -->
+                    <div class="filter-item filter-flavours">
+                        <label class="filter-label">Flavours</label>
+                        <div class="searchable-dropdown-wrapper">
+                            <div class="filter-dropdown-trigger" id="flavour-dropdown-trigger">
+                                <span class="trigger-text">All flavours</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                            <div class="filter-dropdown-menu" id="flavour-dropdown-menu">
+                                <div class="dropdown-options-list" id="flavour-dropdown-options"></div>
+                            </div>
+                        </div>
+                        <div class="selected-tags mt-2" id="flavour-selected-tags"></div>
+                    </div>
+
                     <!-- Min Revenue -->
                     <div class="filter-item filter-revenue">
                         <label class="filter-label">Min Revenue</label>
@@ -714,6 +729,8 @@
     .dropdown-option-item.included .option-checkbox { color: var(--success-color); }
     .dropdown-option-item.excluded { background: #fee2e2; }
     .dropdown-option-item.excluded .option-checkbox { color: #dc2626; }
+    .dropdown-option-item.selected { background: linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%); }
+    .dropdown-option-item.selected .option-checkbox { color: #00695c; }
     
     .option-checkbox {
         width: 20px;
@@ -825,7 +842,18 @@
         background: #fca5a5;
         color: #7f1d1d;
     }
-    
+
+    .selected-tag.flavour-selected {
+        background: linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%);
+        border-color: #00695c;
+        color: #00695c;
+    }
+
+    .selected-tag.flavour-selected:hover {
+        background: #00695c;
+        color: white;
+    }
+
     .year-tag {
         border-radius: 9999px;
         font-weight: 500;
@@ -1067,6 +1095,7 @@ let filteredCompanies = [];
 let currentViewMode = 'cards';
 let currentYear = 'combined'; // Always load all companies
 let categoryStates = {}; // Track category filter states: 'included', 'excluded', or null (removed)
+let selectedFlavours = []; // Track selected flavours for filtering
 let showOnlyMajorRetailers = false; // Filter for major retailers
 
 // Cache configuration
@@ -1276,9 +1305,10 @@ async function loadData(forceRefresh = false) {
             allCompanies = cachedData.companies || [];
             filteredCompanies = [...allCompanies];
             
-            // Populate category filter dropdown
+            // Populate filter dropdowns
             populateCategories();
-            
+            populateFlavours();
+
             // Update stats
             updateStats(cachedData);
             
@@ -1315,9 +1345,10 @@ async function loadData(forceRefresh = false) {
         allCompanies = data.companies || [];
         filteredCompanies = [...allCompanies];
         
-        // Populate category filter dropdown
+        // Populate filter dropdowns
         populateCategories();
-        
+        populateFlavours();
+
         // Update stats
         updateStats(data);
         
@@ -1671,7 +1702,14 @@ function filterCompanies() {
             const hasIncludedCategory = companyCategories.some(cat => includedCategories.includes(cat));
             if (!hasIncludedCategory) return false;
         }
-        
+
+        // Flavour filtering - if flavours selected, company must have at least one of them
+        if (selectedFlavours.length > 0) {
+            const companyFlavours = company.current_flavours || [];
+            const hasSelectedFlavour = companyFlavours.some(f => selectedFlavours.includes(f));
+            if (!hasSelectedFlavour) return false;
+        }
+
         // Search term filtering
         if (searchTerm && searchTerm.trim() !== '') {
             const searchableText = [
@@ -1970,6 +2008,125 @@ function deselectAllCategories() {
     filterCompanies();
 }
 
+// =====================================================
+// FLAVOUR FILTER FUNCTIONS
+// =====================================================
+
+function populateFlavours() {
+    const flavourSet = new Set();
+
+    // Extract all unique flavours from all companies
+    allCompanies.forEach(company => {
+        if (company.current_flavours && Array.isArray(company.current_flavours)) {
+            company.current_flavours.forEach(f => flavourSet.add(f));
+        }
+    });
+
+    const sortedFlavours = Array.from(flavourSet).sort();
+
+    // Clear selected flavours
+    selectedFlavours = [];
+
+    renderFlavourDropdown(sortedFlavours);
+}
+
+function renderFlavourDropdown(allFlavours) {
+    const optionsContainer = document.getElementById('flavour-dropdown-options');
+    const selectedContainer = document.getElementById('flavour-selected-tags');
+    if (!optionsContainer) return;
+
+    if (allFlavours.length === 0) {
+        optionsContainer.innerHTML = '<div class="p-3 text-center text-muted small">No flavours found</div>';
+        return;
+    }
+
+    // Render options in dropdown
+    optionsContainer.innerHTML = '';
+    allFlavours.forEach(flavour => {
+        const isSelected = selectedFlavours.includes(flavour);
+
+        const option = document.createElement('div');
+        option.className = `dropdown-option-item ${isSelected ? 'selected' : ''}`;
+        option.innerHTML = `
+            <div class="option-checkbox">
+                <i class="fas fa-${isSelected ? 'check-circle' : 'circle'}"></i>
+            </div>
+            <span class="option-label">${escapeHtml(flavour)}</span>
+        `;
+        option.onclick = () => toggleFlavour(flavour);
+
+        optionsContainer.appendChild(option);
+    });
+
+    // Render selected tags
+    selectedContainer.innerHTML = '';
+    selectedFlavours.forEach(flavour => {
+        const tag = document.createElement('span');
+        tag.className = 'selected-tag flavour-selected';
+        tag.innerHTML = `
+            <span>${escapeHtml(flavour)}</span>
+            <i class="fas fa-times"></i>
+        `;
+        tag.onclick = () => toggleFlavour(flavour);
+        selectedContainer.appendChild(tag);
+    });
+
+    // Update trigger text
+    const trigger = document.getElementById('flavour-dropdown-trigger');
+    const triggerText = trigger?.querySelector('.trigger-text');
+
+    if (triggerText) {
+        if (selectedFlavours.length === 0) {
+            triggerText.textContent = 'All flavours';
+            triggerText.className = 'trigger-text text-muted';
+        } else {
+            triggerText.textContent = `${selectedFlavours.length} selected`;
+            triggerText.className = 'trigger-text text-success';
+        }
+    }
+}
+
+function toggleFlavour(flavour) {
+    const index = selectedFlavours.indexOf(flavour);
+    if (index === -1) {
+        selectedFlavours.push(flavour);
+    } else {
+        selectedFlavours.splice(index, 1);
+    }
+
+    // Get all flavours for re-render
+    const flavourSet = new Set();
+    allCompanies.forEach(company => {
+        if (company.current_flavours && Array.isArray(company.current_flavours)) {
+            company.current_flavours.forEach(f => flavourSet.add(f));
+        }
+    });
+
+    renderFlavourDropdown(Array.from(flavourSet).sort());
+    filterCompanies();
+}
+
+// Initialize flavour dropdown toggle
+document.addEventListener('DOMContentLoaded', function() {
+    const flavourTrigger = document.getElementById('flavour-dropdown-trigger');
+    const flavourMenu = document.getElementById('flavour-dropdown-menu');
+
+    if (flavourTrigger && flavourMenu) {
+        flavourTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            flavourMenu.classList.toggle('show');
+        });
+
+        document.addEventListener('click', () => {
+            flavourMenu.classList.remove('show');
+        });
+
+        flavourMenu.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+});
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -2092,12 +2249,6 @@ function displayCardsView() {
                     <h5 class="company-name">${escapeHtml(displayName)}</h5>
                     ${company.customer_status ? `<span class="badge badge-soft-${getStatusColor(company.customer_status)}">${escapeHtml(company.customer_status)}</span>` : ''}
                 </div>
-
-                ${company.current_flavours && company.current_flavours.length > 0 ? `
-                <div class="company-flavours">
-                    ${company.current_flavours.map(f => `<span class="flavour-tag">${escapeHtml(f)}</span>`).join('')}
-                </div>
-                ` : ''}
 
                 <div class="company-contact">
                     ${addressParts ? `<div class="contact-item"><i class="fas fa-map-marker-alt"></i><span>${escapeHtml(addressParts)}</span></div>` : ''}
