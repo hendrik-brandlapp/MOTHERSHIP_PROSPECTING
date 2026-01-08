@@ -3,6 +3,9 @@
 {% block title %}Companies - CRMinal{% endblock %}
 
 {% block content %}
+<!-- Mapbox GL JS for map view -->
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
 <div class="container-fluid px-4">
     <div class="row">
         <div class="col-12">
@@ -142,6 +145,19 @@
                             <option value="invoices_asc">Invoices ↑</option>
                         </select>
                     </div>
+
+                    <!-- View Toggle -->
+                    <div class="filter-item">
+                        <label class="filter-label">View</label>
+                        <div class="view-toggle-group">
+                            <button class="view-toggle-btn active" data-view="cards" onclick="switchToView('cards')">
+                                <i class="fas fa-th-large"></i> Cards
+                            </button>
+                            <button class="view-toggle-btn" data-view="map" onclick="switchToView('map')">
+                                <i class="fas fa-map-marker-alt"></i> Map
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -171,6 +187,11 @@
     <!-- Card View -->
     <div id="companies-cards" class="row" style="display: none;">
         <!-- Company cards will be inserted here -->
+    </div>
+
+    <!-- Map View -->
+    <div id="companies-map" class="d-none" style="height: calc(100vh - 280px); border-radius: 12px; overflow: hidden; border: 1px solid #e9ecef;">
+        <div id="map-container" style="width: 100%; height: 100%;"></div>
     </div>
 
     <!-- Table View -->
@@ -273,6 +294,63 @@
         background-color: var(--surface-bg);
         font-family: var(--font-sans);
         color: var(--text-main);
+    }
+
+    /* View Toggle */
+    .view-toggle-group {
+        display: flex;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #e9ecef;
+    }
+
+    .view-toggle-btn {
+        padding: 8px 14px;
+        border: none;
+        background: #f8f9fa;
+        color: #6c757d;
+        cursor: pointer;
+        font-size: 0.8rem;
+        font-weight: 500;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .view-toggle-btn:hover {
+        background: #e9ecef;
+        color: #495057;
+    }
+
+    .view-toggle-btn.active {
+        background: #5B5FEF;
+        color: white;
+    }
+
+    .view-toggle-btn i {
+        font-size: 0.85rem;
+    }
+
+    /* Map Popup Styles */
+    .mapboxgl-popup-content {
+        padding: 12px 16px;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        font-family: var(--font-sans);
+    }
+
+    .mapboxgl-popup-close-button {
+        font-size: 18px;
+        padding: 4px 8px;
+    }
+
+    .map-marker {
+        transition: transform 0.15s ease;
+    }
+
+    .map-marker:hover {
+        transform: scale(1.15);
     }
 
     /* Modern Card */
@@ -1482,6 +1560,11 @@ let categoryStates = {}; // Track category filter states: 'included', 'excluded'
 let selectedFlavours = []; // Track selected flavours for filtering
 let showOnlyMajorRetailers = false; // Filter for major retailers
 
+// Map variables
+let map = null;
+let mapMarkers = [];
+const MAPBOX_TOKEN = '{{ mapbox_api_key }}';
+
 // Shared cache configuration (same keys as map.html for sharing)
 const CACHE_KEY = 'companies_shared_cache';
 const CACHE_TIME_KEY = 'companies_shared_cache_time';
@@ -2548,9 +2631,152 @@ function changeViewMode() {
     displayCompanies();
 }
 
+// Switch between cards and map view
+function switchToView(view) {
+    const cardsContainer = document.getElementById('companies-cards');
+    const mapContainer = document.getElementById('companies-map');
+    const tableContainer = document.getElementById('companies-table');
+
+    // Update toggle buttons
+    document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === view);
+    });
+
+    // Hide all containers first
+    cardsContainer.style.display = 'none';
+    mapContainer.classList.add('d-none');
+    tableContainer.style.display = 'none';
+
+    currentViewMode = view;
+
+    if (view === 'map') {
+        mapContainer.classList.remove('d-none');
+        initMapIfNeeded();
+        // Wait for map to be ready before updating markers
+        if (map && map.loaded()) {
+            updateMapMarkers();
+        } else if (map) {
+            map.once('load', updateMapMarkers);
+        }
+    } else {
+        displayCompanies();
+    }
+}
+
+// Initialize map if not already done
+function initMapIfNeeded() {
+    if (map) return;
+
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+    map = new mapboxgl.Map({
+        container: 'map-container',
+        style: 'mapbox://styles/mapbox/light-v11',
+        center: [4.3517, 50.8503], // Belgium
+        zoom: 7
+    });
+
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
+    map.on('load', function() {
+        updateMapMarkers();
+    });
+}
+
+// Update map markers based on filteredCompanies
+function updateMapMarkers() {
+    if (!map) return;
+
+    // Clear existing markers
+    mapMarkers.forEach(m => m.remove());
+    mapMarkers = [];
+
+    let validMarkerCount = 0;
+    const bounds = new mapboxgl.LngLatBounds();
+
+    // Add markers for filtered companies
+    filteredCompanies.forEach(company => {
+        const lat = parseFloat(company.latitude);
+        const lng = parseFloat(company.longitude);
+
+        if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
+
+        validMarkerCount++;
+        bounds.extend([lng, lat]);
+
+        const hasAlerts = company.alerts && company.alerts.length > 0;
+        const markerColor = hasAlerts ? '#dc3545' : '#28a745';
+
+        // Create marker element
+        const el = document.createElement('div');
+        el.className = 'map-marker';
+        el.style.cssText = `
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: ${markerColor};
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        el.innerHTML = '<i class="fas fa-building" style="color:white;font-size:11px;"></i>';
+
+        // Create popup content
+        const city = company.address?.city || '';
+        const alertBadges = hasAlerts ? company.alerts.map(a =>
+            `<span style="display:inline-block;background:#fee2e2;color:#dc3545;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:4px;">${getAlertLabel(a.type)}</span>`
+        ).join('') : '';
+
+        const popupContent = `
+            <div style="min-width:180px;">
+                <strong style="font-size:14px;">${escapeHtml(company.name || company.public_name || 'Unknown')}</strong>
+                <div style="color:#6c757d;font-size:12px;margin:4px 0;">${escapeHtml(city)}</div>
+                ${alertBadges ? `<div style="margin-top:6px;">${alertBadges}</div>` : ''}
+                <button onclick="showCompanyDetails(${company.company_id})"
+                        style="margin-top:8px;width:100%;padding:6px;background:#5B5FEF;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">
+                    View Details
+                </button>
+            </div>
+        `;
+
+        const popup = new mapboxgl.Popup({ offset: 25, closeButton: true })
+            .setHTML(popupContent);
+
+        const marker = new mapboxgl.Marker(el)
+            .setLngLat([lng, lat])
+            .setPopup(popup)
+            .addTo(map);
+
+        mapMarkers.push(marker);
+    });
+
+    // Fit bounds if markers exist
+    if (validMarkerCount > 0) {
+        map.fitBounds(bounds, { padding: 60, maxZoom: 12 });
+    }
+
+    console.log(`Map: Showing ${validMarkerCount} of ${filteredCompanies.length} companies with valid coordinates`);
+}
+
+// Helper to get alert label
+function getAlertLabel(type) {
+    const labels = {
+        'PATTERN_DISRUPTION': 'Pattern Break',
+        'HIGH_VALUE_AT_RISK': 'High Value Risk',
+        'DORMANT_CUSTOMER': 'Dormant',
+        'DECLINING_VALUE': 'Declining',
+        'INCREASING_GAP': 'Less Frequent',
+        'ONE_TIME_CUSTOMER': 'One-Timer'
+    };
+    return labels[type] || type;
+}
+
 function displayCompanies() {
     const cardsContainer = document.getElementById('companies-cards');
     const tableContainer = document.getElementById('companies-table');
+    const mapContainer = document.getElementById('companies-map');
     const resultsInfo = document.getElementById('results-info');
     const noResults = document.getElementById('no-results');
 
@@ -2562,20 +2788,28 @@ function displayCompanies() {
     if (filteredCompanies.length === 0) {
         cardsContainer.style.display = 'none';
         tableContainer.style.display = 'none';
+        mapContainer.classList.add('d-none');
         noResults.style.display = 'block';
         return;
     }
 
     noResults.style.display = 'none';
 
-    if (currentViewMode === 'cards') {
+    if (currentViewMode === 'map') {
+        cardsContainer.style.display = 'none';
+        tableContainer.style.display = 'none';
+        mapContainer.classList.remove('d-none');
+        if (map) updateMapMarkers();
+    } else if (currentViewMode === 'cards') {
         displayCardsView();
         cardsContainer.style.display = 'flex';
         tableContainer.style.display = 'none';
+        mapContainer.classList.add('d-none');
     } else {
         displayTableView();
         cardsContainer.style.display = 'none';
         tableContainer.style.display = 'block';
+        mapContainer.classList.add('d-none');
     }
 }
 

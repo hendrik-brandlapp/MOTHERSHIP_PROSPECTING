@@ -7054,8 +7054,11 @@ def data():
     """Unified Data Analysis page"""
     if not is_logged_in():
         return redirect(url_for('index'))
-    
-    return render_template('data.html')
+
+    # Mapbox API key for map view
+    mapbox_api_key = "pk.eyJ1IjoiaGVuZHJpa3l1Z2VuIiwiYSI6ImNtY24zZnB4YTAwNTYybnMzNGVpemZxdGEifQ.HIpLMTGycSiEsf7ytxaSJg"
+
+    return render_template('data.html', mapbox_api_key=mapbox_api_key)
 
 
 @app.route('/map')
