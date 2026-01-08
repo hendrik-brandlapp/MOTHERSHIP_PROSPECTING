@@ -736,30 +736,36 @@
 
         // Populate area dropdown
         const areaSelect = document.getElementById('areaFilter');
+        console.log('areaSelect element:', areaSelect, 'options before:', areaSelect?.options?.length);
         Array.from(areas).sort().forEach(area => {
             const option = document.createElement('option');
             option.value = area;
             option.textContent = area;
             areaSelect.appendChild(option);
         });
+        console.log('Area options after:', areaSelect?.options?.length);
 
         // Populate category dropdown
         const categorySelect = document.getElementById('categoryFilter');
+        console.log('categorySelect element:', categorySelect, 'options before:', categorySelect?.options?.length);
         Array.from(categories).sort().forEach(category => {
             const option = document.createElement('option');
             option.value = category;
             option.textContent = category;
             categorySelect.appendChild(option);
         });
+        console.log('Category options after:', categorySelect?.options?.length);
 
         // Populate salesperson dropdown
         const salespersonSelect = document.getElementById('salespersonFilter');
+        console.log('salespersonSelect element:', salespersonSelect, 'options before:', salespersonSelect?.options?.length);
         Array.from(salespersons).sort().forEach(person => {
             const option = document.createElement('option');
             option.value = person;
             option.textContent = person;
             salespersonSelect.appendChild(option);
         });
+        console.log('Salesperson options after:', salespersonSelect?.options?.length);
     }
 
     // Toggle flavour selection
