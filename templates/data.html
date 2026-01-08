@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Data Analysis - DOUANO{% endblock %}
+{% block title %}Companies - CRMinal{% endblock %}
 
 {% block content %}
 <div class="container-fluid px-4">
@@ -8,8 +8,8 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-5">
                 <div>
-                    <h2 class="fw-bold text-dark mb-1">Data Analysis</h2>
-                    <p class="text-muted mb-0">Overview of company performance and invoices</p>
+                    <h2 class="fw-bold text-dark mb-1">Companies</h2>
+                    <p class="text-muted mb-0">Your company directory and contacts</p>
                 </div>
                 <div class="d-flex gap-2">
                     {% if session.user_role == 'admin' %}
@@ -46,19 +46,20 @@
                     <div class="row align-items-center">
                     <div class="col-md-4 border-end">
                         <label class="text-uppercase text-muted small fw-bold mb-3 d-block">Select Data View</label>
-                            <div class="d-flex gap-2 flex-wrap">
-                            <button class="btn btn-outline-primary year-tag active rounded-pill px-4" data-year="2026" onclick="changeYear('2026')">
+                            <div class="d-flex gap-2 flex-wrap align-items-center">
+                            <button class="btn btn-outline-primary year-tag active rounded-pill px-4" data-year="2026" onclick="changeYear('2026', event)">
                                 2026
                                 </button>
-                            <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2025" onclick="changeYear('2025')">
+                            <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2025" onclick="changeYear('2025', event)">
                                 2025
                                 </button>
-                            <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2024" onclick="changeYear('2024')">
+                            <button class="btn btn-outline-primary year-tag rounded-pill px-4" data-year="2024" onclick="changeYear('2024', event)">
                                 2024
                                 </button>
-                            <button class="btn btn-outline-success year-tag rounded-pill px-4" data-year="combined" onclick="changeYear('combined')">
-                                Combined
+                            <button class="btn btn-outline-success year-tag rounded-pill px-4" data-year="combined" onclick="changeYear('combined', event)">
+                                All Years
                                 </button>
+                            <small class="text-muted ms-2" title="Hold Ctrl/Cmd to select multiple years"><i class="fas fa-info-circle"></i> Ctrl+click for multi-select</small>
                             </div>
                         </div>
                     <div class="col-md-8 ps-md-5">
@@ -69,6 +70,7 @@
                                     <small class="text-muted fw-bold text-uppercase">Companies</small>
                                     </div>
                                 </div>
+                                {% if session.user_role == 'admin' %}
                                 <div class="col-md-3">
                                     <div class="text-center">
                                     <div class="h3 fw-bold text-success mb-1" id="stat-total-revenue">-</div>
@@ -87,6 +89,7 @@
                                     <small class="text-muted fw-bold text-uppercase">Avg/Company</small>
                                     </div>
                                 </div>
+                                {% endif %}
                             </div>
                             
                             <!-- Year Breakdown for Combined View -->
@@ -587,7 +590,7 @@
         display: grid;
         grid-template-columns: 2fr 1.5fr 1fr 1fr auto;
         gap: 1rem;
-        align-items: end;
+        align-items: start;
     }
     
     @media (max-width: 1200px) {
@@ -855,6 +858,13 @@
     }
 
     /* Selected Tags */
+    .selected-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+        min-height: 0;
+    }
+
     .selected-tag {
         display: inline-flex;
         align-items: center;
@@ -1091,7 +1101,8 @@
 let allCompanies = [];
 let filteredCompanies = [];
 let currentViewMode = 'cards';
-let currentYear = '2026';
+let selectedYears = ['2026']; // Multi-select years
+let currentYear = '2026'; // Computed from selectedYears for API compatibility
 let categoryStates = {}; // Track category filter states: 'included', 'excluded', or null (removed)
 let showOnlyMajorRetailers = false; // Filter for major retailers
 
@@ -1283,23 +1294,63 @@ function checkUrlForCompany() {
     }
 }
 
-async function changeYear(year) {
-    currentYear = year;
-    
-    // Update active button
+async function changeYear(year, event) {
+    // If it's the 'combined' option, select all years
+    if (year === 'combined') {
+        selectedYears = ['2024', '2025', '2026'];
+    } else {
+        // Multi-select with Ctrl/Cmd click, otherwise single select
+        const isMultiSelect = event && (event.ctrlKey || event.metaKey);
+
+        if (isMultiSelect) {
+            // Toggle year in selection
+            const index = selectedYears.indexOf(year);
+            if (index > -1) {
+                // Remove if already selected (but keep at least one)
+                if (selectedYears.length > 1) {
+                    selectedYears.splice(index, 1);
+                }
+            } else {
+                selectedYears.push(year);
+            }
+        } else {
+            // Single select
+            selectedYears = [year];
+        }
+    }
+
+    // Sort years for consistent display
+    selectedYears.sort();
+
+    // Compute currentYear for API: use 'combined' if multiple years, otherwise single year
+    currentYear = selectedYears.length > 1 ? 'combined' : selectedYears[0];
+
+    // Update active buttons
     document.querySelectorAll('.year-tag').forEach(btn => {
         btn.classList.remove('active');
-        if (btn.dataset.year === year) {
+        const btnYear = btn.dataset.year;
+        if (btnYear === 'combined') {
+            // Combined is active when all 3 years are selected
+            if (selectedYears.length === 3 && selectedYears.includes('2024') && selectedYears.includes('2025') && selectedYears.includes('2026')) {
+                btn.classList.add('active');
+            }
+        } else if (selectedYears.includes(btnYear)) {
             btn.classList.add('active');
         }
     });
-    
+
     // Update current year display
     const currentYearSpan = document.getElementById('current-year');
     if (currentYearSpan) {
-        currentYearSpan.textContent = year === 'combined' ? '2024-2026' : year;
+        if (selectedYears.length === 3) {
+            currentYearSpan.textContent = '2024-2026';
+        } else if (selectedYears.length > 1) {
+            currentYearSpan.textContent = selectedYears.join(', ');
+        } else {
+            currentYearSpan.textContent = selectedYears[0];
+        }
     }
-    
+
     loadData();
 }
 
@@ -2133,10 +2184,12 @@ function displayCardsView() {
         const phone = company.phone || '';
         const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
 
+        const displayName = company.public_name || company.name;
+
         card.innerHTML = `
             <div class="company-card-modern h-100" data-company-id="${company.id}">
                 <div class="company-header">
-                    <h5 class="company-name">${escapeHtml(company.name)}</h5>
+                    <h5 class="company-name">${escapeHtml(displayName)}</h5>
                     ${company.customer_status ? `<span class="badge badge-soft-${getStatusColor(company.customer_status)}">${escapeHtml(company.customer_status)}</span>` : ''}
                 </div>
 
@@ -2158,10 +2211,10 @@ function displayCardsView() {
                     <button class="action-btn whatsapp" title="WhatsApp" onclick="event.stopPropagation(); whatsappCompany('${escapeHtml(cleanPhone)}')" ${!phone ? 'disabled' : ''}>
                         <i class="fab fa-whatsapp"></i>
                     </button>
-                    <button class="action-btn" title="Add to Trip" onclick="event.stopPropagation(); addToTrip(${company.id}, '${escapeHtml(company.name)}')">
+                    <button class="action-btn" title="Add to Trip" onclick="event.stopPropagation(); addToTrip(${company.id}, '${escapeHtml(displayName)}')">
                         <i class="fas fa-route"></i>
                     </button>
-                    <button class="action-btn" title="Create Task" onclick="event.stopPropagation(); createTask(${company.id}, '${escapeHtml(company.name)}')">
+                    <button class="action-btn" title="Create Task" onclick="event.stopPropagation(); createTask(${company.id}, '${escapeHtml(displayName)}')">
                         <i class="fas fa-tasks"></i>
                     </button>
                     <button class="action-btn primary" onclick="showCompanyDetails(${company.id})">
@@ -2246,8 +2299,9 @@ function displayTableView() {
 function showCompanyDetails(companyId) {
     const company = allCompanies.find(c => c.id === companyId);
     if (!company) return;
-    
-    document.getElementById('companyModalTitle').textContent = company.name;
+
+    const displayName = company.public_name || company.name;
+    document.getElementById('companyModalTitle').textContent = displayName;
     
     // Parse JSON fields if they're strings
     if (typeof company.company_categories === 'string') {
@@ -2311,6 +2365,11 @@ function showCompanyDetails(companyId) {
     const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
 
     const modalBody = document.getElementById('companyModalBody');
+    // Format customer_since date
+    const customerSinceFormatted = company.customer_since
+        ? new Date(company.customer_since).toLocaleDateString('nl-BE', {day: 'numeric', month: 'long', year: 'numeric'})
+        : null;
+
     modalBody.innerHTML = `
         <div class="sidepanel-content">
             <!-- Company Header -->
@@ -2318,7 +2377,8 @@ function showCompanyDetails(companyId) {
                 <div class="company-avatar">
                     <i class="fas fa-building"></i>
                 </div>
-                <h2 class="h4 mb-1 fw-bold text-dark">${escapeHtml(company.name)}</h2>
+                <h2 class="h4 mb-1 fw-bold text-dark">${escapeHtml(displayName)}</h2>
+                ${customerSinceFormatted ? `<div class="text-muted small mb-2"><i class="fas fa-calendar-check me-1"></i>Customer since ${customerSinceFormatted}</div>` : ''}
                 <div class="d-flex justify-content-center gap-2 text-muted small mb-3">
                     ${company.vat_number ? `<span><i class="fas fa-hashtag me-1"></i>${escapeHtml(company.vat_number)}</span>` : ''}
                     ${invoiceAddress.city ? `<span><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(invoiceAddress.city)}</span>` : ''}
