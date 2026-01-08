@@ -644,6 +644,25 @@
         return '';
     }
 
+    // Extract category names from company (same logic as data.html)
+    function getCompanyCategories(company) {
+        // Extract categories from raw_company_data first
+        if (company.raw_company_data && company.raw_company_data.company_categories) {
+            if (Array.isArray(company.raw_company_data.company_categories)) {
+                return company.raw_company_data.company_categories.map(cat => cat.name || cat).filter(c => c);
+            }
+        }
+
+        // Fallback: try direct company_categories field
+        if (company.company_categories) {
+            if (Array.isArray(company.company_categories)) {
+                return company.company_categories.map(cat => cat.name || cat).filter(c => c);
+            }
+        }
+
+        return [];
+    }
+
     // Populate filter dropdowns
     function populateFilters() {
         const flavours = new Set();
@@ -665,34 +684,13 @@
                 const city = safeString(getCompanyCity(company));
                 if (city) areas.add(city);
 
-                // Categories - try different formats
-                if (company.company_categories) {
-                    let cats = company.company_categories;
-
-                    // If string, try to parse as JSON first
-                    if (typeof cats === 'string') {
-                        try {
-                            cats = JSON.parse(cats);
-                        } catch (e) {
-                            // Treat as comma-separated
-                            cats = cats.split(',');
-                        }
+                // Categories - use same logic as Companies page
+                const companyCats = getCompanyCategories(company);
+                companyCats.forEach(cat => {
+                    if (cat && typeof cat === 'string') {
+                        categories.add(cat.trim());
                     }
-
-                    // Now process as array
-                    if (Array.isArray(cats)) {
-                        cats.forEach(c => {
-                            const val = safeString(c);
-                            if (val) categories.add(val);
-                        });
-                    }
-                }
-
-                // Also check company_tag for category
-                if (company.company_tag) {
-                    const tag = safeString(company.company_tag);
-                    if (tag) categories.add(tag);
-                }
+                });
 
                 // Salesperson
                 if (company.assigned_salesperson) {
@@ -835,29 +833,7 @@
 
             // Category filter
             if (selectedCategory) {
-                let companyCategories = [];
-                if (company.company_categories) {
-                    let cats = company.company_categories;
-
-                    // If string, try to parse as JSON first
-                    if (typeof cats === 'string') {
-                        try {
-                            cats = JSON.parse(cats);
-                        } catch (e) {
-                            cats = cats.split(',');
-                        }
-                    }
-
-                    // Process as array
-                    if (Array.isArray(cats)) {
-                        companyCategories = cats.map(c => safeString(c)).filter(c => c);
-                    }
-                }
-                // Also check company_tag
-                if (company.company_tag) {
-                    const tag = safeString(company.company_tag);
-                    if (tag) companyCategories.push(tag);
-                }
+                const companyCategories = getCompanyCategories(company);
                 if (!companyCategories.includes(selectedCategory)) return false;
             }
 
