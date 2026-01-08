@@ -609,6 +609,15 @@
         return '';
     }
 
+    // Safe string extraction helper
+    function safeString(val) {
+        if (val == null) return '';
+        if (typeof val === 'string') return val.trim();
+        if (typeof val === 'number') return String(val);
+        if (typeof val === 'object' && val.name) return String(val.name).trim();
+        return '';
+    }
+
     // Populate filter dropdowns
     function populateFilters() {
         const flavours = new Set();
@@ -617,47 +626,55 @@
         const salespersons = new Set();
 
         allCompanies.forEach(company => {
-            // Flavours
-            if (company.current_flavours && Array.isArray(company.current_flavours)) {
-                company.current_flavours.forEach(f => flavours.add(f));
-            }
-
-            // Areas (city from address or geocoded_address)
-            const city = getCompanyCity(company);
-            if (city && city.trim()) areas.add(city.trim());
-
-            // Categories - try different formats
-            if (company.company_categories) {
-                if (Array.isArray(company.company_categories)) {
-                    company.company_categories.forEach(c => {
-                        if (c && c.trim()) categories.add(c.trim());
+            try {
+                // Flavours
+                if (company.current_flavours && Array.isArray(company.current_flavours)) {
+                    company.current_flavours.forEach(f => {
+                        const val = safeString(f);
+                        if (val) flavours.add(val);
                     });
-                } else if (typeof company.company_categories === 'string') {
-                    // Could be comma-separated or JSON
-                    try {
-                        const parsed = JSON.parse(company.company_categories);
-                        if (Array.isArray(parsed)) {
-                            parsed.forEach(c => {
-                                if (c && c.trim) categories.add(c.trim());
-                            });
+                }
+
+                // Areas (city from address or geocoded_address)
+                const city = safeString(getCompanyCity(company));
+                if (city) areas.add(city);
+
+                // Categories - try different formats
+                if (company.company_categories) {
+                    let cats = company.company_categories;
+
+                    // If string, try to parse as JSON first
+                    if (typeof cats === 'string') {
+                        try {
+                            cats = JSON.parse(cats);
+                        } catch (e) {
+                            // Treat as comma-separated
+                            cats = cats.split(',');
                         }
-                    } catch (e) {
-                        // Treat as comma-separated string
-                        company.company_categories.split(',').forEach(c => {
-                            if (c && c.trim()) categories.add(c.trim());
+                    }
+
+                    // Now process as array
+                    if (Array.isArray(cats)) {
+                        cats.forEach(c => {
+                            const val = safeString(c);
+                            if (val) categories.add(val);
                         });
                     }
                 }
-            }
 
-            // Also check company_tag for category
-            if (company.company_tag && company.company_tag.trim()) {
-                categories.add(company.company_tag.trim());
-            }
+                // Also check company_tag for category
+                if (company.company_tag) {
+                    const tag = safeString(company.company_tag);
+                    if (tag) categories.add(tag);
+                }
 
-            // Salesperson
-            if (company.assigned_salesperson && company.assigned_salesperson.trim()) {
-                salespersons.add(company.assigned_salesperson.trim());
+                // Salesperson
+                if (company.assigned_salesperson) {
+                    const salesperson = safeString(company.assigned_salesperson);
+                    if (salesperson) salespersons.add(salesperson);
+                }
+            } catch (err) {
+                console.warn('Error processing company:', company.id, err);
             }
         });
 
@@ -773,22 +790,26 @@
             if (selectedCategory) {
                 let companyCategories = [];
                 if (company.company_categories) {
-                    if (Array.isArray(company.company_categories)) {
-                        companyCategories = company.company_categories.map(c => c.trim());
-                    } else if (typeof company.company_categories === 'string') {
+                    let cats = company.company_categories;
+
+                    // If string, try to parse as JSON first
+                    if (typeof cats === 'string') {
                         try {
-                            const parsed = JSON.parse(company.company_categories);
-                            if (Array.isArray(parsed)) {
-                                companyCategories = parsed.map(c => c.trim ? c.trim() : c);
-                            }
+                            cats = JSON.parse(cats);
                         } catch (e) {
-                            companyCategories = company.company_categories.split(',').map(c => c.trim());
+                            cats = cats.split(',');
                         }
+                    }
+
+                    // Process as array
+                    if (Array.isArray(cats)) {
+                        companyCategories = cats.map(c => safeString(c)).filter(c => c);
                     }
                 }
                 // Also check company_tag
                 if (company.company_tag) {
-                    companyCategories.push(company.company_tag.trim());
+                    const tag = safeString(company.company_tag);
+                    if (tag) companyCategories.push(tag);
                 }
                 if (!companyCategories.includes(selectedCategory)) return false;
             }
