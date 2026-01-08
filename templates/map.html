@@ -1,0 +1,840 @@
+{% extends "base.html" %}
+
+{% block title %}Map - CRMinal{% endblock %}
+
+{% block extra_head %}
+<!-- Mapbox GL JS -->
+<link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+<script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+<style>
+    /* Full-screen map layout */
+    .map-page-container {
+        position: relative;
+        height: calc(100vh - 65px);
+        width: 100%;
+        overflow: hidden;
+    }
+
+    #map {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Floating Filter Panel */
+    .filter-panel {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        width: 320px;
+        max-height: calc(100vh - 120px);
+        background: white;
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-xl);
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .filter-panel-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--bg-surface);
+    }
+
+    .filter-panel-header h5 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-panel-body {
+        padding: 1rem 1.25rem;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .filter-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .filter-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .filter-label {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-tertiary);
+        margin-bottom: 0.5rem;
+    }
+
+    .filter-select {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        background: white;
+        transition: all 0.15s ease;
+    }
+
+    .filter-select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .filter-checkbox-group {
+        max-height: 150px;
+        overflow-y: auto;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 0.5rem;
+    }
+
+    .filter-checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.375rem 0.5rem;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        font-size: 0.8125rem;
+    }
+
+    .filter-checkbox-item:hover {
+        background: var(--bg-hover);
+    }
+
+    .filter-checkbox-item input {
+        margin: 0;
+        accent-color: var(--accent);
+    }
+
+    .filter-checkbox-item.selected {
+        background: var(--accent-subtle);
+    }
+
+    /* Stats bar at bottom of filter panel */
+    .filter-stats {
+        padding: 0.75rem 1.25rem;
+        border-top: 1px solid var(--border-color);
+        background: var(--bg-hover);
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .stats-count {
+        font-weight: 600;
+        color: var(--accent);
+    }
+
+    /* Toggle button for mobile */
+    .filter-toggle-btn {
+        display: none;
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        z-index: 1001;
+        background: white;
+        border: none;
+        border-radius: var(--radius-md);
+        padding: 0.75rem;
+        box-shadow: var(--shadow-lg);
+        cursor: pointer;
+    }
+
+    /* Custom marker styles */
+    .company-marker {
+        cursor: pointer;
+    }
+
+    .marker-pin {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 3px solid white;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        background: linear-gradient(135deg, #5B5FEF, #4C4FE0);
+    }
+
+    .marker-pin:hover {
+        transform: scale(1.15);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    .marker-pin.no-flavour {
+        background: linear-gradient(135deg, #94a3b8, #64748b);
+    }
+
+    .marker-pin.has-flavour {
+        background: linear-gradient(135deg, #00695c, #004d40);
+    }
+
+    /* Popup styles */
+    .mapboxgl-popup-content {
+        padding: 0;
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        min-width: 250px;
+    }
+
+    .marker-popup {
+        padding: 1rem;
+    }
+
+    .marker-popup h6 {
+        margin: 0 0 0.75rem 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .marker-popup .popup-info {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.375rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .marker-popup .popup-info i {
+        width: 16px;
+        color: var(--text-tertiary);
+    }
+
+    .marker-popup .popup-flavours {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin: 0.75rem 0;
+    }
+
+    .marker-popup .flavour-badge {
+        display: inline-block;
+        padding: 0.125rem 0.5rem;
+        background: linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%);
+        color: #00695c;
+        font-size: 0.6875rem;
+        font-weight: 600;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .marker-popup .popup-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .marker-popup .popup-btn {
+        flex: 1;
+        padding: 0.5rem;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        transition: all 0.15s ease;
+    }
+
+    .marker-popup .popup-btn-primary {
+        background: var(--accent);
+        color: white;
+    }
+
+    .marker-popup .popup-btn-primary:hover {
+        background: var(--accent-hover);
+    }
+
+    .marker-popup .popup-btn-secondary {
+        background: var(--bg-hover);
+        color: var(--text-secondary);
+    }
+
+    .marker-popup .popup-btn-secondary:hover {
+        background: var(--bg-active);
+    }
+
+    /* Clear filters button */
+    .btn-clear-filters {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px dashed var(--border-color);
+        border-radius: var(--radius-md);
+        background: transparent;
+        color: var(--text-tertiary);
+        font-size: 0.8125rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        margin-top: 1rem;
+    }
+
+    .btn-clear-filters:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+        background: var(--accent-subtle);
+    }
+
+    /* Loading overlay */
+    .map-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 2rem;
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-xl);
+        text-align: center;
+        z-index: 2000;
+    }
+
+    .map-loading .spinner-border {
+        width: 2rem;
+        height: 2rem;
+        color: var(--accent);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .filter-panel {
+            width: calc(100% - 2rem);
+            max-height: 50vh;
+            top: auto;
+            bottom: 1rem;
+            transform: translateY(calc(100% + 1rem));
+            transition: transform 0.3s ease;
+        }
+
+        .filter-panel.show {
+            transform: translateY(0);
+        }
+
+        .filter-toggle-btn {
+            display: flex;
+        }
+    }
+
+    /* Search input in filter */
+    .filter-search-input {
+        width: 100%;
+        padding: 0.5rem 0.75rem 0.5rem 2rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .filter-search-wrapper {
+        position: relative;
+    }
+
+    .filter-search-wrapper i {
+        position: absolute;
+        left: 0.75rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-tertiary);
+        font-size: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="map-page-container">
+    <!-- Loading Overlay -->
+    <div class="map-loading" id="mapLoading">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-3 mb-0 text-muted">Loading companies...</p>
+    </div>
+
+    <!-- The Map -->
+    <div id="map"></div>
+
+    <!-- Mobile Toggle Button -->
+    <button class="filter-toggle-btn" id="filterToggle" onclick="toggleFilterPanel()">
+        <i class="fas fa-filter"></i>
+    </button>
+
+    <!-- Floating Filter Panel -->
+    <div class="filter-panel" id="filterPanel">
+        <div class="filter-panel-header">
+            <h5><i class="fas fa-filter text-muted"></i> Filters</h5>
+            <button class="btn btn-sm btn-link p-0" onclick="toggleFilterPanel()" style="display: none;" id="closeFilterBtn">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="filter-panel-body">
+            <!-- Search -->
+            <div class="filter-group">
+                <label class="filter-label">Search</label>
+                <div class="filter-search-wrapper">
+                    <i class="fas fa-search"></i>
+                    <input type="text" class="filter-search-input" id="searchInput" placeholder="Search companies..." oninput="applyFilters()">
+                </div>
+            </div>
+
+            <!-- Flavours Filter -->
+            <div class="filter-group">
+                <label class="filter-label">Flavours</label>
+                <div class="filter-checkbox-group" id="flavourFilters">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Area (City) Filter -->
+            <div class="filter-group">
+                <label class="filter-label">Area</label>
+                <select class="filter-select" id="areaFilter" onchange="applyFilters()">
+                    <option value="">All areas</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+
+            <!-- Category Filter -->
+            <div class="filter-group">
+                <label class="filter-label">Category</label>
+                <select class="filter-select" id="categoryFilter" onchange="applyFilters()">
+                    <option value="">All categories</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+
+            <!-- Assigned Salesperson Filter -->
+            <div class="filter-group">
+                <label class="filter-label">Assigned Salesperson</label>
+                <select class="filter-select" id="salespersonFilter" onchange="applyFilters()">
+                    <option value="">All salespersons</option>
+                    <!-- Populated by JS -->
+                </select>
+            </div>
+
+            <button class="btn-clear-filters" onclick="clearAllFilters()">
+                <i class="fas fa-times me-1"></i> Clear all filters
+            </button>
+        </div>
+
+        <div class="filter-stats">
+            <span>Showing <span class="stats-count" id="visibleCount">0</span> companies</span>
+            <span id="totalCount">of 0 total</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Mapbox configuration
+    const mapboxToken = '{{ mapbox_api_key }}';
+    let map;
+    let markers = [];
+    let allCompanies = [];
+
+    // Filter states
+    let selectedFlavours = [];
+    let selectedArea = '';
+    let selectedCategory = '';
+    let selectedSalesperson = '';
+    let searchTerm = '';
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeMap();
+        loadCompanies();
+    });
+
+    // Initialize Mapbox map
+    function initializeMap() {
+        mapboxgl.accessToken = mapboxToken;
+
+        map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/light-v11',
+            center: [4.3517, 50.8503], // Brussels, Belgium
+            zoom: 8
+        });
+
+        // Add navigation controls
+        map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+        // Add fullscreen control
+        map.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
+
+        console.log('Map initialized');
+    }
+
+    // Load companies from API
+    async function loadCompanies() {
+        try {
+            const response = await fetch('/api/companies-from-db?year=combined');
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            allCompanies = data.companies || [];
+            console.log(`Loaded ${allCompanies.length} companies`);
+
+            // Populate filter options
+            populateFilters();
+
+            // Add markers to map
+            addMarkersToMap(allCompanies);
+
+            // Hide loading
+            document.getElementById('mapLoading').style.display = 'none';
+
+            // Update stats
+            updateStats();
+
+        } catch (error) {
+            console.error('Error loading companies:', error);
+            document.getElementById('mapLoading').innerHTML = `
+                <i class="fas fa-exclamation-triangle text-danger fa-2x mb-3"></i>
+                <p class="mb-0">Failed to load companies</p>
+                <small class="text-muted">${error.message}</small>
+            `;
+        }
+    }
+
+    // Populate filter dropdowns
+    function populateFilters() {
+        const flavours = new Set();
+        const areas = new Set();
+        const categories = new Set();
+        const salespersons = new Set();
+
+        allCompanies.forEach(company => {
+            // Flavours
+            if (company.current_flavours) {
+                company.current_flavours.forEach(f => flavours.add(f));
+            }
+
+            // Areas (city from address or geocoded_address)
+            const city = company.address?.city || '';
+            if (city) areas.add(city);
+
+            // Categories
+            if (company.company_categories) {
+                if (Array.isArray(company.company_categories)) {
+                    company.company_categories.forEach(c => categories.add(c));
+                } else if (typeof company.company_categories === 'string') {
+                    company.company_categories.split(',').forEach(c => categories.add(c.trim()));
+                }
+            }
+
+            // Salesperson
+            if (company.assigned_salesperson) {
+                salespersons.add(company.assigned_salesperson);
+            }
+        });
+
+        // Populate flavour checkboxes
+        const flavourContainer = document.getElementById('flavourFilters');
+        flavourContainer.innerHTML = '';
+        Array.from(flavours).sort().forEach(flavour => {
+            const item = document.createElement('label');
+            item.className = 'filter-checkbox-item';
+            item.innerHTML = `
+                <input type="checkbox" value="${escapeHtml(flavour)}" onchange="toggleFlavour('${escapeHtml(flavour)}')">
+                <span>${escapeHtml(flavour)}</span>
+            `;
+            flavourContainer.appendChild(item);
+        });
+
+        if (flavours.size === 0) {
+            flavourContainer.innerHTML = '<div class="text-muted small p-2">No flavours found</div>';
+        }
+
+        // Populate area dropdown
+        const areaSelect = document.getElementById('areaFilter');
+        Array.from(areas).sort().forEach(area => {
+            const option = document.createElement('option');
+            option.value = area;
+            option.textContent = area;
+            areaSelect.appendChild(option);
+        });
+
+        // Populate category dropdown
+        const categorySelect = document.getElementById('categoryFilter');
+        Array.from(categories).sort().forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            categorySelect.appendChild(option);
+        });
+
+        // Populate salesperson dropdown
+        const salespersonSelect = document.getElementById('salespersonFilter');
+        Array.from(salespersons).sort().forEach(person => {
+            const option = document.createElement('option');
+            option.value = person;
+            option.textContent = person;
+            salespersonSelect.appendChild(option);
+        });
+    }
+
+    // Toggle flavour selection
+    function toggleFlavour(flavour) {
+        const index = selectedFlavours.indexOf(flavour);
+        if (index === -1) {
+            selectedFlavours.push(flavour);
+        } else {
+            selectedFlavours.splice(index, 1);
+        }
+
+        // Update checkbox visual
+        const checkboxes = document.querySelectorAll('#flavourFilters input[type="checkbox"]');
+        checkboxes.forEach(cb => {
+            const item = cb.closest('.filter-checkbox-item');
+            if (selectedFlavours.includes(cb.value)) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+
+        applyFilters();
+    }
+
+    // Apply all filters
+    function applyFilters() {
+        searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        selectedArea = document.getElementById('areaFilter').value;
+        selectedCategory = document.getElementById('categoryFilter').value;
+        selectedSalesperson = document.getElementById('salespersonFilter').value;
+
+        const filteredCompanies = allCompanies.filter(company => {
+            // Search filter
+            if (searchTerm) {
+                const searchable = [
+                    company.name || '',
+                    company.public_name || '',
+                    company.vat_number || '',
+                    company.address?.city || ''
+                ].join(' ').toLowerCase();
+                if (!searchable.includes(searchTerm)) return false;
+            }
+
+            // Flavour filter
+            if (selectedFlavours.length > 0) {
+                const companyFlavours = company.current_flavours || [];
+                const hasSelectedFlavour = companyFlavours.some(f => selectedFlavours.includes(f));
+                if (!hasSelectedFlavour) return false;
+            }
+
+            // Area filter
+            if (selectedArea) {
+                const city = company.address?.city || '';
+                if (city !== selectedArea) return false;
+            }
+
+            // Category filter
+            if (selectedCategory) {
+                let companyCategories = [];
+                if (company.company_categories) {
+                    if (Array.isArray(company.company_categories)) {
+                        companyCategories = company.company_categories;
+                    } else if (typeof company.company_categories === 'string') {
+                        companyCategories = company.company_categories.split(',').map(c => c.trim());
+                    }
+                }
+                if (!companyCategories.includes(selectedCategory)) return false;
+            }
+
+            // Salesperson filter
+            if (selectedSalesperson) {
+                if (company.assigned_salesperson !== selectedSalesperson) return false;
+            }
+
+            return true;
+        });
+
+        // Update markers
+        clearMarkers();
+        addMarkersToMap(filteredCompanies);
+        updateStats();
+    }
+
+    // Clear all markers from map
+    function clearMarkers() {
+        markers.forEach(m => m.marker.remove());
+        markers = [];
+    }
+
+    // Add markers to map
+    function addMarkersToMap(companies) {
+        const bounds = new mapboxgl.LngLatBounds();
+        let hasValidCoords = false;
+
+        companies.forEach(company => {
+            // Check for valid coordinates
+            const lat = parseFloat(company.latitude);
+            const lng = parseFloat(company.longitude);
+
+            if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
+
+            hasValidCoords = true;
+            const coordinates = [lng, lat];
+
+            // Create marker element
+            const markerElement = document.createElement('div');
+            markerElement.className = 'company-marker';
+
+            const hasFlavours = company.current_flavours && company.current_flavours.length > 0;
+            markerElement.innerHTML = `
+                <div class="marker-pin ${hasFlavours ? 'has-flavour' : 'no-flavour'}">
+                    <i class="fas fa-building"></i>
+                </div>
+            `;
+
+            // Create popup content
+            const displayName = company.public_name || company.name || 'Unknown Company';
+            const city = company.address?.city || '';
+            const phone = company.phone || '';
+            const email = company.email || '';
+            const flavours = company.current_flavours || [];
+
+            const popupContent = `
+                <div class="marker-popup">
+                    <h6>${escapeHtml(displayName)}</h6>
+                    ${city ? `<div class="popup-info"><i class="fas fa-map-marker-alt"></i> ${escapeHtml(city)}</div>` : ''}
+                    ${phone ? `<div class="popup-info"><i class="fas fa-phone"></i> ${escapeHtml(phone)}</div>` : ''}
+                    ${email ? `<div class="popup-info"><i class="fas fa-envelope"></i> ${escapeHtml(email)}</div>` : ''}
+                    ${company.assigned_salesperson ? `<div class="popup-info"><i class="fas fa-user"></i> ${escapeHtml(company.assigned_salesperson)}</div>` : ''}
+                    ${flavours.length > 0 ? `
+                        <div class="popup-flavours">
+                            ${flavours.map(f => `<span class="flavour-badge">${escapeHtml(f)}</span>`).join('')}
+                        </div>
+                    ` : ''}
+                    <div class="popup-actions">
+                        <button class="popup-btn popup-btn-secondary" onclick="window.open('tel:${escapeHtml(phone)}')">
+                            <i class="fas fa-phone"></i> Call
+                        </button>
+                        <button class="popup-btn popup-btn-primary" onclick="viewCompanyDetails(${company.company_id || company.id})">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            // Create popup
+            const popup = new mapboxgl.Popup({
+                offset: 25,
+                closeButton: true,
+                closeOnClick: false,
+                maxWidth: '280px'
+            }).setHTML(popupContent);
+
+            // Create marker
+            const marker = new mapboxgl.Marker(markerElement)
+                .setLngLat(coordinates)
+                .setPopup(popup)
+                .addTo(map);
+
+            markers.push({
+                marker: marker,
+                company: company,
+                coordinates: coordinates
+            });
+
+            bounds.extend(coordinates);
+        });
+
+        // Fit map to markers
+        if (hasValidCoords && markers.length > 0) {
+            map.fitBounds(bounds, {
+                padding: 80,
+                maxZoom: 14
+            });
+        }
+
+        updateStats();
+    }
+
+    // Update statistics
+    function updateStats() {
+        document.getElementById('visibleCount').textContent = markers.length;
+        document.getElementById('totalCount').textContent = `of ${allCompanies.length} total`;
+    }
+
+    // Clear all filters
+    function clearAllFilters() {
+        // Reset search
+        document.getElementById('searchInput').value = '';
+
+        // Reset dropdowns
+        document.getElementById('areaFilter').value = '';
+        document.getElementById('categoryFilter').value = '';
+        document.getElementById('salespersonFilter').value = '';
+
+        // Reset flavour checkboxes
+        selectedFlavours = [];
+        const checkboxes = document.querySelectorAll('#flavourFilters input[type="checkbox"]');
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+            cb.closest('.filter-checkbox-item').classList.remove('selected');
+        });
+
+        // Re-apply (show all)
+        applyFilters();
+    }
+
+    // View company details (navigate to data page with company selected)
+    function viewCompanyDetails(companyId) {
+        window.location.href = `/data?company=${companyId}`;
+    }
+
+    // Toggle filter panel (mobile)
+    function toggleFilterPanel() {
+        const panel = document.getElementById('filterPanel');
+        panel.classList.toggle('show');
+    }
+
+    // Escape HTML helper
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+</script>
+{% endblock %}

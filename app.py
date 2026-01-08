@@ -7058,6 +7058,18 @@ def data():
     return render_template('data.html')
 
 
+@app.route('/map')
+def companies_map():
+    """Map view of all companies with filtering"""
+    if not is_logged_in():
+        return redirect(url_for('index'))
+
+    # Mapbox API key
+    mapbox_api_key = "pk.eyJ1IjoiaGVuZHJpa3l1Z2VuIiwiYSI6ImNtY24zZnB4YTAwNTYybnMzNGVpemZxdGEifQ.HIpLMTGycSiEsf7ytxaSJg"
+
+    return render_template('map.html', mapbox_api_key=mapbox_api_key)
+
+
 @app.route('/retailer-details/<int:company_id>')
 def retailer_details(company_id):
     """Detailed analytics page for major retailers"""
