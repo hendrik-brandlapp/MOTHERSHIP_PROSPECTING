@@ -2190,8 +2190,29 @@ function displayCardsView() {
             company.address.country
         ].filter(part => part).join(', ');
 
-        // Get email and phone
-        const email = company.email_addresses || company.email || '';
+        // Parse raw_company_data for email and contact person
+        let rawData = {};
+        if (company.raw_company_data) {
+            try {
+                rawData = typeof company.raw_company_data === 'string'
+                    ? JSON.parse(company.raw_company_data)
+                    : company.raw_company_data;
+            } catch (e) {
+                rawData = {};
+            }
+        }
+
+        // Extract email from raw_company_data
+        let emailFromRaw = '';
+        if (rawData.email_addresses && Array.isArray(rawData.email_addresses) && rawData.email_addresses.length > 0) {
+            emailFromRaw = rawData.email_addresses[0];
+        }
+
+        // Extract contact person from raw_company_data
+        const contactPerson = rawData.name || company.contact_person || '';
+
+        // Get email and phone (prioritize raw_company_data)
+        const email = emailFromRaw || company.email_addresses || company.email || '';
         const phone = company.phone || '';
         const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
 
@@ -2208,7 +2229,7 @@ function displayCardsView() {
                     ${addressParts ? `<div class="contact-item"><i class="fas fa-map-marker-alt"></i><span>${escapeHtml(addressParts)}</span></div>` : ''}
                     ${phone ? `<div class="contact-item clickable" onclick="event.stopPropagation(); callCompany('${escapeHtml(cleanPhone)}')"><i class="fas fa-phone"></i><span>${escapeHtml(phone)}</span></div>` : ''}
                     ${email ? `<div class="contact-item clickable" onclick="event.stopPropagation(); emailCompany('${escapeHtml(email)}')"><i class="fas fa-envelope"></i><span>${escapeHtml(email)}</span></div>` : ''}
-                    ${company.contact_person ? `<div class="contact-item"><i class="fas fa-user"></i><span>${escapeHtml(company.contact_person)}</span></div>` : ''}
+                    ${contactPerson ? `<div class="contact-item"><i class="fas fa-user"></i><span>${escapeHtml(contactPerson)}</span></div>` : ''}
                     ${company.vat_number ? `<div class="contact-item"><i class="fas fa-hashtag"></i><span>${escapeHtml(company.vat_number)}</span></div>` : ''}
                 </div>
 
@@ -2369,9 +2390,19 @@ function showCompanyDetails(companyId) {
     
     // Extract address from raw data if not in structured format
     const invoiceAddress = rawData.invoice_address || {};
-    
-    // Get email and phone for quick actions
-    const email = company.email_addresses || company.email || '';
+
+    // Extract email_addresses from raw_company_data (it's an array)
+    let emailFromRaw = '';
+    if (rawData.email_addresses && Array.isArray(rawData.email_addresses) && rawData.email_addresses.length > 0) {
+        emailFromRaw = rawData.email_addresses[0]; // Use first email
+    }
+
+    // Extract contact person name from raw_company_data
+    const contactPersonFromRaw = rawData.name || '';
+
+    // Get email and phone for quick actions (prioritize raw_company_data)
+    const email = emailFromRaw || company.email_addresses || company.email || '';
+    const contactPerson = contactPersonFromRaw || company.contact_person || '';
     const phone = company.phone || '';
     const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
 
@@ -2444,7 +2475,7 @@ function showCompanyDetails(companyId) {
                 <div class="row g-4">
                     <div class="col-md-6">
                         <div class="detail-label">Contact Person</div>
-                        <div class="detail-value">${escapeHtml(company.contact_person || 'N/A')}</div>
+                        <div class="detail-value">${escapeHtml(contactPerson || 'N/A')}</div>
                     </div>
                     <div class="col-md-6">
                         <div class="detail-label">Email</div>
