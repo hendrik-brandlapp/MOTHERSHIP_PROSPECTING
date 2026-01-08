@@ -307,67 +307,6 @@
     </div>
 </div>
 
-<!-- AI Chat Widget -->
-<button class="ai-chat-fab" onclick="toggleAIChat()" title="Ask AI about your data">
-    <i class="fas fa-sparkles"></i>
-    <div class="badge-dot"></div>
-</button>
-
-<div class="ai-chat-panel" id="aiChatPanel">
-    <div class="ai-chat-header">
-        <div class="ai-chat-header-info">
-            <div class="ai-chat-avatar">
-                <i class="fas fa-robot"></i>
-            </div>
-            <div>
-                <h6>Sales Intelligence AI</h6>
-                <small>Ask questions about your data</small>
-            </div>
-        </div>
-        <button class="ai-chat-close" onclick="toggleAIChat()">
-            <i class="fas fa-times"></i>
-        </button>
-    </div>
-    
-    <div class="ai-chat-messages" id="aiChatMessages">
-        <div class="chat-message assistant">
-            <strong>Hey! 👋</strong><br>
-            I can help you analyze your sales data. Ask me anything about:
-            <ul style="margin: 0.5rem 0 0; padding-left: 1.25rem;">
-                <li>Company performance & revenue</li>
-                <li>Sales trends by region or product</li>
-                <li>Invoice analysis & comparisons</li>
-                <li>Wholesaler & distributor data</li>
-            </ul>
-        </div>
-    </div>
-    
-    <div class="ai-chat-input-area">
-        <div class="ai-chat-suggestions" id="aiSuggestions">
-            <button class="ai-suggestion-chip" onclick="askAI('What are my top 10 customers by revenue?')">
-                Top 10 customers
-            </button>
-            <button class="ai-suggestion-chip" onclick="askAI('Show revenue breakdown by month for 2025')">
-                Monthly revenue
-            </button>
-            <button class="ai-suggestion-chip" onclick="askAI('Which products are selling the most?')">
-                Top products
-            </button>
-        </div>
-        <div class="ai-chat-input-wrapper">
-            <textarea 
-                class="ai-chat-input" 
-                id="aiChatInput" 
-                placeholder="Ask about your sales data..."
-                rows="1"
-                onkeydown="handleChatKeydown(event)"
-            ></textarea>
-            <button class="ai-chat-send" onclick="sendAIMessage()" id="aiSendBtn">
-                <i class="fas fa-paper-plane"></i>
-            </button>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -439,13 +378,13 @@
 .sidepanel {
     position: fixed;
     top: 0;
-    right: -50vw;
-    width: 50vw;
-    max-width: 90vw;
+    right: -100vw;
+    width: 100vw;
+    max-width: 100vw;
     height: 100%;
-        background: var(--card-bg);
-        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
-        transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    background: var(--card-bg);
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1);
+    transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 1050;
     display: flex;
     flex-direction: column;
@@ -474,10 +413,15 @@
 
 .sidepanel-body {
     flex: 1;
-        padding: 2rem;
+    padding: 2rem;
     overflow-y: auto;
-        background-color: #ffffff;
-    }
+    background-color: #ffffff;
+}
+
+.sidepanel-content {
+    max-width: 800px;
+    margin: 0 auto;
+}
 
     /* Detail Sections */
     .detail-section {
@@ -632,10 +576,10 @@
        FILTER CARD - Clean Grid Layout
        ===================================================== */
     .filter-card {
-    background: white;
-        border-radius: var(--radius-lg);
-        padding: 1.25rem 1.5rem;
-        box-shadow: var(--shadow-sm);
+        background: white;
+        border-radius: var(--radius-xl);
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
         border: 1px solid var(--border-color);
     }
     
@@ -703,7 +647,19 @@
     .filter-input:focus {
         outline: none;
         border-color: var(--primary-color);
-        box-shadow: 0 0 0 3px var(--primary-soft);
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+
+    .filter-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+
+    .filter-dropdown-trigger:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
     }
     
     .filter-select {
@@ -898,328 +854,238 @@
         color: white;
     }
 
-    /* AI Chat Widget Styles */
-    .ai-chat-fab {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        color: white;
-        border: none;
-        cursor: pointer;
-        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    
-    .ai-chat-fab:hover {
-        transform: scale(1.1);
-        box-shadow: 0 6px 30px rgba(99, 102, 241, 0.5);
-    }
-    
-    .ai-chat-fab i {
-        font-size: 1.5rem;
-    }
-    
-    .ai-chat-fab .badge-dot {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #10b981;
-        border: 2px solid white;
-    }
-
-    .ai-chat-panel {
-        position: fixed;
-        bottom: 100px;
-        right: 24px;
-        width: 520px;
-        max-width: calc(100vw - 48px);
-        height: 700px;
-        max-height: calc(100vh - 140px);
-        background: white;
-        border-radius: var(--radius-xl);
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-        display: flex;
-        flex-direction: column;
-        z-index: 1001;
-        opacity: 0;
-        visibility: hidden;
-        transform: translateY(20px) scale(0.95);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    
-    .ai-chat-panel.show {
-        opacity: 1;
-        visibility: visible;
-        transform: translateY(0) scale(1);
-    }
-    
-    .ai-chat-header {
-        padding: 1.25rem 1.5rem;
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .ai-chat-header-info {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
-    
-    .ai-chat-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.2);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .ai-chat-header h6 {
-        margin: 0;
-        font-weight: 600;
-        font-size: 1rem;
-    }
-    
-    .ai-chat-header small {
-        opacity: 0.8;
-    font-size: 0.75rem;
-}
-
-    .ai-chat-close {
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        color: white;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.2s;
-    }
-    
-    .ai-chat-close:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
-    
-    .ai-chat-messages {
-        flex: 1;
-        overflow-y: auto;
-        padding: 1.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        background: #f8fafc;
-    }
-    
-    .chat-message {
-        max-width: 85%;
-        padding: 0.875rem 1rem;
-        border-radius: var(--radius-lg);
-        font-size: 0.875rem;
-        line-height: 1.5;
-        animation: messageSlideIn 0.3s ease;
-    }
-    
-    @keyframes messageSlideIn {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    .chat-message.user {
-        align-self: flex-end;
-        background: var(--primary-color);
-        color: white;
-        border-bottom-right-radius: 4px;
-    }
-    
-    .chat-message.assistant {
-        align-self: flex-start;
-        background: white;
-        color: var(--text-main);
-        border-bottom-left-radius: 4px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-    
-    .chat-message.assistant pre {
-        background: #f1f5f9;
-        padding: 0.75rem;
-        border-radius: var(--radius-md);
-        overflow-x: auto;
-        font-size: 0.8rem;
-        margin: 0.5rem 0;
-    }
-    
-    .chat-message.assistant code {
-        font-family: 'SF Mono', 'Monaco', monospace;
-        background: #e2e8f0;
-        padding: 0.125rem 0.375rem;
-    border-radius: 4px;
-        font-size: 0.8rem;
-    }
-    
-    .chat-message.assistant table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 0.5rem 0;
-        font-size: 0.8rem;
-    }
-    
-    .chat-message.assistant th,
-    .chat-message.assistant td {
-        padding: 0.5rem;
-        border: 1px solid var(--border-color);
-        text-align: left;
-    }
-    
-    .chat-message.assistant th {
-        background: #f1f5f9;
-    font-weight: 600;
-}
-
-    .chat-typing {
-        display: flex;
-        gap: 4px;
-        padding: 1rem;
-        background: white;
-        border-radius: var(--radius-lg);
-        width: fit-content;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-    
-    .chat-typing span {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #cbd5e1;
-        animation: typingDot 1.4s infinite ease-in-out;
-    }
-    
-    .chat-typing span:nth-child(1) { animation-delay: 0s; }
-    .chat-typing span:nth-child(2) { animation-delay: 0.2s; }
-    .chat-typing span:nth-child(3) { animation-delay: 0.4s; }
-    
-    @keyframes typingDot {
-        0%, 60%, 100% { transform: translateY(0); background: #cbd5e1; }
-        30% { transform: translateY(-6px); background: var(--primary-color); }
-    }
-    
-    .ai-chat-input-area {
-        padding: 1rem 1.5rem 1.5rem;
-        background: white;
-        border-top: 1px solid var(--border-color);
-        border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-    }
-    
-    .ai-chat-suggestions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-        margin-bottom: 0.75rem;
-    }
-    
-    .ai-suggestion-chip {
-        padding: 0.375rem 0.75rem;
-        background: var(--primary-soft);
-        color: var(--primary-color);
-        border: none;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-    cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .ai-suggestion-chip:hover {
-        background: var(--primary-color);
-        color: white;
-    }
-    
-    .ai-chat-input-wrapper {
-        display: flex;
-        gap: 0.75rem;
-        align-items: flex-end;
-    }
-    
-    .ai-chat-input {
-        flex: 1;
-        padding: 0.75rem 1rem;
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-lg);
-        font-size: 0.875rem;
-        resize: none;
-        min-height: 44px;
-        max-height: 120px;
-        transition: border-color 0.2s;
-    }
-    
-    .ai-chat-input:focus {
-        outline: none;
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 3px var(--primary-soft);
-    }
-    
-    .ai-chat-send {
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        background: var(--primary-color);
-        color: white;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s;
-        flex-shrink: 0;
-    }
-    
-    .ai-chat-send:hover:not(:disabled) {
-        background: #4f46e5;
-        transform: scale(1.05);
-    }
-    
-    .ai-chat-send:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
     /* Selected Tags */
     .selected-tag {
-    display: inline-flex;
-    align-items: center;
+        display: inline-flex;
+        align-items: center;
         gap: 0.35rem;
-        padding: 0.35rem 0.75rem;
-        background: #fee2e2;
-        border: 1px solid #fca5a5;
+        padding: 0.375rem 0.75rem;
+        background: var(--primary-soft);
+        border: 1px solid var(--primary-color);
         border-radius: 9999px;
         font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--primary-color);
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .selected-tag:hover {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .selected-tag.excluded {
+        background: #fee2e2;
+        border-color: #fca5a5;
         color: #b91c1c;
-    cursor: pointer;
-    transition: all 0.2s ease;
+    }
+
+    .selected-tag.excluded:hover {
+        background: #fca5a5;
+        color: #7f1d1d;
     }
     
     .year-tag {
         border-radius: 9999px;
         font-weight: 500;
         padding: 0.5rem 1.25rem;
-}
+    }
+
+    /* =====================================================
+       COMPANY CARDS - Modern Redesign
+       ===================================================== */
+    .company-card-modern {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 0;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .company-card-modern:hover {
+        border-color: var(--primary-color);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
+
+    .company-header {
+        padding: 1.25rem 1.25rem 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .company-name {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-main);
+        margin: 0;
+        line-height: 1.3;
+    }
+
+    .company-contact {
+        padding: 0 1.25rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        flex: 1;
+    }
+
+    .contact-item {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        font-size: 0.8125rem;
+        color: var(--text-muted);
+    }
+
+    .contact-item.clickable {
+        cursor: pointer;
+        transition: color 0.15s ease;
+    }
+
+    .contact-item.clickable:hover {
+        color: var(--primary-color);
+    }
+
+    .contact-item i {
+        width: 16px;
+        text-align: center;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+    }
+
+    .contact-item span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Quick Action Buttons */
+    .company-actions {
+        display: flex;
+        gap: 0.375rem;
+        padding: 0.875rem 1.25rem;
+        background: var(--surface-bg);
+        border-top: 1px solid var(--border-color);
+        margin-top: auto;
+    }
+
+    .action-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-color);
+        background: white;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.875rem;
+    }
+
+    .action-btn:hover:not(:disabled) {
+        background: var(--primary-soft);
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+    }
+
+    .action-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    .action-btn.whatsapp:hover:not(:disabled) {
+        background: #dcf8c6;
+        border-color: #25d366;
+        color: #25d366;
+    }
+
+    .action-btn.primary {
+        flex: 1;
+        width: auto;
+        padding: 0 0.75rem;
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        font-weight: 500;
+        gap: 0.375rem;
+    }
+
+    .action-btn.primary:hover {
+        background: #4f46e5;
+    }
+
+    /* =====================================================
+       SIDEPANEL - Simplified Layout
+       ===================================================== */
+    .company-profile-header {
+        text-align: center;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 1.5rem;
+    }
+
+    .company-avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: var(--primary-soft);
+        color: var(--primary-color);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin: 0 auto 1rem;
+    }
+
+    .quick-actions-row {
+        display: flex;
+        justify-content: center;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .quick-action {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--surface-bg);
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        transition: all 0.2s ease;
+        text-decoration: none;
+    }
+
+    .quick-action:hover:not(.disabled) {
+        background: var(--primary-soft);
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+        transform: scale(1.05);
+    }
+
+    .quick-action.whatsapp:hover:not(.disabled) {
+        background: #dcf8c6;
+        border-color: #25d366;
+        color: #25d366;
+    }
+
+    .quick-action.disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
 </style>
 <script>
 let allCompanies = [];
@@ -2252,59 +2118,74 @@ function displayCompanies() {
 function displayCardsView() {
     const container = document.getElementById('companies-cards');
     container.innerHTML = '';
-    
+
     filteredCompanies.forEach(company => {
         const card = document.createElement('div');
         card.className = 'col-md-6 col-lg-4 mb-4';
-        
+
         const addressParts = [
             company.address.city,
             company.address.country
         ].filter(part => part).join(', ');
-        
-        const isMajor = isMajorRetailer(company.company_id);
-        
+
+        // Get email and phone
+        const email = company.email_addresses || company.email || '';
+        const phone = company.phone || '';
+        const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
+
         card.innerHTML = `
-            <div class="modern-card h-100 position-relative" data-company-id="${company.id}" style="cursor: pointer;" onclick="showCompanyDetails(${company.id})">
-                ${isMajor ? '<div class="position-absolute top-0 end-0 mt-3 me-3"><i class="fas fa-star text-warning"></i></div>' : ''}
-                <div class="p-4">
-                    <div class="mb-4">
-                        <h5 class="fw-bold mb-2 text-dark">${escapeHtml(company.name)}</h5>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <span class="badge badge-soft-primary">${company.invoice_count} invoices</span>
-                            ${isMajor ? '<span class="badge badge-soft-warning">Major Retailer</span>' : ''}
-                        </div>
-                    </div>
-                    
-                    <div class="row g-3 mb-4">
-                            <div class="col-6">
-                            <div class="text-muted small text-uppercase fw-bold mb-1">Total Revenue</div>
-                            <div class="h5 mb-0 text-success fw-bold">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-                            </div>
-                            <div class="col-6">
-                            <div class="text-muted small text-uppercase fw-bold mb-1">Avg Invoice</div>
-                            <div class="h5 mb-0 text-dark fw-bold">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-                        </div>
-                    </div>
-                    
-                    <div class="d-flex flex-column gap-2 mb-4">
-                        ${company.vat_number ? `<div class="d-flex align-items-center text-muted small"><i class="fas fa-hashtag w-5 me-2 text-center"></i>${escapeHtml(company.vat_number)}</div>` : ''}
-                        ${addressParts ? `<div class="d-flex align-items-center text-muted small"><i class="fas fa-map-marker-alt w-5 me-2 text-center"></i>${escapeHtml(addressParts)}</div>` : ''}
-                        ${company.contact_person ? `<div class="d-flex align-items-center text-muted small"><i class="fas fa-user w-5 me-2 text-center"></i>${escapeHtml(company.contact_person)}</div>` : ''}
-                    </div>
-                    </div>
-                    
-                <div class="px-4 py-3 bg-light border-top d-flex justify-content-between align-items-center rounded-bottom">
-                        <small class="text-muted">
-                        <i class="far fa-clock me-1"></i> ${company.last_invoice_date ? new Date(company.last_invoice_date).toLocaleDateString('nl-BE') : 'No invoices'}
-                        </small>
-                    <span class="text-primary fw-bold small">View Details <i class="fas fa-arrow-right ms-1"></i></span>
+            <div class="company-card-modern h-100" data-company-id="${company.id}">
+                <div class="company-header">
+                    <h5 class="company-name">${escapeHtml(company.name)}</h5>
+                    ${company.customer_status ? `<span class="badge badge-soft-${getStatusColor(company.customer_status)}">${escapeHtml(company.customer_status)}</span>` : ''}
+                </div>
+
+                <div class="company-contact">
+                    ${addressParts ? `<div class="contact-item"><i class="fas fa-map-marker-alt"></i><span>${escapeHtml(addressParts)}</span></div>` : ''}
+                    ${phone ? `<div class="contact-item clickable" onclick="event.stopPropagation(); callCompany('${escapeHtml(cleanPhone)}')"><i class="fas fa-phone"></i><span>${escapeHtml(phone)}</span></div>` : ''}
+                    ${email ? `<div class="contact-item clickable" onclick="event.stopPropagation(); emailCompany('${escapeHtml(email)}')"><i class="fas fa-envelope"></i><span>${escapeHtml(email)}</span></div>` : ''}
+                    ${company.contact_person ? `<div class="contact-item"><i class="fas fa-user"></i><span>${escapeHtml(company.contact_person)}</span></div>` : ''}
+                    ${company.vat_number ? `<div class="contact-item"><i class="fas fa-hashtag"></i><span>${escapeHtml(company.vat_number)}</span></div>` : ''}
+                </div>
+
+                <div class="company-actions">
+                    <button class="action-btn" title="Call" onclick="event.stopPropagation(); callCompany('${escapeHtml(cleanPhone)}')" ${!phone ? 'disabled' : ''}>
+                        <i class="fas fa-phone"></i>
+                    </button>
+                    <button class="action-btn" title="Email" onclick="event.stopPropagation(); emailCompany('${escapeHtml(email)}')" ${!email ? 'disabled' : ''}>
+                        <i class="fas fa-envelope"></i>
+                    </button>
+                    <button class="action-btn whatsapp" title="WhatsApp" onclick="event.stopPropagation(); whatsappCompany('${escapeHtml(cleanPhone)}')" ${!phone ? 'disabled' : ''}>
+                        <i class="fab fa-whatsapp"></i>
+                    </button>
+                    <button class="action-btn" title="Add to Trip" onclick="event.stopPropagation(); addToTrip(${company.id}, '${escapeHtml(company.name)}')">
+                        <i class="fas fa-route"></i>
+                    </button>
+                    <button class="action-btn" title="Create Task" onclick="event.stopPropagation(); createTask(${company.id}, '${escapeHtml(company.name)}')">
+                        <i class="fas fa-tasks"></i>
+                    </button>
+                    <button class="action-btn primary" onclick="showCompanyDetails(${company.id})">
+                        <i class="fas fa-eye"></i> View
+                    </button>
                 </div>
             </div>
         `;
-        
+
         container.appendChild(card);
     });
+}
+
+// Helper function for status badge colors
+function getStatusColor(status) {
+    const colors = {
+        'active': 'success',
+        'priority': 'primary',
+        'watch': 'warning',
+        'at_risk': 'danger',
+        'dormant': 'secondary',
+        'churned': 'dark'
+    };
+    return colors[status] || 'secondary';
 }
 
 function displayTableView() {
@@ -2424,102 +2305,98 @@ function showCompanyDetails(companyId) {
     // Extract address from raw data if not in structured format
     const invoiceAddress = rawData.invoice_address || {};
     
+    // Get email and phone for quick actions
+    const email = company.email_addresses || company.email || '';
+    const phone = company.phone || '';
+    const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
+
     const modalBody = document.getElementById('companyModalBody');
     modalBody.innerHTML = `
-        <div class="d-flex align-items-center mb-4">
-            <div class="bg-light rounded-circle p-3 me-3 text-primary">
-                <i class="fas fa-building fa-2x"></i>
-                            </div>
-            <div>
+        <div class="sidepanel-content">
+            <!-- Company Header -->
+            <div class="company-profile-header">
+                <div class="company-avatar">
+                    <i class="fas fa-building"></i>
+                </div>
                 <h2 class="h4 mb-1 fw-bold text-dark">${escapeHtml(company.name)}</h2>
-                <div class="d-flex gap-2 text-muted small">
+                <div class="d-flex justify-content-center gap-2 text-muted small mb-3">
                     ${company.vat_number ? `<span><i class="fas fa-hashtag me-1"></i>${escapeHtml(company.vat_number)}</span>` : ''}
                     ${invoiceAddress.city ? `<span><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(invoiceAddress.city)}</span>` : ''}
-                        </div>
-                    </div>
-                        </div>
-                        
-        <!-- Key Metrics -->
-        <div class="row g-3 mb-4">
-            <div class="col-4">
-                <div class="p-3 bg-light rounded-3 border">
-                    <div class="text-muted small fw-bold text-uppercase mb-1">Total Revenue</div>
-                    <div class="h5 mb-0 text-success fw-bold">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
-                        </div>
-                    </div>
-            <div class="col-4">
-                <div class="p-3 bg-light rounded-3 border">
-                    <div class="text-muted small fw-bold text-uppercase mb-1">Invoices</div>
-                    <div class="h5 mb-0 text-primary fw-bold">${company.invoice_count}</div>
                 </div>
-                    </div>
-            <div class="col-4">
-                <div class="p-3 bg-light rounded-3 border">
-                    <div class="text-muted small fw-bold text-uppercase mb-1">Avg Invoice</div>
-                    <div class="h5 mb-0 text-dark fw-bold">€${company.average_invoice_value.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
+
+                <!-- Quick Actions Row -->
+                <div class="quick-actions-row">
+                    <a href="tel:${escapeHtml(cleanPhone)}" class="quick-action ${!phone ? 'disabled' : ''}" title="Call">
+                        <i class="fas fa-phone"></i>
+                    </a>
+                    <a href="mailto:${escapeHtml(email)}" class="quick-action ${!email ? 'disabled' : ''}" title="Email">
+                        <i class="fas fa-envelope"></i>
+                    </a>
+                    <a href="https://wa.me/${cleanPhone.replace(/[^\d]/g, '')}" target="_blank" class="quick-action whatsapp ${!phone ? 'disabled' : ''}" title="WhatsApp">
+                        <i class="fab fa-whatsapp"></i>
+                    </a>
+                    <a href="/trips?add_company=${company.id}" class="quick-action" title="Add to Trip">
+                        <i class="fas fa-route"></i>
+                    </a>
+                    <a href="/tasks?create_for=${company.id}" class="quick-action" title="Create Task">
+                        <i class="fas fa-tasks"></i>
+                    </a>
                 </div>
             </div>
-                        </div>
-                        
-        <!-- Contact & Details -->
-        <div class="detail-section">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="mb-0 fw-bold text-dark"><i class="far fa-address-card me-2 text-muted"></i>Contact & Details</h6>
-                <button class="btn btn-sm btn-outline-secondary" onclick="toggleEditMode(this)" id="editContactBtn">
-                    <i class="fas fa-pencil-alt me-1"></i>Edit
-                </button>
-                                </div>
-            
-            <div id="viewContactDetails" class="row g-4">
-                <div class="col-md-6">
-                    <div class="detail-label">Contact Person</div>
-                    <div class="detail-value" id="view_contact_person">${escapeHtml(company.contact_person || 'N/A')}</div>
-                            </div>
-                <div class="col-md-6">
-                    <div class="detail-label">Email</div>
-                    <div class="detail-value text-break" id="view_email">${company.email_addresses || company.email ? `<a href="mailto:${escapeHtml(company.email_addresses || company.email)}" class="text-decoration-none">${escapeHtml(company.email_addresses || company.email)}</a>` : 'N/A'}</div>
-                                </div>
-                <div class="col-md-6">
-                    <div class="detail-label">Phone</div>
-                    <div class="detail-value" id="view_phone">${escapeHtml(company.phone || 'N/A')}</div>
-                </div>
-                <div class="col-md-6">
-                    <div class="detail-label">Website</div>
-                    <div class="detail-value" id="view_website">${company.website ? `<a href="${escapeHtml(company.website)}" target="_blank" class="text-decoration-none">Visit Website</a>` : 'N/A'}</div>
-                            </div>
-                            <div class="col-12">
-                    <div class="detail-label">Address</div>
-                    <div class="detail-value" id="view_address">
-                        ${invoiceAddress.address_line1 ? escapeHtml(invoiceAddress.address_line1) + '<br>' : ''}
-                        ${invoiceAddress.post_code ? escapeHtml(invoiceAddress.post_code) + ' ' : ''}${escapeHtml(invoiceAddress.city || '')}<br>
-                        ${invoiceAddress.country ? escapeHtml(invoiceAddress.country.name || invoiceAddress.country) : ''}
-                                </div>
-                            </div>
-                        </div>
-                        
-            <div id="editContactDetails" class="row g-3 d-none">
-                <div class="col-md-6">
-                    <label class="form-label small fw-bold text-muted">Contact Person</label>
-                    <input type="text" class="form-input-modern w-100" id="edit_contact_person" value="${escapeHtml(company.contact_person || '')}">
-                                </div>
-                <div class="col-md-6">
-                    <label class="form-label small fw-bold text-muted">Email</label>
-                    <input type="email" class="form-input-modern w-100" id="edit_email" value="${escapeHtml(company.email_addresses || company.email || '')}">
-                                </div>
-                <div class="col-md-6">
-                    <label class="form-label small fw-bold text-muted">Phone</label>
-                    <input type="text" class="form-input-modern w-100" id="edit_phone" value="${escapeHtml(company.phone || '')}">
-                            </div>
-                <div class="col-md-6">
-                    <label class="form-label small fw-bold text-muted">Website</label>
-                    <input type="text" class="form-input-modern w-100" id="edit_website" value="${escapeHtml(company.website || '')}">
+
+            <!-- Key Metrics -->
+            <div class="row g-3 mb-4">
+                <div class="col-4">
+                    <div class="p-3 bg-light rounded-3 border text-center">
+                        <div class="text-muted small fw-bold text-uppercase mb-1">Revenue</div>
+                        <div class="h5 mb-0 text-success fw-bold">€${company.total_revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0, maximumFractionDigits: 0})}</div>
                     </div>
-                <div class="col-12 mt-3 text-end">
-                    <button class="btn btn-sm btn-secondary me-2" onclick="toggleEditMode()">Cancel</button>
-                    <button class="btn btn-sm btn-modern-primary" onclick="saveContactDetails(${company.company_id})">Save Changes</button>
+                </div>
+                <div class="col-4">
+                    <div class="p-3 bg-light rounded-3 border text-center">
+                        <div class="text-muted small fw-bold text-uppercase mb-1">Orders</div>
+                        <div class="h5 mb-0 text-primary fw-bold">${company.invoice_count}</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="p-3 bg-light rounded-3 border text-center">
+                        <div class="text-muted small fw-bold text-uppercase mb-1">Last Order</div>
+                        <div class="h6 mb-0 text-dark fw-bold">${company.last_invoice_date ? new Date(company.last_invoice_date).toLocaleDateString('nl-BE', {day: 'numeric', month: 'short'}) : 'N/A'}</div>
+                    </div>
                 </div>
             </div>
-        </div>
+                        
+            <!-- Contact & Details -->
+            <div class="detail-section">
+                <h6 class="mb-3 fw-bold text-dark"><i class="far fa-address-card me-2 text-muted"></i>Contact Details</h6>
+
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="detail-label">Contact Person</div>
+                        <div class="detail-value">${escapeHtml(company.contact_person || 'N/A')}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-label">Email</div>
+                        <div class="detail-value text-break">${email ? `<a href="mailto:${escapeHtml(email)}" class="text-decoration-none">${escapeHtml(email)}</a>` : 'N/A'}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-label">Phone</div>
+                        <div class="detail-value">${phone ? `<a href="tel:${escapeHtml(cleanPhone)}" class="text-decoration-none">${escapeHtml(phone)}</a>` : 'N/A'}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-label">Website</div>
+                        <div class="detail-value">${company.website ? `<a href="${escapeHtml(company.website)}" target="_blank" class="text-decoration-none">Visit Website <i class="fas fa-external-link-alt ms-1 small"></i></a>` : 'N/A'}</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="detail-label">Address</div>
+                        <div class="detail-value">
+                            ${invoiceAddress.address_line1 ? escapeHtml(invoiceAddress.address_line1) + '<br>' : ''}
+                            ${invoiceAddress.post_code ? escapeHtml(invoiceAddress.post_code) + ' ' : ''}${escapeHtml(invoiceAddress.city || '')}<br>
+                            ${invoiceAddress.country ? escapeHtml(invoiceAddress.country.name || invoiceAddress.country) : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
         
         <!-- Customer Status -->
         <div class="detail-section">
@@ -2568,15 +2445,16 @@ function showCompanyDetails(companyId) {
             </div>
         </div>
         
-        <!-- Recent Invoices -->
-        <div class="mt-4">
+            <!-- Recent Invoices -->
+            <div class="mt-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="fw-bold mb-0">Recent Invoices</h6>
-                <span class="badge badge-soft-secondary" id="invoices-count">Loading...</span>
+                    <h6 class="fw-bold mb-0">Recent Orders</h6>
+                    <span class="badge badge-soft-secondary" id="invoices-count">Loading...</span>
                 </div>
-                
-            <div class="bg-white rounded-3 border overflow-hidden" id="invoices-list-container">
-                <div class="p-3 text-center text-muted small">Loading invoices...</div>
+
+                <div class="bg-white rounded-3 border overflow-hidden" id="invoices-list-container">
+                    <div class="p-3 text-center text-muted small">Loading orders...</div>
+                </div>
             </div>
         </div>
     `;
@@ -3090,199 +2968,54 @@ function escapeHtml(text) {
 }
 
 // =====================================================
-// AI CHAT WIDGET
+// QUICK ACTION FUNCTIONS
 // =====================================================
 
-let aiChatOpen = false;
-let aiChatHistory = [];
+function callCompany(phone) {
+    if (phone) {
+        window.location.href = `tel:${phone}`;
+    }
+}
 
-function toggleAIChat() {
-    const panel = document.getElementById('aiChatPanel');
-    aiChatOpen = !aiChatOpen;
-    
-    if (aiChatOpen) {
-        panel.classList.add('show');
-        document.getElementById('aiChatInput').focus();
+function emailCompany(email) {
+    if (email) {
+        window.location.href = `mailto:${email}`;
+    }
+}
+
+function whatsappCompany(phone) {
+    if (phone) {
+        // Remove any leading + and non-digit characters for WhatsApp URL
+        const cleanNumber = phone.replace(/[^\d]/g, '');
+        window.open(`https://wa.me/${cleanNumber}`, '_blank');
+    }
+}
+
+function addToTrip(companyId, companyName) {
+    // Open trip selector modal or redirect to trips page with company pre-selected
+    const tripModal = document.getElementById('addToTripModal');
+    if (tripModal) {
+        document.getElementById('tripCompanyId').value = companyId;
+        document.getElementById('tripCompanyName').textContent = companyName;
+        new bootstrap.Modal(tripModal).show();
     } else {
-        panel.classList.remove('show');
+        // Redirect to trips page with company parameter
+        window.location.href = `/trips?add_company=${companyId}`;
     }
 }
 
-function handleChatKeydown(event) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        sendAIMessage();
+function createTask(companyId, companyName) {
+    // Open task creation modal or redirect to tasks page
+    const taskModal = document.getElementById('createTaskModal');
+    if (taskModal) {
+        document.getElementById('taskCompanyId').value = companyId;
+        document.getElementById('taskCompanyName').textContent = companyName;
+        new bootstrap.Modal(taskModal).show();
+    } else {
+        // Redirect to tasks page with company parameter
+        window.location.href = `/tasks?create_for=${companyId}`;
     }
 }
 
-function askAI(question) {
-    document.getElementById('aiChatInput').value = question;
-    sendAIMessage();
-}
-
-async function sendAIMessage() {
-    const input = document.getElementById('aiChatInput');
-    const message = input.value.trim();
-    
-    if (!message) return;
-    
-    // Clear input
-    input.value = '';
-    input.style.height = 'auto';
-    
-    // Hide suggestions after first message
-    const suggestions = document.getElementById('aiSuggestions');
-    if (suggestions) suggestions.style.display = 'none';
-    
-    // Add user message to chat
-    addChatMessage(message, 'user');
-    
-    // Add to history
-    aiChatHistory.push({ role: 'user', content: message });
-    
-    // Show typing indicator
-    const typingEl = showTypingIndicator();
-    
-    // Disable send button
-    const sendBtn = document.getElementById('aiSendBtn');
-    sendBtn.disabled = true;
-    
-    try {
-        const response = await fetch('/api/ai-chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: message,
-                history: aiChatHistory.slice(-10), // Send last 10 messages for context
-                context: {
-                    currentYear: currentYear,
-                    totalCompanies: allCompanies.length,
-                    filteredCount: filteredCompanies.length
-                }
-            })
-        });
-        
-        const data = await response.json();
-        
-        // Remove typing indicator
-        typingEl.remove();
-        
-        if (data.success) {
-            // Add assistant response
-            addChatMessage(data.response, 'assistant');
-            aiChatHistory.push({ role: 'assistant', content: data.response });
-            
-            // Show data if returned
-            if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-                addDataTable(data.data);
-            }
-        } else {
-            addChatMessage('Sorry, I encountered an error: ' + (data.error || 'Unknown error'), 'assistant');
-        }
-    } catch (error) {
-        typingEl.remove();
-        addChatMessage('Sorry, I couldn\'t connect to the AI service. Please try again.', 'assistant');
-        console.error('AI Chat error:', error);
-    } finally {
-        sendBtn.disabled = false;
-    }
-}
-
-function addChatMessage(content, role) {
-    const messagesContainer = document.getElementById('aiChatMessages');
-    const messageEl = document.createElement('div');
-    messageEl.className = `chat-message ${role}`;
-    
-    // Parse markdown-like formatting for assistant messages
-    if (role === 'assistant') {
-        content = formatAIResponse(content);
-    }
-    
-    messageEl.innerHTML = content;
-    messagesContainer.appendChild(messageEl);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-function formatAIResponse(text) {
-    // Convert **bold** to <strong>
-    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    
-    // Convert *italic* to <em>
-    text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    
-    // Convert `code` to <code>
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-    
-    // Convert line breaks to <br>
-    text = text.replace(/\n/g, '<br>');
-    
-    // Convert numbered lists (1. item)
-    text = text.replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>');
-    if (text.includes('<li>')) {
-        text = text.replace(/(<li>.*<\/li>)/s, '<ol style="margin: 0.5rem 0; padding-left: 1.25rem;">$1</ol>');
-    }
-    
-    return text;
-}
-
-function addDataTable(data) {
-    if (!data || data.length === 0) return;
-    
-    const messagesContainer = document.getElementById('aiChatMessages');
-    const tableEl = document.createElement('div');
-    tableEl.className = 'chat-message assistant';
-    
-    // Get headers from first row
-    const headers = Object.keys(data[0]);
-    
-    let tableHtml = '<div style="overflow-x: auto;"><table><thead><tr>';
-    headers.forEach(h => {
-        tableHtml += `<th>${escapeHtml(h)}</th>`;
-    });
-    tableHtml += '</tr></thead><tbody>';
-    
-    data.slice(0, 10).forEach(row => { // Limit to 10 rows
-        tableHtml += '<tr>';
-        headers.forEach(h => {
-            let val = row[h];
-            if (typeof val === 'number') {
-                val = val.toLocaleString('nl-BE', { maximumFractionDigits: 2 });
-            }
-            tableHtml += `<td>${escapeHtml(val?.toString() || '')}</td>`;
-        });
-        tableHtml += '</tr>';
-    });
-    
-    tableHtml += '</tbody></table></div>';
-    
-    if (data.length > 10) {
-        tableHtml += `<small class="text-muted">Showing 10 of ${data.length} results</small>`;
-    }
-    
-    tableEl.innerHTML = tableHtml;
-    messagesContainer.appendChild(tableEl);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-function showTypingIndicator() {
-    const messagesContainer = document.getElementById('aiChatMessages');
-    const typingEl = document.createElement('div');
-    typingEl.className = 'chat-typing';
-    typingEl.innerHTML = '<span></span><span></span><span></span>';
-    messagesContainer.appendChild(typingEl);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    return typingEl;
-}
-
-// Auto-resize textarea
-document.addEventListener('DOMContentLoaded', function() {
-    const textarea = document.getElementById('aiChatInput');
-    if (textarea) {
-        textarea.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
-        });
-    }
-});
 </script>
 {% endblock %}
