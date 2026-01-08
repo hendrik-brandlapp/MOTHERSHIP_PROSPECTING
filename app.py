@@ -7820,7 +7820,7 @@ def api_companies_from_db():
             comp_result = supabase_client.table('companies').select(
                 'company_id, email, phone_number, website, latitude, longitude, '
                 'city, country_name, address_line1, post_code, company_tag, '
-                'company_categories, raw_company_data'
+                'company_categories, raw_company_data, public_name, customer_since'
             ).execute()
             if comp_result.data:
                 for c in comp_result.data:
@@ -7866,6 +7866,8 @@ def api_companies_from_db():
                 'id': cid,
                 'company_id': cid,
                 'name': metrics['name'],
+                'public_name': details.get('public_name'),
+                'customer_since': details.get('customer_since'),
                 'vat_number': metrics.get('vat_number'),
                 'email': details.get('email'),
                 'phone': details.get('phone_number'),

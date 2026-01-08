@@ -2202,14 +2202,18 @@ function displayCardsView() {
             }
         }
 
-        // Extract email from raw_company_data
+        // Extract email from raw_company_data (can be string or array)
         let emailFromRaw = '';
-        if (rawData.email_addresses && Array.isArray(rawData.email_addresses) && rawData.email_addresses.length > 0) {
-            emailFromRaw = rawData.email_addresses[0];
+        if (rawData.email_addresses) {
+            if (Array.isArray(rawData.email_addresses) && rawData.email_addresses.length > 0) {
+                emailFromRaw = rawData.email_addresses[0];
+            } else if (typeof rawData.email_addresses === 'string') {
+                emailFromRaw = rawData.email_addresses;
+            }
         }
 
-        // Extract contact person from raw_company_data
-        const contactPerson = rawData.name || company.contact_person || '';
+        // Get contact person (not from rawData.name - that's company name)
+        const contactPerson = company.contact_person || '';
 
         // Get email and phone (prioritize raw_company_data)
         const email = emailFromRaw || company.email_addresses || company.email || '';
@@ -2391,18 +2395,19 @@ function showCompanyDetails(companyId) {
     // Extract address from raw data if not in structured format
     const invoiceAddress = rawData.invoice_address || {};
 
-    // Extract email_addresses from raw_company_data (it's an array)
+    // Extract email_addresses from raw_company_data (can be string or array)
     let emailFromRaw = '';
-    if (rawData.email_addresses && Array.isArray(rawData.email_addresses) && rawData.email_addresses.length > 0) {
-        emailFromRaw = rawData.email_addresses[0]; // Use first email
+    if (rawData.email_addresses) {
+        if (Array.isArray(rawData.email_addresses) && rawData.email_addresses.length > 0) {
+            emailFromRaw = rawData.email_addresses[0];
+        } else if (typeof rawData.email_addresses === 'string') {
+            emailFromRaw = rawData.email_addresses;
+        }
     }
-
-    // Extract contact person name from raw_company_data
-    const contactPersonFromRaw = rawData.name || '';
 
     // Get email and phone for quick actions (prioritize raw_company_data)
     const email = emailFromRaw || company.email_addresses || company.email || '';
-    const contactPerson = contactPersonFromRaw || company.contact_person || '';
+    const contactPerson = company.contact_person || '';
     const phone = company.phone || '';
     const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
 
