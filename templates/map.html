@@ -83,29 +83,132 @@
         margin-bottom: 0.5rem;
     }
 
-    .filter-select {
-        width: 100%;
-        padding: 0.5rem 0.75rem;
+    /* Searchable Dropdown Styles */
+    .searchable-dropdown-wrapper {
+        position: relative;
+    }
+
+    .filter-dropdown-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.625rem 0.875rem;
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
-        font-size: 0.875rem;
         background: white;
-        transition: all 0.15s ease;
-        appearance: menulist;
-        -webkit-appearance: menulist;
-        -moz-appearance: menulist;
         cursor: pointer;
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        transition: all 0.15s ease;
     }
 
-    .filter-select option {
+    .filter-dropdown-trigger:hover {
+        border-color: var(--accent);
+    }
+
+    .filter-dropdown-trigger .trigger-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .filter-dropdown-trigger i {
+        font-size: 0.625rem;
+        margin-left: 0.5rem;
+        flex-shrink: 0;
+        transition: transform 0.2s ease;
+    }
+
+    .filter-dropdown-trigger.open i {
+        transform: rotate(180deg);
+    }
+
+    .filter-dropdown-menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        z-index: 1050;
+        max-height: 320px;
+        display: none;
+        overflow: hidden;
+    }
+
+    .filter-dropdown-menu.show {
+        display: block;
+        animation: dropdownSlideIn 0.2s ease;
+    }
+
+    @keyframes dropdownSlideIn {
+        from { opacity: 0; transform: translateY(-8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .dropdown-search-box {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: #f8fafc;
+    }
+
+    .dropdown-search-box i {
+        color: var(--text-muted);
+    }
+
+    .dropdown-search-box input {
+        flex: 1;
+        border: none;
+        outline: none;
+        font-size: 0.875rem;
+        background: transparent;
+    }
+
+    .dropdown-options-list {
+        max-height: 240px;
+        overflow-y: auto;
         padding: 0.5rem;
+    }
+
+    .dropdown-option-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all 0.15s ease;
         font-size: 0.875rem;
     }
 
-    .filter-select:focus {
-        outline: none;
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px var(--accent-glow);
+    .dropdown-option-item:hover {
+        background: var(--bg-hover);
+    }
+
+    .dropdown-option-item.selected {
+        background: linear-gradient(135deg, #e0f2f1 0%, #b2dfdb 100%);
+    }
+
+    .dropdown-option-item.selected .option-checkbox {
+        color: #00695c;
+    }
+
+    .option-checkbox {
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ccc;
+    }
+
+    .option-label {
+        flex: 1;
     }
 
     .filter-checkbox-group {
@@ -431,28 +534,51 @@
             <!-- Area (City) Filter -->
             <div class="filter-group">
                 <label class="filter-label">Area</label>
-                <select class="filter-select no-custom" id="areaFilter" onchange="applyFilters()">
-                    <option value="">All areas</option>
-                    <!-- Populated by JS -->
-                </select>
+                <div class="searchable-dropdown-wrapper">
+                    <div class="filter-dropdown-trigger" id="area-dropdown-trigger">
+                        <span class="trigger-text">All areas</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="filter-dropdown-menu" id="area-dropdown-menu">
+                        <div class="dropdown-search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="Search areas..." id="area-search-input">
+                        </div>
+                        <div class="dropdown-options-list" id="area-dropdown-options"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Category Filter -->
             <div class="filter-group">
                 <label class="filter-label">Category</label>
-                <select class="filter-select no-custom" id="categoryFilter" onchange="applyFilters()">
-                    <option value="">All categories</option>
-                    <!-- Populated by JS -->
-                </select>
+                <div class="searchable-dropdown-wrapper">
+                    <div class="filter-dropdown-trigger" id="category-dropdown-trigger">
+                        <span class="trigger-text">All categories</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="filter-dropdown-menu" id="category-dropdown-menu">
+                        <div class="dropdown-search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" placeholder="Search categories..." id="category-search-input">
+                        </div>
+                        <div class="dropdown-options-list" id="category-dropdown-options"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Assigned Salesperson Filter -->
             <div class="filter-group">
                 <label class="filter-label">Assigned Salesperson</label>
-                <select class="filter-select no-custom" id="salespersonFilter" onchange="applyFilters()">
-                    <option value="">All salespersons</option>
-                    <!-- Populated by JS -->
-                </select>
+                <div class="searchable-dropdown-wrapper">
+                    <div class="filter-dropdown-trigger" id="salesperson-dropdown-trigger">
+                        <span class="trigger-text">All salespersons</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="filter-dropdown-menu" id="salesperson-dropdown-menu">
+                        <div class="dropdown-options-list" id="salesperson-dropdown-options"></div>
+                    </div>
+                </div>
             </div>
 
             <button class="btn-clear-filters" onclick="clearAllFilters()">
@@ -741,38 +867,151 @@
             flavourContainer.innerHTML = '<div class="text-muted small p-2">No flavours found</div>';
         }
 
-        // Populate area dropdown
-        const areaSelect = document.getElementById('areaFilter');
-        console.log('areaSelect element:', areaSelect, 'options before:', areaSelect?.options?.length);
-        Array.from(areas).sort().forEach(area => {
-            const option = document.createElement('option');
-            option.value = area;
-            option.textContent = area;
-            areaSelect.appendChild(option);
-        });
-        console.log('Area options after:', areaSelect?.options?.length);
+        // Store all options globally for search filtering
+        allAreas = Array.from(areas).sort();
+        allCategories = Array.from(categories).sort();
+        allSalespersons = Array.from(salespersons).sort();
 
-        // Populate category dropdown
-        const categorySelect = document.getElementById('categoryFilter');
-        console.log('categorySelect element:', categorySelect, 'options before:', categorySelect?.options?.length);
-        Array.from(categories).sort().forEach(category => {
-            const option = document.createElement('option');
-            option.value = category;
-            option.textContent = category;
-            categorySelect.appendChild(option);
-        });
-        console.log('Category options after:', categorySelect?.options?.length);
+        // Populate searchable dropdowns
+        renderDropdownOptions('area', allAreas, selectedArea);
+        renderDropdownOptions('category', allCategories, selectedCategory);
+        renderDropdownOptions('salesperson', allSalespersons, selectedSalesperson);
 
-        // Populate salesperson dropdown
-        const salespersonSelect = document.getElementById('salespersonFilter');
-        console.log('salespersonSelect element:', salespersonSelect, 'options before:', salespersonSelect?.options?.length);
-        Array.from(salespersons).sort().forEach(person => {
-            const option = document.createElement('option');
-            option.value = person;
-            option.textContent = person;
-            salespersonSelect.appendChild(option);
+        // Initialize dropdown event listeners
+        initializeDropdowns();
+    }
+
+    // Global arrays for dropdown options
+    let allAreas = [];
+    let allCategories = [];
+    let allSalespersons = [];
+
+    // Render dropdown options
+    function renderDropdownOptions(type, options, selectedValue, searchTerm = '') {
+        const container = document.getElementById(`${type}-dropdown-options`);
+        if (!container) return;
+
+        // Filter by search term
+        const filtered = searchTerm
+            ? options.filter(opt => opt.toLowerCase().includes(searchTerm.toLowerCase()))
+            : options;
+
+        if (filtered.length === 0) {
+            container.innerHTML = '<div class="p-3 text-center text-muted small">No options found</div>';
+            return;
+        }
+
+        // Add "All" option first
+        let html = `
+            <div class="dropdown-option-item ${!selectedValue ? 'selected' : ''}" data-value="">
+                <div class="option-checkbox">
+                    <i class="fas ${!selectedValue ? 'fa-check-circle' : 'fa-circle'}"></i>
+                </div>
+                <span class="option-label">All ${type}s</span>
+            </div>
+        `;
+
+        filtered.forEach(option => {
+            const isSelected = option === selectedValue;
+            html += `
+                <div class="dropdown-option-item ${isSelected ? 'selected' : ''}" data-value="${escapeHtml(option)}">
+                    <div class="option-checkbox">
+                        <i class="fas ${isSelected ? 'fa-check-circle' : 'fa-circle'}"></i>
+                    </div>
+                    <span class="option-label">${escapeHtml(option)}</span>
+                </div>
+            `;
         });
-        console.log('Salesperson options after:', salespersonSelect?.options?.length);
+
+        container.innerHTML = html;
+
+        // Add click handlers
+        container.querySelectorAll('.dropdown-option-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const value = item.dataset.value;
+                selectDropdownOption(type, value);
+            });
+        });
+    }
+
+    // Handle dropdown option selection
+    function selectDropdownOption(type, value) {
+        // Update selected value
+        if (type === 'area') selectedArea = value;
+        else if (type === 'category') selectedCategory = value;
+        else if (type === 'salesperson') selectedSalesperson = value;
+
+        // Update trigger text
+        const trigger = document.getElementById(`${type}-dropdown-trigger`);
+        const triggerText = trigger.querySelector('.trigger-text');
+        triggerText.textContent = value || `All ${type}s`;
+
+        // Close dropdown
+        document.getElementById(`${type}-dropdown-menu`).classList.remove('show');
+        trigger.classList.remove('open');
+
+        // Re-render options to show selection
+        const options = type === 'area' ? allAreas : type === 'category' ? allCategories : allSalespersons;
+        const selected = type === 'area' ? selectedArea : type === 'category' ? selectedCategory : selectedSalesperson;
+        renderDropdownOptions(type, options, selected);
+
+        // Apply filters
+        applyFilters();
+    }
+
+    // Initialize dropdown event listeners
+    function initializeDropdowns() {
+        ['area', 'category', 'salesperson'].forEach(type => {
+            const trigger = document.getElementById(`${type}-dropdown-trigger`);
+            const menu = document.getElementById(`${type}-dropdown-menu`);
+            const searchInput = document.getElementById(`${type}-search-input`);
+
+            if (trigger && menu) {
+                // Toggle dropdown on trigger click
+                trigger.addEventListener('click', (e) => {
+                    e.stopPropagation();
+
+                    // Close other dropdowns
+                    ['area', 'category', 'salesperson'].forEach(t => {
+                        if (t !== type) {
+                            document.getElementById(`${t}-dropdown-menu`)?.classList.remove('show');
+                            document.getElementById(`${t}-dropdown-trigger`)?.classList.remove('open');
+                        }
+                    });
+
+                    menu.classList.toggle('show');
+                    trigger.classList.toggle('open');
+
+                    if (menu.classList.contains('show') && searchInput) {
+                        searchInput.focus();
+                        searchInput.value = '';
+                    }
+                });
+
+                // Search input handler
+                if (searchInput) {
+                    searchInput.addEventListener('input', (e) => {
+                        const searchTerm = e.target.value;
+                        const options = type === 'area' ? allAreas : type === 'category' ? allCategories : allSalespersons;
+                        const selected = type === 'area' ? selectedArea : type === 'category' ? selectedCategory : selectedSalesperson;
+                        renderDropdownOptions(type, options, selected, searchTerm);
+                    });
+                }
+
+                // Prevent menu click from closing
+                menu.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                });
+            }
+        });
+
+        // Close all dropdowns on outside click
+        document.addEventListener('click', () => {
+            ['area', 'category', 'salesperson'].forEach(type => {
+                document.getElementById(`${type}-dropdown-menu`)?.classList.remove('show');
+                document.getElementById(`${type}-dropdown-trigger`)?.classList.remove('open');
+            });
+        });
     }
 
     // Toggle flavour selection
@@ -801,9 +1040,7 @@
     // Apply all filters
     function applyFilters() {
         searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        selectedArea = document.getElementById('areaFilter').value;
-        selectedCategory = document.getElementById('categoryFilter').value;
-        selectedSalesperson = document.getElementById('salespersonFilter').value;
+        // selectedArea, selectedCategory, selectedSalesperson are already set by dropdown handlers
 
         const filteredCompanies = allCompanies.filter(company => {
             // Search filter
@@ -958,10 +1195,23 @@
         // Reset search
         document.getElementById('searchInput').value = '';
 
-        // Reset dropdowns
-        document.getElementById('areaFilter').value = '';
-        document.getElementById('categoryFilter').value = '';
-        document.getElementById('salespersonFilter').value = '';
+        // Reset custom dropdown selections
+        selectedArea = '';
+        selectedCategory = '';
+        selectedSalesperson = '';
+
+        // Reset dropdown trigger text
+        ['area', 'category', 'salesperson'].forEach(type => {
+            const trigger = document.getElementById(`${type}-dropdown-trigger`);
+            if (trigger) {
+                trigger.querySelector('.trigger-text').textContent = `All ${type}s`;
+            }
+        });
+
+        // Re-render dropdown options to show reset state
+        renderDropdownOptions('area', allAreas, '');
+        renderDropdownOptions('category', allCategories, '');
+        renderDropdownOptions('salesperson', allSalespersons, '');
 
         // Reset flavour checkboxes
         selectedFlavours = [];
