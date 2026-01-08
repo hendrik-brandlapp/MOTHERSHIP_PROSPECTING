@@ -1445,11 +1445,22 @@ function forceRefreshData() {
 function updateStats(data) {
     document.getElementById('year-stats').style.display = 'flex';
     document.getElementById('stat-total-companies').textContent = data.total_companies || 0;
-    document.getElementById('stat-total-revenue').textContent = '€' + (data.total_revenue || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2});
-    document.getElementById('stat-total-invoices').textContent = data.total_invoices || 0;
-    
-    const avgRevenue = data.total_companies > 0 ? (data.total_revenue / data.total_companies) : 0;
-    document.getElementById('stat-avg-revenue').textContent = '€' + avgRevenue.toLocaleString('nl-BE', {minimumFractionDigits: 2});
+
+    // These elements only exist for admin users
+    const revenueEl = document.getElementById('stat-total-revenue');
+    const invoicesEl = document.getElementById('stat-total-invoices');
+    const avgRevenueEl = document.getElementById('stat-avg-revenue');
+
+    if (revenueEl) {
+        revenueEl.textContent = '€' + (data.total_revenue || 0).toLocaleString('nl-BE', {minimumFractionDigits: 2});
+    }
+    if (invoicesEl) {
+        invoicesEl.textContent = data.total_invoices || 0;
+    }
+    if (avgRevenueEl) {
+        const avgRevenue = data.total_companies > 0 ? (data.total_revenue / data.total_companies) : 0;
+        avgRevenueEl.textContent = '€' + avgRevenue.toLocaleString('nl-BE', {minimumFractionDigits: 2});
+    }
     
     // Show year breakdown for combined view
     if (currentYear === 'combined' && data.year_breakdown) {
