@@ -70,172 +70,169 @@
     <!-- Sync Results -->
     <div id="sync-results" style="display: none;"></div>
 
-    <!-- Filters and Search -->
-    <div class="row mb-2">
-        <div class="col-12">
-            <div class="filter-card">
-                <div class="filter-grid">
-                    <!-- Search -->
-                    <div class="filter-item filter-search">
-                        <label class="filter-label">Search</label>
-                        <div class="filter-input-wrapper">
-                            <i class="fas fa-search filter-input-icon"></i>
-                            <input type="text" class="filter-input" id="searchInput" placeholder="Search companies..." onkeyup="filterCompanies()">
+    <!-- Unified Companies Container -->
+    <div class="unified-container">
+        <!-- Filter Bar -->
+        <div class="unified-filter-bar">
+            <div class="filter-row">
+                <!-- Search -->
+                <div class="filter-cell filter-search-cell">
+                    <div class="filter-input-wrapper">
+                        <i class="fas fa-search filter-input-icon"></i>
+                        <input type="text" class="filter-input" id="searchInput" placeholder="Search companies..." onkeyup="filterCompanies()">
+                    </div>
+                </div>
+
+                <!-- Categories -->
+                <div class="filter-cell">
+                    <div class="searchable-dropdown-wrapper">
+                        <div class="filter-dropdown-trigger" id="category-dropdown-trigger">
+                            <span class="trigger-text">All categories</span>
+                            <i class="fas fa-chevron-down"></i>
                         </div>
-                    </div>
-                    
-                    <!-- Categories -->
-                    <div class="filter-item filter-categories">
-                        <label class="filter-label">Categories</label>
-                            <div class="searchable-dropdown-wrapper">
-                            <div class="filter-dropdown-trigger" id="category-dropdown-trigger">
-                                <span class="trigger-text">All categories</span>
-                                    <i class="fas fa-chevron-down"></i>
-                                </div>
-                            <div class="filter-dropdown-menu" id="category-dropdown-menu">
-                                    <div class="dropdown-search-box">
-                                        <i class="fas fa-search"></i>
-                                    <input type="text" placeholder="Filter..." id="category-search-input">
-                                    </div>
-                                    <div class="dropdown-options-list" id="category-dropdown-options"></div>
-                                </div>
+                        <div class="filter-dropdown-menu" id="category-dropdown-menu">
+                            <div class="dropdown-search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" placeholder="Filter..." id="category-search-input">
                             </div>
-                            <div class="selected-tags mt-2" id="category-selected-tags"></div>
-                        </div>
-
-                    <!-- Flavours Filter -->
-                    <div class="filter-item filter-flavours">
-                        <label class="filter-label">Flavours</label>
-                        <div class="searchable-dropdown-wrapper">
-                            <div class="filter-dropdown-trigger" id="flavour-dropdown-trigger">
-                                <span class="trigger-text">All flavours</span>
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                            <div class="filter-dropdown-menu" id="flavour-dropdown-menu">
-                                <div class="dropdown-options-list" id="flavour-dropdown-options"></div>
-                            </div>
-                        </div>
-                        <div class="selected-tags mt-2" id="flavour-selected-tags"></div>
-                    </div>
-
-                    <!-- Alert Filter -->
-                    <div class="filter-item filter-alerts">
-                        <label class="filter-label">Alerts</label>
-                        <select class="filter-select no-custom" id="alertFilter" onchange="filterCompanies()">
-                            <option value="">All companies</option>
-                            <option value="any">Has any alert</option>
-                            <option value="PATTERN_DISRUPTION">Pattern Break</option>
-                            <option value="HIGH_VALUE_AT_RISK">High Value Risk</option>
-                            <option value="DORMANT_CUSTOMER">Dormant</option>
-                            <option value="DECLINING_VALUE">Declining</option>
-                            <option value="INCREASING_GAP">Less Frequent</option>
-                            <option value="ONE_TIME_CUSTOMER">One-Timer</option>
-                        </select>
-                    </div>
-
-                    <!-- Salesperson Filter -->
-                    <div class="filter-item filter-salesperson">
-                        <label class="filter-label">Salesperson</label>
-                        <select class="filter-select" id="salespersonFilter" onchange="filterCompanies()">
-                            <option value="">All</option>
-                            <option value="unassigned">Unassigned</option>
-                            <option value="Caitlin">Caitlin</option>
-                            <option value="Kesha">Kesha</option>
-                            <option value="Django">Django</option>
-                        </select>
-                    </div>
-
-                    <!-- Sort By -->
-                    <div class="filter-item filter-sort">
-                        <label class="filter-label">Sort</label>
-                        <select class="filter-select" id="sortBy" onchange="sortCompanies()">
-                            <option value="revenue_desc">Revenue ↓</option>
-                            <option value="revenue_asc">Revenue ↑</option>
-                            <option value="name_asc">Name A-Z</option>
-                            <option value="name_desc">Name Z-A</option>
-                            <option value="invoices_desc">Orders ↓</option>
-                            <option value="invoices_asc">Orders ↑</option>
-                        </select>
-                    </div>
-
-                    <!-- View Toggle -->
-                    <div class="filter-item filter-view">
-                        <label class="filter-label">View</label>
-                        <div class="view-toggle-group">
-                            <button class="view-toggle-btn active" data-view="cards" onclick="switchToView('cards')">
-                                <i class="fas fa-th-large"></i>
-                            </button>
-                            <button class="view-toggle-btn" data-view="map" onclick="switchToView('map')">
-                                <i class="fas fa-map-marker-alt"></i>
-                            </button>
+                            <div class="dropdown-options-list" id="category-dropdown-options"></div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Flavours Filter -->
+                <div class="filter-cell">
+                    <div class="searchable-dropdown-wrapper">
+                        <div class="filter-dropdown-trigger" id="flavour-dropdown-trigger">
+                            <span class="trigger-text">All flavours</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="filter-dropdown-menu" id="flavour-dropdown-menu">
+                            <div class="dropdown-options-list" id="flavour-dropdown-options"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alert Filter -->
+                <div class="filter-cell">
+                    <select class="filter-select" id="alertFilter" onchange="filterCompanies()">
+                        <option value="">All alerts</option>
+                        <option value="any">Has any alert</option>
+                        <option value="PATTERN_DISRUPTION">Pattern Break</option>
+                        <option value="HIGH_VALUE_AT_RISK">High Value Risk</option>
+                        <option value="DORMANT_CUSTOMER">Dormant</option>
+                        <option value="DECLINING_VALUE">Declining</option>
+                        <option value="INCREASING_GAP">Less Frequent</option>
+                        <option value="ONE_TIME_CUSTOMER">One-Timer</option>
+                    </select>
+                </div>
+
+                <!-- Salesperson Filter -->
+                <div class="filter-cell">
+                    <select class="filter-select" id="salespersonFilter" onchange="filterCompanies()">
+                        <option value="">All salespeople</option>
+                        <option value="unassigned">Unassigned</option>
+                        <option value="Caitlin">Caitlin</option>
+                        <option value="Kesha">Kesha</option>
+                        <option value="Django">Django</option>
+                    </select>
+                </div>
+
+                <!-- Sort By -->
+                <div class="filter-cell">
+                    <select class="filter-select" id="sortBy" onchange="sortCompanies()">
+                        <option value="revenue_desc">Revenue ↓</option>
+                        <option value="revenue_asc">Revenue ↑</option>
+                        <option value="name_asc">Name A-Z</option>
+                        <option value="name_desc">Name Z-A</option>
+                        <option value="invoices_desc">Orders ↓</option>
+                        <option value="invoices_asc">Orders ↑</option>
+                    </select>
+                </div>
+
+                <!-- View Toggle -->
+                <div class="filter-cell filter-view-cell">
+                    <div class="view-toggle-group">
+                        <button class="view-toggle-btn active" data-view="cards" onclick="switchToView('cards')">
+                            <i class="fas fa-th-large"></i>
+                        </button>
+                        <button class="view-toggle-btn" data-view="map" onclick="switchToView('map')">
+                            <i class="fas fa-map-marker-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selected Tags Row -->
+            <div class="selected-tags-row">
+                <div class="selected-tags" id="category-selected-tags"></div>
+                <div class="selected-tags" id="flavour-selected-tags"></div>
             </div>
         </div>
-    </div>
 
-    <!-- Loading State -->
-    <div id="loading" class="text-center py-5">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-        <p class="mt-3 text-muted">Loading company data...</p>
-    </div>
+        <!-- Content Area -->
+        <div class="unified-content">
+            <!-- Results Info Bar -->
+            <div id="results-info" class="results-info-bar" style="display: none;">
+                <span class="results-count">Showing <strong id="showing-count">0</strong> of <strong id="total-count">0</strong> companies</span>
+            </div>
 
-    <!-- Error State -->
-    <div id="error-message" class="alert alert-danger" style="display: none;">
-        <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
-        <p class="mb-0" id="error-text">Failed to load company data</p>
-    </div>
+            <!-- Loading State -->
+            <div id="loading" class="content-state">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-muted">Loading company data...</p>
+            </div>
 
-    <!-- Results Info -->
-    <div id="results-info" class="mb-2" style="display: none;">
-        <p class="text-muted small mb-0">
-            Showing <span id="showing-count">0</span> of <span id="total-count">0</span> companies
-        </p>
-    </div>
+            <!-- Error State -->
+            <div id="error-message" class="content-state" style="display: none;">
+                <div class="alert alert-danger mb-0">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                    <p class="mb-0" id="error-text">Failed to load company data</p>
+                </div>
+            </div>
 
-    <!-- Card View -->
-    <div id="companies-cards" class="row" style="display: none;">
-        <!-- Company cards will be inserted here -->
-    </div>
+            <!-- Card View -->
+            <div id="companies-cards" class="cards-container row g-3" style="display: none;">
+                <!-- Company cards will be inserted here -->
+            </div>
 
-    <!-- Map View -->
-    <div id="companies-map" class="d-none" style="height: calc(100vh - 240px); border-radius: 12px; overflow: hidden; border: 1px solid #e9ecef;">
-        <div id="map-container" style="width: 100%; height: 100%;"></div>
-    </div>
+            <!-- Map View -->
+            <div id="companies-map" class="map-container" style="display: none;">
+                <div id="map-container" style="width: 100%; height: 100%;"></div>
+            </div>
 
-    <!-- Table View -->
-    <div id="companies-table" style="display: none;">
-        <div class="card border-0 shadow-sm">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Company</th>
-                            <th>Contact</th>
-                            <th>Location</th>
-                            <th>Invoices</th>
-                            <th>Total Revenue</th>
-                            <th>Avg Invoice</th>
-                            <th>Last Invoice</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="companies-table-body">
-                        <!-- Table rows will be inserted here -->
-                    </tbody>
-                </table>
+            <!-- Table View -->
+            <div id="companies-table" style="display: none;">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Company</th>
+                                <th>Contact</th>
+                                <th>Location</th>
+                                <th>Invoices</th>
+                                <th>Total Revenue</th>
+                                <th>Avg Invoice</th>
+                                <th>Last Invoice</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="companies-table-body">
+                            <!-- Table rows will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- No Results -->
+            <div id="no-results" class="content-state" style="display: none;">
+                <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No companies found</h5>
+                <p class="text-muted mb-0">Try adjusting your search criteria</p>
             </div>
         </div>
-    </div>
-
-    <!-- No Results -->
-    <div id="no-results" class="text-center py-5" style="display: none;">
-        <i class="fas fa-search fa-3x text-muted mb-3"></i>
-        <h5 class="text-muted">No companies found</h5>
-        <p class="text-muted">Try adjusting your search criteria</p>
     </div>
 </div>
 
@@ -311,37 +308,39 @@
     /* View Toggle */
     .view-toggle-group {
         display: flex;
-        border-radius: 8px;
+        border-radius: var(--radius-md);
         overflow: hidden;
-        border: 1px solid #e9ecef;
+        border: 1px solid var(--border-color);
+        background: white;
     }
 
     .view-toggle-btn {
-        padding: 8px 14px;
+        padding: 0.5rem 0.875rem;
         border: none;
-        background: #f8f9fa;
-        color: #6c757d;
+        background: transparent;
+        color: var(--text-muted);
         cursor: pointer;
-        font-size: 0.8rem;
+        font-size: 0.875rem;
         font-weight: 500;
         transition: all 0.15s ease;
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: 6px;
     }
 
     .view-toggle-btn:hover {
-        background: #e9ecef;
-        color: #495057;
+        background: var(--surface-bg);
+        color: var(--text-main);
     }
 
     .view-toggle-btn.active {
-        background: #5B5FEF;
+        background: var(--primary-color);
         color: white;
     }
 
     .view-toggle-btn i {
-        font-size: 0.85rem;
+        font-size: 0.9rem;
     }
 
     /* Map Popup Styles */
@@ -593,68 +592,141 @@
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
     /* =====================================================
-       FILTER CARD - Clean Grid Layout
+       UNIFIED CONTAINER - Cohesive Filter + Content
        ===================================================== */
-    .filter-card {
+    .unified-container {
         background: white;
-        border-radius: var(--radius-lg);
-        padding: 1rem 1.25rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-        border: 1px solid var(--border-color);
-        margin-bottom: 0;
+        border-radius: var(--radius-xl);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 24px rgba(0, 0, 0, 0.06);
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        overflow: hidden;
     }
 
-    .filter-grid {
+    .unified-filter-bar {
+        background: linear-gradient(180deg, #ffffff 0%, #f9fafb 100%);
+        border-bottom: 1px solid #eef1f4;
+        padding: 0.875rem 1.25rem;
+    }
+
+    .filter-row {
         display: flex;
+        align-items: center;
+        gap: 0.75rem;
         flex-wrap: wrap;
-        gap: 0.75rem 1rem;
-        align-items: end;
     }
 
-    .filter-item {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
+    .filter-cell {
+        flex-shrink: 0;
+        min-width: 130px;
     }
 
-    .filter-item.filter-search {
+    .filter-cell.filter-search-cell {
         flex: 1;
         min-width: 200px;
+        max-width: 320px;
     }
 
-    .filter-item.filter-categories,
-    .filter-item.filter-flavours {
-        min-width: 140px;
-    }
-
-    .filter-item.filter-alerts,
-    .filter-item.filter-salesperson {
-        min-width: 120px;
-    }
-
-    .filter-item.filter-sort {
-        min-width: 100px;
-    }
-
-    .filter-item.filter-view {
+    .filter-cell.filter-view-cell {
+        margin-left: auto;
         min-width: auto;
     }
 
-    @media (max-width: 768px) {
-        .filter-grid {
-            flex-direction: column;
+    .filter-cell .filter-select,
+    .filter-cell .filter-dropdown-trigger {
+        height: 38px;
+    }
+
+    .filter-cell .filter-input {
+        height: 38px;
+    }
+
+    .selected-tags-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+    }
+
+    .selected-tags-row:empty,
+    .selected-tags-row:not(:has(.selected-tag)) {
+        display: none;
+        margin-top: 0;
+    }
+
+    .selected-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .unified-content {
+        background: #f8f9fb;
+        min-height: 450px;
+        position: relative;
+    }
+
+    .results-info-bar {
+        padding: 0.65rem 1.25rem;
+        background: linear-gradient(to bottom, #ffffff, #fafbfc);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .results-count {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+
+    .results-count strong {
+        color: var(--text-main);
+        font-weight: 600;
+    }
+
+    .content-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .cards-container {
+        padding: 1.25rem;
+        margin: 0;
+    }
+
+    .map-container {
+        height: calc(100vh - 340px);
+        min-height: 480px;
+        margin: 0;
+        border-bottom-left-radius: calc(var(--radius-xl) - 1px);
+        border-bottom-right-radius: calc(var(--radius-xl) - 1px);
+        overflow: hidden;
+    }
+
+    .map-container #map-container {
+        border-radius: 0;
+    }
+
+    @media (max-width: 992px) {
+        .filter-row {
+            gap: 0.5rem;
         }
-        .filter-item {
-            width: 100%;
+        .filter-cell.filter-view-cell {
+            margin-left: 0;
         }
     }
 
-    .filter-label {
-        font-size: 0.65rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--text-muted);
+    @media (max-width: 768px) {
+        .filter-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .filter-cell {
+            width: 100%;
+        }
+        .filter-cell.filter-search-cell {
+            min-width: auto;
+        }
+        .filter-cell.filter-view-cell {
+            margin-left: 0;
+        }
     }
     
     .filter-input-wrapper {
@@ -2679,13 +2751,13 @@ function switchToView(view) {
 
     // Hide all containers first
     cardsContainer.style.display = 'none';
-    mapContainer.classList.add('d-none');
+    mapContainer.style.display = 'none';
     tableContainer.style.display = 'none';
 
     currentViewMode = view;
 
     if (view === 'map') {
-        mapContainer.classList.remove('d-none');
+        mapContainer.style.display = 'block';
         initMapIfNeeded();
         // Wait for map to be ready before updating markers
         if (map && map.loaded()) {
@@ -2823,7 +2895,7 @@ function displayCompanies() {
     if (filteredCompanies.length === 0) {
         cardsContainer.style.display = 'none';
         tableContainer.style.display = 'none';
-        mapContainer.classList.add('d-none');
+        mapContainer.style.display = 'none';
         noResults.style.display = 'block';
         return;
     }
@@ -2833,18 +2905,18 @@ function displayCompanies() {
     if (currentViewMode === 'map') {
         cardsContainer.style.display = 'none';
         tableContainer.style.display = 'none';
-        mapContainer.classList.remove('d-none');
+        mapContainer.style.display = 'block';
         if (map) updateMapMarkers();
     } else if (currentViewMode === 'cards') {
         displayCardsView();
         cardsContainer.style.display = 'flex';
         tableContainer.style.display = 'none';
-        mapContainer.classList.add('d-none');
+        mapContainer.style.display = 'none';
     } else {
         displayTableView();
         cardsContainer.style.display = 'none';
         tableContainer.style.display = 'block';
-        mapContainer.classList.add('d-none');
+        mapContainer.style.display = 'none';
     }
 }
 
