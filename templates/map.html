@@ -586,8 +586,8 @@
 
     // Helper to extract city from company data
     function getCompanyCity(company) {
-        // Try address.city first
-        if (company.address?.city) {
+        // Try address.city first (from API response)
+        if (company.address && company.address.city) {
             return company.address.city;
         }
 
@@ -599,11 +599,20 @@
                     geo = JSON.parse(geo);
                 } catch (e) {
                     // If it's a plain string, it might be the city itself
-                    return geo;
+                    if (geo.trim()) return geo.trim();
                 }
             }
-            // Try common field names for city
-            return geo.city || geo.locality || geo.town || geo.municipality || '';
+            if (geo && typeof geo === 'object') {
+                // Try common field names for city
+                const city = geo.city || geo.locality || geo.town || geo.municipality ||
+                             geo.sublocality || geo.administrative_area_level_2 || '';
+                if (city) return city;
+            }
+        }
+
+        // Fallback: try direct city field on company
+        if (company.city) {
+            return company.city;
         }
 
         return '';
@@ -677,6 +686,21 @@
                 console.warn('Error processing company:', company.id, err);
             }
         });
+
+        // Debug: log sample company data
+        if (allCompanies.length > 0) {
+            const sample = allCompanies[0];
+            console.log('Sample company data:', {
+                id: sample.id,
+                name: sample.name,
+                address: sample.address,
+                geocoded_address: sample.geocoded_address,
+                company_categories: sample.company_categories,
+                company_tag: sample.company_tag,
+                assigned_salesperson: sample.assigned_salesperson,
+                current_flavours: sample.current_flavours
+            });
+        }
 
         console.log('Filter options found:', {
             flavours: flavours.size,
