@@ -118,7 +118,7 @@
                     <!-- Alert Filter -->
                     <div class="filter-item filter-alerts">
                         <label class="filter-label">Alerts</label>
-                        <select class="filter-select" id="alertFilter" onchange="filterCompanies()">
+                        <select class="filter-select no-custom" id="alertFilter" onchange="filterCompanies()">
                             <option value="">All companies</option>
                             <option value="any">Has any alert</option>
                             <option value="PATTERN_DISRUPTION">Pattern Break</option>
@@ -1831,6 +1831,8 @@ function filterCompanies() {
     // Update statistics based on filtered companies
     updateFilteredStats();
 
+    console.log('[DEBUG] filterCompanies: filteredCompanies.length =', filteredCompanies.length);
+
     sortCompanies();
 }
 
@@ -2232,6 +2234,7 @@ function escapeHtml(text) {
 }
 
 function sortCompanies() {
+    console.log('[DEBUG] sortCompanies: starting, filteredCompanies.length =', filteredCompanies.length);
     const sortBy = document.getElementById('sortBy').value;
     
     filteredCompanies.sort((a, b) => {
@@ -2266,11 +2269,12 @@ function changeViewMode() {
 }
 
 function displayCompanies() {
+    console.log('[DEBUG] displayCompanies: starting, filteredCompanies.length =', filteredCompanies.length, 'currentViewMode =', currentViewMode);
     const cardsContainer = document.getElementById('companies-cards');
     const tableContainer = document.getElementById('companies-table');
     const resultsInfo = document.getElementById('results-info');
     const noResults = document.getElementById('no-results');
-    
+
     // Update results info
     document.getElementById('showing-count').textContent = filteredCompanies.length;
     document.getElementById('total-count').textContent = allCompanies.length;
@@ -2297,6 +2301,7 @@ function displayCompanies() {
 }
 
 function displayCardsView() {
+    console.log('[DEBUG] displayCardsView: starting, filteredCompanies.length =', filteredCompanies.length);
     const container = document.getElementById('companies-cards');
     container.innerHTML = '';
 
@@ -2386,6 +2391,7 @@ function displayCardsView() {
 
         container.appendChild(card);
     });
+    console.log('[DEBUG] displayCardsView: finished, cards in DOM =', container.children.length);
 }
 
 // Helper function for status badge colors
