@@ -2320,30 +2320,39 @@ function showCompanyDetails(companyId) {
             </div>
             ` : ''}
                         
-            <!-- Contact & Details -->
+            <!-- Contact & Details (Editable) -->
             <div class="detail-section">
-                <h6 class="mb-3 fw-bold text-dark"><i class="far fa-address-card me-2 text-muted"></i>Contact Details</h6>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0 fw-bold text-dark"><i class="far fa-address-card me-2 text-muted"></i>Contact Details</h6>
+                    <button class="btn btn-sm btn-primary" onclick="saveContactDetails(${company.company_id})" id="saveContactBtn">
+                        <i class="fas fa-save me-1"></i>Save
+                    </button>
+                </div>
 
-                <div class="row g-4">
+                <div class="row g-3">
                     <div class="col-md-6">
-                        <div class="detail-label">Contact Person</div>
-                        <div class="detail-value">${escapeHtml(contactPerson || 'N/A')}</div>
+                        <label class="form-label small fw-bold text-muted">Contact Person</label>
+                        <input type="text" class="form-control form-control-sm" id="editContactPerson"
+                               value="${escapeHtml(contactPerson || '')}" placeholder="Enter contact name">
                     </div>
                     <div class="col-md-6">
-                        <div class="detail-label">Email</div>
-                        <div class="detail-value text-break">${email ? `<a href="mailto:${escapeHtml(email)}" class="text-decoration-none">${escapeHtml(email)}</a>` : 'N/A'}</div>
+                        <label class="form-label small fw-bold text-muted">Email</label>
+                        <input type="email" class="form-control form-control-sm" id="editEmail"
+                               value="${escapeHtml(email || '')}" placeholder="Enter email">
                     </div>
                     <div class="col-md-6">
-                        <div class="detail-label">Phone</div>
-                        <div class="detail-value">${phone ? `<a href="tel:${escapeHtml(cleanPhone)}" class="text-decoration-none">${escapeHtml(phone)}</a>` : 'N/A'}</div>
+                        <label class="form-label small fw-bold text-muted">Phone</label>
+                        <input type="tel" class="form-control form-control-sm" id="editPhone"
+                               value="${escapeHtml(phone || '')}" placeholder="Enter phone number">
                     </div>
                     <div class="col-md-6">
-                        <div class="detail-label">Website</div>
-                        <div class="detail-value">${company.website ? `<a href="${escapeHtml(company.website)}" target="_blank" class="text-decoration-none">Visit Website <i class="fas fa-external-link-alt ms-1 small"></i></a>` : 'N/A'}</div>
+                        <label class="form-label small fw-bold text-muted">Website</label>
+                        <input type="url" class="form-control form-control-sm" id="editWebsite"
+                               value="${escapeHtml(company.website || '')}" placeholder="https://example.com">
                     </div>
                     <div class="col-12">
-                        <div class="detail-label">Address</div>
-                        <div class="detail-value">
+                        <label class="form-label small fw-bold text-muted">Address</label>
+                        <div class="form-control-plaintext small text-muted">
                             ${invoiceAddress.address_line1 ? escapeHtml(invoiceAddress.address_line1) + '<br>' : ''}
                             ${invoiceAddress.post_code ? escapeHtml(invoiceAddress.post_code) + ' ' : ''}${escapeHtml(invoiceAddress.city || '')}<br>
                             ${invoiceAddress.country ? escapeHtml(invoiceAddress.country.name || invoiceAddress.country) : ''}
@@ -2369,11 +2378,11 @@ function showCompanyDetails(companyId) {
                         </div>
                 <div class="col-md-6">
                     <label class="form-label small fw-bold text-muted">Assigned To</label>
-                    <select class="form-select-modern w-100" id="assignedSalesperson">
-                        <option value="">Unassigned</option>
-                        <option value="Caitlin">Caitlin</option>
-                        <option value="Kesha">Kesha</option>
-                        <option value="Django">Django</option>
+                    <select class="form-select-modern w-100" id="assignedSalesperson" onchange="updateAssignedSalesperson(${company.company_id})">
+                        <option value="" ${!company.assigned_salesperson ? 'selected' : ''}>Unassigned</option>
+                        <option value="Caitlin" ${company.assigned_salesperson === 'Caitlin' ? 'selected' : ''}>Caitlin</option>
+                        <option value="Kesha" ${company.assigned_salesperson === 'Kesha' ? 'selected' : ''}>Kesha</option>
+                        <option value="Django" ${company.assigned_salesperson === 'Django' ? 'selected' : ''}>Django</option>
                     </select>
                     </div>
                 </div>
@@ -2791,6 +2800,80 @@ function showSaveSuccess(message) {
     toast.innerHTML = `<i class="fas fa-check-circle me-2"></i>${message}`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2000);
+}
+
+// Save contact details to Supabase
+async function saveContactDetails(companyId) {
+    const btn = document.getElementById('saveContactBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving...';
+    btn.disabled = true;
+
+    try {
+        const contactData = {
+            contact_person_name: document.getElementById('editContactPerson')?.value || '',
+            email: document.getElementById('editEmail')?.value || '',
+            phone_number: document.getElementById('editPhone')?.value || '',
+            website: document.getElementById('editWebsite')?.value || ''
+        };
+
+        const response = await fetch(`/api/companies/${companyId}/contact`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(contactData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showSaveSuccess('Contact details saved!');
+            // Update local data
+            const company = allCompanies.find(c => c.company_id === companyId);
+            if (company) {
+                company.contact_person = contactData.contact_person_name;
+                company.email = contactData.email;
+                company.phone = contactData.phone_number;
+                company.website = contactData.website;
+            }
+        } else {
+            alert('Error saving: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error saving contact details:', error);
+        alert('Error saving contact details');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+// Update assigned salesperson
+async function updateAssignedSalesperson(companyId) {
+    const salesperson = document.getElementById('assignedSalesperson')?.value || '';
+
+    try {
+        const response = await fetch(`/api/companies/${companyId}/contact`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ assigned_salesperson: salesperson })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showSaveSuccess('Salesperson updated!');
+            // Update local data
+            const company = allCompanies.find(c => c.company_id === companyId);
+            if (company) {
+                company.assigned_salesperson = salesperson;
+            }
+        } else {
+            alert('Error updating: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error updating salesperson:', error);
+        alert('Error updating salesperson');
+    }
 }
 
 async function showInvoiceDetails(companyId, invoiceId) {

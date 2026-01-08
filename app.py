@@ -7820,7 +7820,8 @@ def api_companies_from_db():
             comp_result = supabase_client.table('companies').select(
                 'company_id, email, phone_number, website, latitude, longitude, '
                 'city, country_name, address_line1, post_code, company_tag, '
-                'company_categories, raw_company_data, public_name, customer_since'
+                'company_categories, raw_company_data, public_name, customer_since, '
+                'assigned_salesperson, contact_person_name'
             ).execute()
             if comp_result.data:
                 for c in comp_result.data:
@@ -7873,6 +7874,8 @@ def api_companies_from_db():
                 'phone': details.get('phone_number'),
                 'website': details.get('website'),
                 'company_tag': details.get('company_tag'),
+                'contact_person': details.get('contact_person_name'),
+                'assigned_salesperson': details.get('assigned_salesperson'),
                 # Categories for filtering
                 'company_categories': details.get('company_categories'),
                 'raw_company_data': details.get('raw_company_data'),
@@ -7932,6 +7935,51 @@ def api_companies_from_db():
         print(f"❌ Error in companies from DB: {e}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/companies/<int:company_id>/contact', methods=['PUT'])
+def api_update_company_contact(company_id):
+    """Update company contact details (phone, email, website, contact person, salesperson)."""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        # Build update payload with only provided fields
+        update_fields = {}
+
+        if 'contact_person_name' in data:
+            update_fields['contact_person_name'] = data['contact_person_name']
+        if 'email' in data:
+            update_fields['email'] = data['email']
+        if 'phone_number' in data:
+            update_fields['phone_number'] = data['phone_number']
+        if 'website' in data:
+            update_fields['website'] = data['website']
+        if 'assigned_salesperson' in data:
+            update_fields['assigned_salesperson'] = data['assigned_salesperson']
+
+        if not update_fields:
+            return jsonify({'error': 'No valid fields to update'}), 400
+
+        # Update in Supabase
+        result = supabase_client.table('companies').update(update_fields).eq('company_id', company_id).execute()
+
+        if result.data:
+            print(f"✅ Updated company {company_id} contact details: {update_fields}")
+            return jsonify({'success': True, 'updated': update_fields})
+        else:
+            return jsonify({'error': 'Company not found'}), 404
+
+    except Exception as e:
+        print(f"Error updating company contact: {e}")
         return jsonify({'error': str(e)}), 500
 
 
