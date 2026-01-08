@@ -1,0 +1,1241 @@
+{% extends "base.html" %}
+
+{% block title %}Prospecting Map - CRMinal{% endblock %}
+
+{% block content %}
+<div class="prospecting-map-container">
+    <!-- Map Container -->
+    <div id="map"></div>
+
+    <!-- Right Sidebar -->
+    <div class="map-sidebar" id="mapSidebar">
+        <!-- Tab Header -->
+        <div class="tab-header">
+            <button class="tab-btn active" data-tab="filter" onclick="switchTab('filter')">
+                <i class="fas fa-filter"></i>
+                <span>Filter</span>
+            </button>
+            <button class="tab-btn" data-tab="google" onclick="switchTab('google')">
+                <i class="fab fa-google"></i>
+                <span>Google</span>
+            </button>
+        </div>
+
+        <!-- Filter Panel -->
+        <div class="tab-content" id="filter-panel">
+            <!-- Stats Bar -->
+            <div class="stats-bar">
+                <span class="stats-text">
+                    <strong id="filtered-count">0</strong> of <strong id="total-count">0</strong> customers
+                </span>
+                <button class="btn-clear-filters" onclick="clearAllFilters()">
+                    <i class="fas fa-times"></i> Clear
+                </button>
+            </div>
+
+            <!-- Search -->
+            <div class="filter-group">
+                <label class="filter-label">Search</label>
+                <div class="search-input-wrapper">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="customerSearch" placeholder="Company name..." oninput="filterCustomers()">
+                </div>
+            </div>
+
+            <!-- Category Filter -->
+            <div class="filter-group">
+                <label class="filter-label">Category</label>
+                <select id="categoryFilter" class="filter-select" onchange="filterCustomers()">
+                    <option value="">All categories</option>
+                </select>
+            </div>
+
+            <!-- Alert Filter -->
+            <div class="filter-group">
+                <label class="filter-label">Alert Type</label>
+                <select id="alertFilter" class="filter-select" onchange="filterCustomers()">
+                    <option value="">All companies</option>
+                    <option value="any">Has any alert</option>
+                    <option value="PATTERN_DISRUPTION">Pattern Break</option>
+                    <option value="HIGH_VALUE_AT_RISK">High Value Risk</option>
+                    <option value="DORMANT_CUSTOMER">Dormant</option>
+                    <option value="DECLINING_VALUE">Declining</option>
+                    <option value="INCREASING_GAP">Less Frequent</option>
+                    <option value="ONE_TIME_CUSTOMER">One-Timer</option>
+                </select>
+            </div>
+
+            <!-- Salesperson Filter -->
+            <div class="filter-group">
+                <label class="filter-label">Salesperson</label>
+                <select id="salespersonFilter" class="filter-select" onchange="filterCustomers()">
+                    <option value="">All</option>
+                    <option value="unassigned">Unassigned</option>
+                    <option value="Caitlin">Caitlin</option>
+                    <option value="Kesha">Kesha</option>
+                    <option value="Django">Django</option>
+                </select>
+            </div>
+
+            <!-- Customer List -->
+            <div class="results-list" id="customerList">
+                <div class="loading-state">
+                    <div class="spinner-border spinner-border-sm text-primary"></div>
+                    <span>Loading customers...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Search Panel -->
+        <div class="tab-content" id="google-panel" style="display: none;">
+            <!-- Search Box -->
+            <div class="google-search-box">
+                <div class="search-input-wrapper">
+                    <i class="fab fa-google"></i>
+                    <input type="text" id="googleSearchInput" placeholder="Search places..."
+                           onkeypress="if(event.key==='Enter') searchGooglePlaces()">
+                    <button class="btn-search" onclick="searchGooglePlaces()">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+                <button class="btn-search-area" onclick="searchInCurrentArea()">
+                    <i class="fas fa-map-marker-alt"></i> Search this area
+                </button>
+            </div>
+
+            <!-- Search Results -->
+            <div class="results-list" id="googleResultsList">
+                <div class="empty-state">
+                    <i class="fab fa-google fa-2x"></i>
+                    <p>Search for businesses to find new prospects</p>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="results-actions" id="googleResultsActions" style="display: none;">
+                <button class="btn btn-outline-secondary btn-sm" onclick="clearGoogleResults()">
+                    Clear Results
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Toggle -->
+    <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
+        <i class="fas fa-filter"></i>
+    </button>
+</div>
+
+<!-- Prospect Detail Modal -->
+<div class="modal fade" id="prospectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="prospectModalTitle">Add Prospect</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="prospectModalBody">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveProspectBtn" onclick="saveProspect()">
+                    <i class="fas fa-plus me-2"></i>Add as Prospect
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+    :root {
+        --primary-color: #6366f1;
+        --primary-soft: #e0e7ff;
+        --success-color: #10b981;
+        --success-soft: #d1fae5;
+        --warning-color: #f59e0b;
+        --danger-color: #dc3545;
+        --text-main: #111827;
+        --text-muted: #6b7280;
+        --border-color: #e5e7eb;
+        --surface-bg: #f9fafb;
+    }
+
+    /* Main Layout */
+    .prospecting-map-container {
+        display: flex;
+        height: calc(100vh - 60px);
+        position: relative;
+        margin: -1.5rem;
+    }
+
+    #map {
+        flex: 1;
+        height: 100%;
+    }
+
+    /* Sidebar */
+    .map-sidebar {
+        width: 380px;
+        background: white;
+        border-left: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        z-index: 10;
+        transition: transform 0.3s ease;
+    }
+
+    /* Tab Header */
+    .tab-header {
+        display: flex;
+        border-bottom: 1px solid var(--border-color);
+        background: var(--surface-bg);
+    }
+
+    .tab-btn {
+        flex: 1;
+        padding: 1rem;
+        text-align: center;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .tab-btn:hover {
+        color: var(--text-main);
+        background: white;
+    }
+
+    .tab-btn.active {
+        background: white;
+        color: var(--primary-color);
+        border-bottom: 2px solid var(--primary-color);
+        margin-bottom: -1px;
+    }
+
+    .tab-btn i {
+        font-size: 1rem;
+    }
+
+    /* Tab Content */
+    .tab-content {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        background: linear-gradient(to bottom, white, var(--surface-bg));
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .stats-text {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+
+    .btn-clear-filters {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border: 1px solid var(--border-color);
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        color: var(--text-muted);
+    }
+
+    .btn-clear-filters:hover {
+        background: var(--surface-bg);
+        color: var(--danger-color);
+        border-color: var(--danger-color);
+    }
+
+    /* Filter Groups */
+    .filter-group {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .filter-label {
+        display: block;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        margin-bottom: 0.5rem;
+    }
+
+    .filter-select {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 0.875rem;
+        background: white;
+        cursor: pointer;
+    }
+
+    .filter-select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+
+    /* Search Input */
+    .search-input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-input-wrapper i {
+        position: absolute;
+        left: 0.75rem;
+        color: var(--text-muted);
+        font-size: 0.875rem;
+    }
+
+    .search-input-wrapper input {
+        width: 100%;
+        padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 0.875rem;
+    }
+
+    .search-input-wrapper input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+
+    .search-input-wrapper .btn-search {
+        position: absolute;
+        right: 4px;
+        padding: 0.35rem 0.6rem;
+        border: none;
+        background: var(--primary-color);
+        color: white;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    /* Google Search Box */
+    .google-search-box {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        background: var(--surface-bg);
+    }
+
+    .btn-search-area {
+        width: 100%;
+        margin-top: 0.5rem;
+        padding: 0.5rem;
+        border: 1px dashed var(--border-color);
+        background: white;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-search-area:hover {
+        border-color: var(--primary-color);
+        color: var(--primary-color);
+        background: var(--primary-soft);
+    }
+
+    /* Results List */
+    .results-list {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .result-item {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+
+    .result-item:hover {
+        background: var(--surface-bg);
+    }
+
+    .result-item.active {
+        background: var(--primary-soft);
+        border-left: 3px solid var(--primary-color);
+    }
+
+    .result-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .result-item-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--text-main);
+        margin: 0;
+    }
+
+    .result-item-badge {
+        font-size: 0.65rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 9999px;
+        font-weight: 600;
+    }
+
+    .badge-alert {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .badge-healthy {
+        background: var(--success-soft);
+        color: var(--success-color);
+    }
+
+    .badge-google {
+        background: #e8f0fe;
+        color: #1967d2;
+    }
+
+    .result-item-address {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin: 0.25rem 0 0 0;
+    }
+
+    .result-item-meta {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 0.35rem;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+
+    .result-item-meta span {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .result-item-actions {
+        margin-top: 0.5rem;
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-add-prospect {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border: 1px solid var(--primary-color);
+        background: white;
+        color: var(--primary-color);
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    .btn-add-prospect:hover {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .btn-add-prospect.added {
+        background: var(--success-soft);
+        border-color: var(--success-color);
+        color: var(--success-color);
+    }
+
+    /* Empty/Loading State */
+    .empty-state, .loading-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 1rem;
+        color: var(--text-muted);
+        text-align: center;
+    }
+
+    .empty-state i, .loading-state i {
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .loading-state {
+        flex-direction: row;
+        gap: 0.75rem;
+    }
+
+    /* Results Actions */
+    .results-actions {
+        padding: 0.75rem 1rem;
+        border-top: 1px solid var(--border-color);
+        background: var(--surface-bg);
+    }
+
+    /* Mobile Toggle */
+    .sidebar-toggle {
+        display: none;
+        position: absolute;
+        right: 1rem;
+        top: 1rem;
+        z-index: 20;
+        padding: 0.75rem;
+        border: none;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        cursor: pointer;
+    }
+
+    /* Google Maps InfoWindow Styles */
+    .gm-style-iw {
+        max-width: 280px !important;
+    }
+
+    .info-window {
+        padding: 0.5rem;
+    }
+
+    .info-window h6 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+
+    .info-window p {
+        margin: 0.25rem 0;
+        font-size: 0.85rem;
+        color: #666;
+    }
+
+    .info-window .btn-add {
+        margin-top: 0.75rem;
+        padding: 0.5rem 1rem;
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        width: 100%;
+    }
+
+    .info-window .btn-add:hover {
+        background: #4f46e5;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .map-sidebar {
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            transform: translateX(100%);
+        }
+
+        .map-sidebar.open {
+            transform: translateX(0);
+        }
+
+        .sidebar-toggle {
+            display: flex;
+        }
+    }
+</style>
+
+<!-- Google Maps -->
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places,marker&callback=initMap" async defer></script>
+
+<!-- MarkerClusterer -->
+<script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
+
+<script>
+// Global variables
+let map;
+let infoWindow;
+let customerMarkers = [];
+let googleMarkers = [];
+let markerClusterer;
+let allCustomers = [];
+let filteredCustomers = [];
+let googleResults = [];
+let currentTab = 'filter';
+let selectedPlaceForProspect = null;
+
+// Initialize Map
+function initMap() {
+    map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 50.8503, lng: 4.3517 }, // Belgium
+        zoom: 8,
+        styles: [
+            { featureType: "poi", stylers: [{ visibility: "off" }] },
+            { featureType: "transit", stylers: [{ visibility: "off" }] }
+        ],
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true
+    });
+
+    infoWindow = new google.maps.InfoWindow();
+
+    // Load customers
+    loadCustomers();
+}
+
+// Load customers from API
+async function loadCustomers() {
+    try {
+        const response = await fetch('/api/companies-from-db?year=combined');
+        const data = await response.json();
+
+        allCustomers = data.companies || [];
+        filteredCustomers = [...allCustomers];
+
+        // Update stats
+        document.getElementById('total-count').textContent = allCustomers.length;
+
+        // Populate category filter
+        populateCategoryFilter();
+
+        // Display on map and list
+        updateCustomerMarkers();
+        updateCustomerList();
+
+    } catch (error) {
+        console.error('Error loading customers:', error);
+        document.getElementById('customerList').innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle fa-2x"></i>
+                <p>Failed to load customers</p>
+            </div>
+        `;
+    }
+}
+
+// Populate category filter
+function populateCategoryFilter() {
+    const categories = new Set();
+    allCustomers.forEach(c => {
+        if (c.company_categories && Array.isArray(c.company_categories)) {
+            c.company_categories.forEach(cat => categories.add(cat));
+        }
+    });
+
+    const select = document.getElementById('categoryFilter');
+    [...categories].sort().forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat;
+        option.textContent = cat;
+        select.appendChild(option);
+    });
+}
+
+// Filter customers
+function filterCustomers() {
+    const searchTerm = document.getElementById('customerSearch').value.toLowerCase();
+    const category = document.getElementById('categoryFilter').value;
+    const alertType = document.getElementById('alertFilter').value;
+    const salesperson = document.getElementById('salespersonFilter').value;
+
+    filteredCustomers = allCustomers.filter(company => {
+        // Search filter
+        if (searchTerm) {
+            const name = (company.name || '').toLowerCase();
+            const publicName = (company.public_name || '').toLowerCase();
+            const city = (company.address?.city || '').toLowerCase();
+            if (!name.includes(searchTerm) && !publicName.includes(searchTerm) && !city.includes(searchTerm)) {
+                return false;
+            }
+        }
+
+        // Category filter
+        if (category) {
+            const cats = company.company_categories || [];
+            if (!cats.includes(category)) return false;
+        }
+
+        // Alert filter
+        if (alertType) {
+            const alerts = company.alerts || [];
+            if (alertType === 'any') {
+                if (alerts.length === 0) return false;
+            } else {
+                if (!alerts.some(a => a.type === alertType)) return false;
+            }
+        }
+
+        // Salesperson filter
+        if (salesperson) {
+            if (salesperson === 'unassigned') {
+                if (company.assigned_salesperson) return false;
+            } else {
+                if (company.assigned_salesperson !== salesperson) return false;
+            }
+        }
+
+        return true;
+    });
+
+    document.getElementById('filtered-count').textContent = filteredCustomers.length;
+    updateCustomerMarkers();
+    updateCustomerList();
+}
+
+// Clear all filters
+function clearAllFilters() {
+    document.getElementById('customerSearch').value = '';
+    document.getElementById('categoryFilter').value = '';
+    document.getElementById('alertFilter').value = '';
+    document.getElementById('salespersonFilter').value = '';
+    filterCustomers();
+}
+
+// Update customer markers on map
+function updateCustomerMarkers() {
+    // Clear existing
+    customerMarkers.forEach(m => m.setMap(null));
+    customerMarkers = [];
+
+    if (markerClusterer) {
+        markerClusterer.clearMarkers();
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    let validCount = 0;
+
+    filteredCustomers.forEach(company => {
+        const lat = parseFloat(company.latitude);
+        const lng = parseFloat(company.longitude);
+
+        if (!lat || !lng || isNaN(lat) || isNaN(lng)) return;
+
+        validCount++;
+        const position = { lat, lng };
+        bounds.extend(position);
+
+        const hasAlerts = company.alerts && company.alerts.length > 0;
+
+        // Create marker
+        const marker = new google.maps.Marker({
+            position,
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 10,
+                fillColor: hasAlerts ? '#dc3545' : '#10b981',
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 2
+            },
+            title: company.name
+        });
+
+        marker.addListener('click', () => {
+            showCustomerInfoWindow(company, marker);
+        });
+
+        customerMarkers.push(marker);
+    });
+
+    // Add clustering
+    if (typeof markerClusterer !== 'undefined') {
+        markerClusterer = new markerClusterer.MarkerClusterer({
+            map,
+            markers: customerMarkers,
+            renderer: {
+                render: ({ count, position }) => {
+                    const color = count > 10 ? '#f59e0b' : '#6366f1';
+                    return new google.maps.Marker({
+                        position,
+                        icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 20 + Math.min(count, 50) / 5,
+                            fillColor: color,
+                            fillOpacity: 0.9,
+                            strokeColor: 'white',
+                            strokeWeight: 3
+                        },
+                        label: {
+                            text: String(count),
+                            color: 'white',
+                            fontWeight: 'bold',
+                            fontSize: '12px'
+                        },
+                        zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count
+                    });
+                }
+            }
+        });
+    } else {
+        customerMarkers.forEach(m => m.setMap(map));
+    }
+
+    // Fit bounds
+    if (validCount > 0) {
+        map.fitBounds(bounds, { padding: 50 });
+        if (map.getZoom() > 14) map.setZoom(14);
+    }
+}
+
+// Show customer info window
+function showCustomerInfoWindow(company, marker) {
+    const hasAlerts = company.alerts && company.alerts.length > 0;
+    const alertBadges = hasAlerts ? company.alerts.map(a =>
+        `<span class="badge bg-danger">${getAlertLabel(a.type)}</span>`
+    ).join(' ') : '';
+
+    const content = `
+        <div class="info-window">
+            <h6>${escapeHtml(company.name)}</h6>
+            <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(company.address?.city || 'Unknown')}</p>
+            ${company.assigned_salesperson ? `<p><i class="fas fa-user"></i> ${escapeHtml(company.assigned_salesperson)}</p>` : ''}
+            ${alertBadges ? `<div style="margin-top:0.5rem">${alertBadges}</div>` : ''}
+            <button class="btn-add" onclick="window.location='/data?company=${company.company_id}'">
+                <i class="fas fa-eye"></i> View Details
+            </button>
+        </div>
+    `;
+
+    infoWindow.setContent(content);
+    infoWindow.open(map, marker);
+}
+
+// Update customer list in sidebar
+function updateCustomerList() {
+    const container = document.getElementById('customerList');
+
+    if (filteredCustomers.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-building fa-2x"></i>
+                <p>No customers match your filters</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Show first 100 for performance
+    const displayCustomers = filteredCustomers.slice(0, 100);
+
+    container.innerHTML = displayCustomers.map(company => {
+        const hasAlerts = company.alerts && company.alerts.length > 0;
+        const badgeClass = hasAlerts ? 'badge-alert' : 'badge-healthy';
+        const badgeText = hasAlerts ? 'Alert' : 'Healthy';
+
+        return `
+            <div class="result-item" onclick="focusCustomer(${company.company_id})">
+                <div class="result-item-header">
+                    <h6 class="result-item-name">${escapeHtml(company.name)}</h6>
+                    <span class="result-item-badge ${badgeClass}">${badgeText}</span>
+                </div>
+                <p class="result-item-address">${escapeHtml(company.address?.city || 'Unknown location')}</p>
+                <div class="result-item-meta">
+                    ${company.total_revenue ? `<span><i class="fas fa-euro-sign"></i> ${formatCurrency(company.total_revenue)}</span>` : ''}
+                    ${company.assigned_salesperson ? `<span><i class="fas fa-user"></i> ${escapeHtml(company.assigned_salesperson)}</span>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (filteredCustomers.length > 100) {
+        container.innerHTML += `
+            <div class="empty-state" style="padding: 1rem;">
+                <small>Showing 100 of ${filteredCustomers.length} results</small>
+            </div>
+        `;
+    }
+}
+
+// Focus on a customer
+function focusCustomer(companyId) {
+    const company = filteredCustomers.find(c => c.company_id === companyId);
+    if (!company || !company.latitude || !company.longitude) return;
+
+    map.setCenter({ lat: parseFloat(company.latitude), lng: parseFloat(company.longitude) });
+    map.setZoom(15);
+
+    // Find and click the marker
+    const marker = customerMarkers.find(m =>
+        m.getTitle() === company.name
+    );
+    if (marker) {
+        showCustomerInfoWindow(company, marker);
+    }
+}
+
+// Tab switching
+function switchTab(tab) {
+    currentTab = tab;
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+
+    document.getElementById('filter-panel').style.display = tab === 'filter' ? 'flex' : 'none';
+    document.getElementById('google-panel').style.display = tab === 'google' ? 'flex' : 'none';
+
+    // Clear Google markers when switching to filter
+    if (tab === 'filter') {
+        clearGoogleMarkers();
+    }
+}
+
+// Search Google Places
+async function searchGooglePlaces() {
+    const query = document.getElementById('googleSearchInput').value.trim();
+    if (!query) return;
+
+    const bounds = map.getBounds();
+    const boundsData = bounds ? {
+        north: bounds.getNorthEast().lat(),
+        south: bounds.getSouthWest().lat(),
+        east: bounds.getNorthEast().lng(),
+        west: bounds.getSouthWest().lng()
+    } : null;
+
+    document.getElementById('googleResultsList').innerHTML = `
+        <div class="loading-state">
+            <div class="spinner-border spinner-border-sm text-primary"></div>
+            <span>Searching...</span>
+        </div>
+    `;
+
+    try {
+        const response = await fetch('/api/places/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, bounds: boundsData })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        googleResults = data.results || [];
+        displayGoogleResults();
+        updateGoogleMarkers();
+
+    } catch (error) {
+        console.error('Search error:', error);
+        document.getElementById('googleResultsList').innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle fa-2x"></i>
+                <p>Search failed: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+// Search in current map area
+function searchInCurrentArea() {
+    const query = document.getElementById('googleSearchInput').value.trim();
+    if (!query) {
+        alert('Please enter a search term first');
+        return;
+    }
+    searchGooglePlaces();
+}
+
+// Display Google results
+function displayGoogleResults() {
+    const container = document.getElementById('googleResultsList');
+    const actionsContainer = document.getElementById('googleResultsActions');
+
+    if (googleResults.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-search fa-2x"></i>
+                <p>No places found</p>
+            </div>
+        `;
+        actionsContainer.style.display = 'none';
+        return;
+    }
+
+    actionsContainer.style.display = 'block';
+
+    container.innerHTML = googleResults.map((place, index) => `
+        <div class="result-item" onclick="focusGooglePlace(${index})">
+            <div class="result-item-header">
+                <h6 class="result-item-name">${escapeHtml(place.name)}</h6>
+                <span class="result-item-badge badge-google">Google</span>
+            </div>
+            <p class="result-item-address">${escapeHtml(place.formatted_address || place.vicinity || '')}</p>
+            <div class="result-item-meta">
+                ${place.rating ? `<span><i class="fas fa-star" style="color:#f59e0b"></i> ${place.rating}</span>` : ''}
+                ${place.user_ratings_total ? `<span>(${place.user_ratings_total} reviews)</span>` : ''}
+            </div>
+            <div class="result-item-actions">
+                <button class="btn-add-prospect" id="add-btn-${index}" onclick="event.stopPropagation(); showAddProspectModal(${index})">
+                    <i class="fas fa-plus"></i> Add as Prospect
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Update Google markers on map
+function updateGoogleMarkers() {
+    clearGoogleMarkers();
+
+    const bounds = new google.maps.LatLngBounds();
+
+    googleResults.forEach((place, index) => {
+        if (!place.geometry?.location) return;
+
+        const position = {
+            lat: place.geometry.location.lat,
+            lng: place.geometry.location.lng
+        };
+        bounds.extend(position);
+
+        const marker = new google.maps.Marker({
+            position,
+            map,
+            icon: {
+                url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+            },
+            title: place.name
+        });
+
+        marker.addListener('click', () => {
+            showGooglePlaceInfoWindow(place, marker, index);
+        });
+
+        googleMarkers.push(marker);
+    });
+
+    if (googleResults.length > 0) {
+        map.fitBounds(bounds, { padding: 50 });
+    }
+}
+
+// Clear Google markers
+function clearGoogleMarkers() {
+    googleMarkers.forEach(m => m.setMap(null));
+    googleMarkers = [];
+}
+
+// Show Google place info window
+function showGooglePlaceInfoWindow(place, marker, index) {
+    const content = `
+        <div class="info-window">
+            <h6>${escapeHtml(place.name)}</h6>
+            <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(place.formatted_address || place.vicinity || '')}</p>
+            ${place.rating ? `<p><i class="fas fa-star" style="color:#f59e0b"></i> ${place.rating} (${place.user_ratings_total || 0} reviews)</p>` : ''}
+            <button class="btn-add" onclick="showAddProspectModal(${index})">
+                <i class="fas fa-plus"></i> Add as Prospect
+            </button>
+        </div>
+    `;
+
+    infoWindow.setContent(content);
+    infoWindow.open(map, marker);
+}
+
+// Focus on a Google place
+function focusGooglePlace(index) {
+    const place = googleResults[index];
+    if (!place?.geometry?.location) return;
+
+    map.setCenter({
+        lat: place.geometry.location.lat,
+        lng: place.geometry.location.lng
+    });
+    map.setZoom(17);
+
+    const marker = googleMarkers[index];
+    if (marker) {
+        showGooglePlaceInfoWindow(place, marker, index);
+    }
+}
+
+// Clear Google results
+function clearGoogleResults() {
+    googleResults = [];
+    clearGoogleMarkers();
+    document.getElementById('googleResultsList').innerHTML = `
+        <div class="empty-state">
+            <i class="fab fa-google fa-2x"></i>
+            <p>Search for businesses to find new prospects</p>
+        </div>
+    `;
+    document.getElementById('googleResultsActions').style.display = 'none';
+}
+
+// Show add prospect modal
+function showAddProspectModal(index) {
+    const place = googleResults[index];
+    if (!place) return;
+
+    selectedPlaceForProspect = { ...place, index };
+
+    document.getElementById('prospectModalBody').innerHTML = `
+        <div class="mb-3">
+            <label class="form-label fw-bold">Business Name</label>
+            <input type="text" class="form-control" id="prospectName" value="${escapeHtml(place.name)}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-bold">Address</label>
+            <input type="text" class="form-control" id="prospectAddress" value="${escapeHtml(place.formatted_address || place.vicinity || '')}">
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-bold">Notes</label>
+            <textarea class="form-control" id="prospectNotes" rows="3" placeholder="Add any notes about this prospect..."></textarea>
+        </div>
+        <div class="alert alert-info small">
+            <i class="fas fa-info-circle me-2"></i>
+            This will add the business to your prospects list for follow-up.
+        </div>
+    `;
+
+    const modal = new bootstrap.Modal(document.getElementById('prospectModal'));
+    modal.show();
+}
+
+// Save prospect
+async function saveProspect() {
+    if (!selectedPlaceForProspect) return;
+
+    const place = selectedPlaceForProspect;
+    const name = document.getElementById('prospectName').value.trim();
+    const address = document.getElementById('prospectAddress').value.trim();
+    const notes = document.getElementById('prospectNotes').value.trim();
+
+    if (!name) {
+        alert('Business name is required');
+        return;
+    }
+
+    const saveBtn = document.getElementById('saveProspectBtn');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+
+    try {
+        const prospectData = {
+            name,
+            address,
+            google_place_id: place.place_id,
+            search_query: document.getElementById('googleSearchInput').value,
+            enriched_data: {
+                latitude: place.geometry?.location?.lat,
+                longitude: place.geometry?.location?.lng,
+                rating: place.rating,
+                user_ratings_total: place.user_ratings_total,
+                types: place.types,
+                source: 'google_places'
+            }
+        };
+
+        if (notes) {
+            prospectData.notes = notes;
+        }
+
+        const response = await fetch('/api/prospects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(prospectData)
+        });
+
+        const result = await response.json();
+
+        if (result.error) {
+            throw new Error(result.error);
+        }
+
+        // Update button state
+        const addBtn = document.getElementById(`add-btn-${place.index}`);
+        if (addBtn) {
+            addBtn.classList.add('added');
+            addBtn.innerHTML = '<i class="fas fa-check"></i> Added';
+            addBtn.disabled = true;
+        }
+
+        // Close modal
+        bootstrap.Modal.getInstance(document.getElementById('prospectModal')).hide();
+
+        // Show success
+        showToast('Prospect added successfully!', 'success');
+
+    } catch (error) {
+        console.error('Error saving prospect:', error);
+        showToast('Failed to save prospect: ' + error.message, 'error');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-plus me-2"></i>Add as Prospect';
+    }
+}
+
+// Toggle sidebar (mobile)
+function toggleSidebar() {
+    document.getElementById('mapSidebar').classList.toggle('open');
+}
+
+// Helper functions
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatCurrency(value) {
+    return new Intl.NumberFormat('en-EU', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 0
+    }).format(value || 0);
+}
+
+function getAlertLabel(type) {
+    const labels = {
+        'PATTERN_DISRUPTION': 'Pattern Break',
+        'HIGH_VALUE_AT_RISK': 'High Value Risk',
+        'DORMANT_CUSTOMER': 'Dormant',
+        'DECLINING_VALUE': 'Declining',
+        'INCREASING_GAP': 'Less Frequent',
+        'ONE_TIME_CUSTOMER': 'One-Timer'
+    };
+    return labels[type] || type;
+}
+
+function showToast(message, type = 'info') {
+    // Simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : 'success'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `
+        <i class="fas fa-${type === 'error' ? 'exclamation-circle' : 'check-circle'} me-2"></i>
+        ${message}
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}

@@ -1621,6 +1621,55 @@ def prospecting():
     return render_template('prospecting.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
 
+@app.route('/prospecting-map')
+def prospecting_map():
+    """Unified Prospecting Map with Google Maps and Places search"""
+    if not is_logged_in():
+        return redirect(url_for('index'))
+    return render_template('prospecting_map.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
+
+
+@app.route('/api/places/search', methods=['POST'])
+def api_places_search():
+    """Search Google Places API within map bounds"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        data = request.get_json()
+        query = data.get('query', '')
+        bounds = data.get('bounds', {})
+
+        if not query:
+            return jsonify({'error': 'Search query is required'}), 400
+
+        # Calculate center from bounds
+        if bounds:
+            lat = (bounds.get('north', 50.85) + bounds.get('south', 50.85)) / 2
+            lng = (bounds.get('east', 4.35) + bounds.get('west', 4.35)) / 2
+            location = f"{lat},{lng}"
+        else:
+            location = "50.8503,4.3517"  # Belgium default
+
+        # Use Google Places Text Search API
+        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+        params = {
+            'query': query,
+            'location': location,
+            'radius': 15000,  # 15km radius
+            'key': GOOGLE_MAPS_API_KEY
+        }
+
+        response = requests.get(url, params=params)
+        places_data = response.json()
+
+        return jsonify(places_data)
+
+    except Exception as e:
+        print(f"Places search error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/planning')
 def planning():
     """Planning page with Mapbox map visualization"""
@@ -2152,6 +2201,14 @@ def api_create_prospect():
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat()
         }
+
+        # Add Google Place ID if provided (from Places search)
+        if data.get('google_place_id'):
+            prospect_data['google_place_id'] = data['google_place_id']
+
+        # Add search query if provided
+        if data.get('search_query'):
+            prospect_data['search_query'] = data['search_query']
         
         # Insert into Supabase
         result = supabase_client.table('prospects').insert(prospect_data).execute()
