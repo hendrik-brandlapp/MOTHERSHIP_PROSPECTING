@@ -7994,9 +7994,34 @@ def api_companies_from_db():
         
         # Sort by revenue descending
         companies_list.sort(key=lambda x: x['total_revenue'], reverse=True)
-        
+
+        # Step 5: Fetch alerts for all companies and attach to company data
+        alerts_by_company = {}
+        try:
+            alerts_result = supabase_client.table('customer_alerts').select(
+                'company_id, alert_type, priority, description'
+            ).eq('status', 'active').neq('alert_type', 'PAYMENT_ISSUES').execute()
+
+            if alerts_result.data:
+                for alert in alerts_result.data:
+                    cid = alert['company_id']
+                    if cid not in alerts_by_company:
+                        alerts_by_company[cid] = []
+                    alerts_by_company[cid].append({
+                        'type': alert['alert_type'],
+                        'priority': alert['priority'],
+                        'description': alert.get('description', '')
+                    })
+                print(f"📢 Found {len(alerts_result.data)} active alerts for {len(alerts_by_company)} companies")
+        except Exception as e:
+            print(f"Could not fetch alerts (optional): {e}")
+
+        # Attach alerts to companies
+        for company in companies_list:
+            company['alerts'] = alerts_by_company.get(company['id'], [])
+
         print(f"✅ Returning {len(companies_list)} companies, {total_invoices} invoices, €{round(total_revenue, 2)} revenue")
-        
+
         return jsonify({
             'companies': companies_list,
             'total_companies': len(companies_list),
