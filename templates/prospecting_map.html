@@ -568,9 +568,6 @@
     }
 </style>
 
-<!-- Google Maps -->
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places,marker&callback=initMap" async defer></script>
-
 <!-- MarkerClusterer -->
 <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
 
@@ -580,7 +577,7 @@ let map;
 let infoWindow;
 let customerMarkers = [];
 let googleMarkers = [];
-let markerClusterer;
+let clusterer;
 let allCustomers = [];
 let filteredCustomers = [];
 let googleResults = [];
@@ -721,8 +718,8 @@ function updateCustomerMarkers() {
     customerMarkers.forEach(m => m.setMap(null));
     customerMarkers = [];
 
-    if (markerClusterer) {
-        markerClusterer.clearMarkers();
+    if (clusterer) {
+        clusterer.clearMarkers();
     }
 
     const bounds = new google.maps.LatLngBounds();
@@ -761,9 +758,9 @@ function updateCustomerMarkers() {
         customerMarkers.push(marker);
     });
 
-    // Add clustering
-    if (typeof markerClusterer !== 'undefined') {
-        markerClusterer = new markerClusterer.MarkerClusterer({
+    // Add clustering using the markerClusterer library
+    if (typeof markerClusterer !== 'undefined' && markerClusterer.MarkerClusterer) {
+        clusterer = new markerClusterer.MarkerClusterer({
             map,
             markers: customerMarkers,
             renderer: {
@@ -791,6 +788,7 @@ function updateCustomerMarkers() {
             }
         });
     } else {
+        // Fallback: add markers directly without clustering
         customerMarkers.forEach(m => m.setMap(map));
     }
 
@@ -1238,4 +1236,7 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 3000);
 }
 </script>
+
+<!-- Google Maps - load AFTER initMap is defined -->
+<script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initMap"></script>
 {% endblock %}
