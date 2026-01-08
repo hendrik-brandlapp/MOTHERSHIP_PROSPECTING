@@ -474,6 +474,11 @@
     let selectedSalesperson = '';
     let searchTerm = '';
 
+    // Shared cache configuration (same as data.html)
+    const CACHE_KEY = 'companies_shared_cache';
+    const CACHE_TIME_KEY = 'companies_shared_cache_time';
+    const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
         initializeMap();
@@ -500,9 +505,50 @@
         console.log('Map initialized');
     }
 
-    // Load companies from API
+    // Cache functions
+    function isCacheValid() {
+        const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+        if (!cachedTime) return false;
+        return (Date.now() - parseInt(cachedTime)) < CACHE_DURATION;
+    }
+
+    function getCachedData() {
+        if (!isCacheValid()) return null;
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (!cached) return null;
+        try {
+            return JSON.parse(cached);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function setCachedData(data) {
+        try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+            localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
+        } catch (e) {
+            console.warn('Failed to cache data:', e);
+        }
+    }
+
+    // Load companies from cache or API
     async function loadCompanies() {
         try {
+            // Check cache first
+            const cachedData = getCachedData();
+            if (cachedData && cachedData.companies) {
+                console.log(`Using cached data (${cachedData.companies.length} companies)`);
+                allCompanies = cachedData.companies;
+                populateFilters();
+                addMarkersToMap(allCompanies);
+                document.getElementById('mapLoading').style.display = 'none';
+                updateStats();
+                return;
+            }
+
+            // Fetch from API
+            console.log('Fetching fresh data from API...');
             const response = await fetch('/api/companies-from-db?year=combined');
             const data = await response.json();
 
@@ -511,7 +557,10 @@
             }
 
             allCompanies = data.companies || [];
-            console.log(`Loaded ${allCompanies.length} companies`);
+            console.log(`Loaded ${allCompanies.length} companies from API`);
+
+            // Cache the data
+            setCachedData(data);
 
             // Populate filter options
             populateFilters();
@@ -535,6 +584,31 @@
         }
     }
 
+    // Helper to extract city from company data
+    function getCompanyCity(company) {
+        // Try address.city first
+        if (company.address?.city) {
+            return company.address.city;
+        }
+
+        // Try geocoded_address (can be object or JSON string)
+        if (company.geocoded_address) {
+            let geo = company.geocoded_address;
+            if (typeof geo === 'string') {
+                try {
+                    geo = JSON.parse(geo);
+                } catch (e) {
+                    // If it's a plain string, it might be the city itself
+                    return geo;
+                }
+            }
+            // Try common field names for city
+            return geo.city || geo.locality || geo.town || geo.municipality || '';
+        }
+
+        return '';
+    }
+
     // Populate filter dropdowns
     function populateFilters() {
         const flavours = new Set();
@@ -544,27 +618,54 @@
 
         allCompanies.forEach(company => {
             // Flavours
-            if (company.current_flavours) {
+            if (company.current_flavours && Array.isArray(company.current_flavours)) {
                 company.current_flavours.forEach(f => flavours.add(f));
             }
 
             // Areas (city from address or geocoded_address)
-            const city = company.address?.city || '';
-            if (city) areas.add(city);
+            const city = getCompanyCity(company);
+            if (city && city.trim()) areas.add(city.trim());
 
-            // Categories
+            // Categories - try different formats
             if (company.company_categories) {
                 if (Array.isArray(company.company_categories)) {
-                    company.company_categories.forEach(c => categories.add(c));
+                    company.company_categories.forEach(c => {
+                        if (c && c.trim()) categories.add(c.trim());
+                    });
                 } else if (typeof company.company_categories === 'string') {
-                    company.company_categories.split(',').forEach(c => categories.add(c.trim()));
+                    // Could be comma-separated or JSON
+                    try {
+                        const parsed = JSON.parse(company.company_categories);
+                        if (Array.isArray(parsed)) {
+                            parsed.forEach(c => {
+                                if (c && c.trim) categories.add(c.trim());
+                            });
+                        }
+                    } catch (e) {
+                        // Treat as comma-separated string
+                        company.company_categories.split(',').forEach(c => {
+                            if (c && c.trim()) categories.add(c.trim());
+                        });
+                    }
                 }
             }
 
-            // Salesperson
-            if (company.assigned_salesperson) {
-                salespersons.add(company.assigned_salesperson);
+            // Also check company_tag for category
+            if (company.company_tag && company.company_tag.trim()) {
+                categories.add(company.company_tag.trim());
             }
+
+            // Salesperson
+            if (company.assigned_salesperson && company.assigned_salesperson.trim()) {
+                salespersons.add(company.assigned_salesperson.trim());
+            }
+        });
+
+        console.log('Filter options found:', {
+            flavours: flavours.size,
+            areas: areas.size,
+            categories: categories.size,
+            salespersons: salespersons.size
         });
 
         // Populate flavour checkboxes
@@ -645,11 +746,12 @@
         const filteredCompanies = allCompanies.filter(company => {
             // Search filter
             if (searchTerm) {
+                const city = getCompanyCity(company);
                 const searchable = [
                     company.name || '',
                     company.public_name || '',
                     company.vat_number || '',
-                    company.address?.city || ''
+                    city
                 ].join(' ').toLowerCase();
                 if (!searchable.includes(searchTerm)) return false;
             }
@@ -663,7 +765,7 @@
 
             // Area filter
             if (selectedArea) {
-                const city = company.address?.city || '';
+                const city = getCompanyCity(company);
                 if (city !== selectedArea) return false;
             }
 
@@ -672,10 +774,21 @@
                 let companyCategories = [];
                 if (company.company_categories) {
                     if (Array.isArray(company.company_categories)) {
-                        companyCategories = company.company_categories;
+                        companyCategories = company.company_categories.map(c => c.trim());
                     } else if (typeof company.company_categories === 'string') {
-                        companyCategories = company.company_categories.split(',').map(c => c.trim());
+                        try {
+                            const parsed = JSON.parse(company.company_categories);
+                            if (Array.isArray(parsed)) {
+                                companyCategories = parsed.map(c => c.trim ? c.trim() : c);
+                            }
+                        } catch (e) {
+                            companyCategories = company.company_categories.split(',').map(c => c.trim());
+                        }
                     }
+                }
+                // Also check company_tag
+                if (company.company_tag) {
+                    companyCategories.push(company.company_tag.trim());
                 }
                 if (!companyCategories.includes(selectedCategory)) return false;
             }

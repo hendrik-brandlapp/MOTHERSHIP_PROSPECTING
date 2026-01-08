@@ -7893,7 +7893,7 @@ def api_companies_from_db():
                 'company_id, email, phone_number, website, latitude, longitude, '
                 'city, country_name, address_line1, post_code, company_tag, '
                 'company_categories, raw_company_data, public_name, customer_since, '
-                'assigned_salesperson, contact_person_name'
+                'assigned_salesperson, contact_person_name, geocoded_address'
             ).execute()
             if comp_result.data:
                 for c in comp_result.data:
@@ -7966,6 +7966,7 @@ def api_companies_from_db():
                     'street': details.get('address_line1', ''),
                     'postal_code': details.get('post_code', '')
                 },
+                'geocoded_address': details.get('geocoded_address'),
                 # Flavours from latest invoice
                 'current_flavours': extract_flavours_from_invoice(metrics.get('latest_invoice_data'))
             }

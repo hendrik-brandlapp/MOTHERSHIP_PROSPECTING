@@ -1098,28 +1098,28 @@ let categoryStates = {}; // Track category filter states: 'included', 'excluded'
 let selectedFlavours = []; // Track selected flavours for filtering
 let showOnlyMajorRetailers = false; // Filter for major retailers
 
-// Cache configuration
-const DATA_CACHE_PREFIX = 'data_companies_cache_';
-const DATA_CACHE_TIME_PREFIX = 'data_companies_cache_time_';
-const DATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+// Shared cache configuration (same keys as map.html for sharing)
+const CACHE_KEY = 'companies_shared_cache';
+const CACHE_TIME_KEY = 'companies_shared_cache_time';
+const DATA_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
 function getCacheKey(year) {
-    return DATA_CACHE_PREFIX + year;
+    return CACHE_KEY; // Always use shared cache
 }
 
 function getCacheTimeKey(year) {
-    return DATA_CACHE_TIME_PREFIX + year;
+    return CACHE_TIME_KEY;
 }
 
 function isCacheValid(year) {
-    const cachedTime = sessionStorage.getItem(getCacheTimeKey(year));
+    const cachedTime = localStorage.getItem(getCacheTimeKey(year));
     if (!cachedTime) return false;
     return (Date.now() - parseInt(cachedTime)) < DATA_CACHE_DURATION;
 }
 
 function getCachedData(year) {
     if (!isCacheValid(year)) return null;
-    const cached = sessionStorage.getItem(getCacheKey(year));
+    const cached = localStorage.getItem(getCacheKey(year));
     if (!cached) return null;
     try {
         return JSON.parse(cached);
@@ -1130,24 +1130,16 @@ function getCachedData(year) {
 
 function setCachedData(year, data) {
     try {
-        sessionStorage.setItem(getCacheKey(year), JSON.stringify(data));
-        sessionStorage.setItem(getCacheTimeKey(year), String(Date.now()));
+        localStorage.setItem(getCacheKey(year), JSON.stringify(data));
+        localStorage.setItem(getCacheTimeKey(year), String(Date.now()));
     } catch (e) {
         console.warn('Failed to cache data:', e);
     }
 }
 
 function clearCache(year) {
-    if (year) {
-        sessionStorage.removeItem(getCacheKey(year));
-        sessionStorage.removeItem(getCacheTimeKey(year));
-    } else {
-        // Clear all years
-        ['2024', '2025', 'combined'].forEach(y => {
-            sessionStorage.removeItem(getCacheKey(y));
-            sessionStorage.removeItem(getCacheTimeKey(y));
-        });
-    }
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(CACHE_TIME_KEY);
 }
 
 // Major retailer company IDs
