@@ -7893,7 +7893,7 @@ def api_companies_from_db():
                 'company_id, email, phone_number, website, latitude, longitude, '
                 'city, country_name, address_line1, post_code, company_tag, '
                 'company_categories, raw_company_data, public_name, customer_since, '
-                'assigned_salesperson, contact_person_name, geocoded_address'
+                'assigned_salesperson, contact_person_name, geocoded_address, flavour_prices'
             ).execute()
             if comp_result.data:
                 for c in comp_result.data:
@@ -7968,7 +7968,9 @@ def api_companies_from_db():
                 },
                 'geocoded_address': details.get('geocoded_address'),
                 # Flavours from latest invoice
-                'current_flavours': extract_flavours_from_invoice(metrics.get('latest_invoice_data'))
+                'current_flavours': extract_flavours_from_invoice(metrics.get('latest_invoice_data')),
+                # Flavour prices (per-flavour retail prices)
+                'flavour_prices': details.get('flavour_prices', {}) or {}
             }
 
             # Add year breakdown for combined view
@@ -10462,6 +10464,209 @@ def api_company_notes(company_id):
         
     except Exception as e:
         print(f"Error with company notes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/company-flavour-prices/<company_id>', methods=['GET', 'POST'])
+def api_company_flavour_prices(company_id):
+    """
+    Get or update flavour prices for a company
+    Stores per-flavour retail prices as JSONB: {"Elderflower": "2.50", "Ginger Lemon": "3.00"}
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        if request.method == 'GET':
+            # Get flavour prices
+            result = supabase_client.table('companies').select(
+                'flavour_prices'
+            ).eq('company_id', int(company_id)).execute()
+
+            if result.data and len(result.data) > 0:
+                return jsonify({
+                    'success': True,
+                    'prices': result.data[0].get('flavour_prices', {}) or {}
+                })
+            return jsonify({'success': True, 'prices': {}})
+
+        # POST - Update flavour prices
+        data = request.get_json()
+        prices = data.get('prices', {})
+
+        # Update in Supabase
+        result = supabase_client.table('companies').update({
+            'flavour_prices': prices,
+            'updated_at': datetime.now().isoformat()
+        }).eq('company_id', int(company_id)).execute()
+
+        return jsonify({
+            'success': True,
+            'message': 'Flavour prices saved successfully'
+        })
+
+    except Exception as e:
+        print(f"Error with flavour prices: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/company-attachments/<company_id>', methods=['GET'])
+def list_company_attachments(company_id):
+    """
+    List all attachments/photos for a company
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        result = supabase_client.table('company_attachments').select(
+            'id, file_name, file_type, file_size, storage_path, description, created_at'
+        ).eq('company_id', int(company_id)).order('created_at', desc=True).execute()
+
+        attachments = []
+        for attachment in (result.data or []):
+            # Generate signed URL for the image (valid for 1 hour)
+            storage_path = attachment.get('storage_path', '')
+            signed_url = None
+            if storage_path:
+                try:
+                    url_result = supabase_client.storage.from_('company-attachments').create_signed_url(
+                        storage_path, 3600  # 1 hour expiry
+                    )
+                    signed_url = url_result.get('signedURL') or url_result.get('signed_url')
+                except Exception as url_error:
+                    print(f"Error creating signed URL: {url_error}")
+
+            attachments.append({
+                'id': attachment['id'],
+                'file_name': attachment['file_name'],
+                'file_type': attachment.get('file_type'),
+                'file_size': attachment.get('file_size'),
+                'description': attachment.get('description'),
+                'created_at': attachment.get('created_at'),
+                'url': signed_url
+            })
+
+        return jsonify({
+            'success': True,
+            'attachments': attachments
+        })
+
+    except Exception as e:
+        print(f"Error listing attachments: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/company-attachments/<company_id>/upload', methods=['POST'])
+def upload_company_attachment(company_id):
+    """
+    Upload an image attachment for a company
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'error': 'No file selected'}), 400
+
+        # Validate file type
+        allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+        if file.content_type not in allowed_types:
+            return jsonify({'error': 'Invalid file type. Only images allowed.'}), 400
+
+        # Generate unique filename
+        import uuid
+        ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+        unique_filename = f"{uuid.uuid4()}.{ext}"
+        storage_path = f"{company_id}/{unique_filename}"
+
+        # Read file content
+        file_content = file.read()
+        file_size = len(file_content)
+
+        # Upload to Supabase Storage
+        upload_result = supabase_client.storage.from_('company-attachments').upload(
+            storage_path,
+            file_content,
+            {'content-type': file.content_type}
+        )
+
+        # Save metadata to database
+        result = supabase_client.table('company_attachments').insert({
+            'company_id': int(company_id),
+            'file_name': file.filename,
+            'file_type': file.content_type,
+            'file_size': file_size,
+            'storage_path': storage_path,
+            'description': request.form.get('description', ''),
+            'created_by': session.get('user_email', 'unknown')
+        }).execute()
+
+        # Generate signed URL for the uploaded image
+        signed_url = None
+        try:
+            url_result = supabase_client.storage.from_('company-attachments').create_signed_url(
+                storage_path, 3600
+            )
+            signed_url = url_result.get('signedURL') or url_result.get('signed_url')
+        except Exception as url_error:
+            print(f"Error creating signed URL: {url_error}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Image uploaded successfully',
+            'attachment': {
+                'id': result.data[0]['id'] if result.data else None,
+                'file_name': file.filename,
+                'url': signed_url
+            }
+        })
+
+    except Exception as e:
+        print(f"Error uploading attachment: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/company-attachments/<int:attachment_id>', methods=['DELETE'])
+def delete_company_attachment(attachment_id):
+    """
+    Delete an attachment
+    """
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get attachment info first
+        result = supabase_client.table('company_attachments').select(
+            'storage_path'
+        ).eq('id', attachment_id).execute()
+
+        if not result.data:
+            return jsonify({'error': 'Attachment not found'}), 404
+
+        storage_path = result.data[0].get('storage_path')
+
+        # Delete from storage
+        if storage_path:
+            try:
+                supabase_client.storage.from_('company-attachments').remove([storage_path])
+            except Exception as storage_error:
+                print(f"Error deleting from storage: {storage_error}")
+
+        # Delete from database
+        supabase_client.table('company_attachments').delete().eq('id', attachment_id).execute()
+
+        return jsonify({
+            'success': True,
+            'message': 'Attachment deleted successfully'
+        })
+
+    except Exception as e:
+        print(f"Error deleting attachment: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

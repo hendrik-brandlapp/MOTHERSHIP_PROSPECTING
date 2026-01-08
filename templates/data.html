@@ -908,6 +908,170 @@
         border: 1px solid rgba(0, 105, 92, 0.2);
     }
 
+    /* Flavour Pricing */
+    .flavour-pricing-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .flavour-price-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.625rem 0.875rem;
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+        border: 1px solid #e9ecef;
+    }
+
+    .flavour-name {
+        font-weight: 500;
+        color: #212529;
+        font-size: 0.875rem;
+    }
+
+    .price-input-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .price-input-wrapper .currency {
+        color: #6c757d;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .flavour-price-input {
+        width: 80px;
+        text-align: right;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+
+    .flavour-price-input:focus {
+        border-color: #5B5FEF;
+        box-shadow: 0 0 0 3px rgba(91, 95, 239, 0.1);
+        outline: none;
+    }
+
+    /* Company Photos Grid */
+    .company-photos-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+    }
+
+    .company-photo {
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        cursor: pointer;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+    }
+
+    .company-photo img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.2s ease;
+    }
+
+    .company-photo:hover img {
+        transform: scale(1.05);
+    }
+
+    .company-photo .delete-btn {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: none;
+        font-size: 0.75rem;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s ease;
+    }
+
+    .company-photo:hover .delete-btn {
+        display: flex;
+    }
+
+    .company-photo .delete-btn:hover {
+        background: #dc3545;
+    }
+
+    .company-photos-empty {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #6c757d;
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+        border: 2px dashed #dee2e6;
+    }
+
+    .company-photos-empty i {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+        display: block;
+        opacity: 0.5;
+    }
+
+    /* Photo Lightbox */
+    .photo-lightbox {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.9);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    .photo-lightbox img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        border-radius: 0.5rem;
+    }
+
+    .photo-lightbox .close-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: none;
+        font-size: 1.25rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .photo-lightbox .close-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
     /* Alert Tags */
     .company-alerts {
         padding: 0 1.25rem 0.5rem;
@@ -2659,12 +2823,29 @@ function showCompanyDetails(companyId) {
             </div>
             ` : ''}
 
-            <!-- Current Flavours (from latest invoice) -->
+            <!-- Flavour Pricing -->
             ${company.current_flavours && company.current_flavours.length > 0 ? `
             <div class="mb-4">
-                <h6 class="fw-bold text-muted small text-uppercase mb-2"><i class="fas fa-leaf me-2"></i>Current Flavours</h6>
-                <div class="d-flex flex-wrap gap-2">
-                    ${company.current_flavours.map(f => `<span class="flavour-tag-lg">${escapeHtml(f)}</span>`).join('')}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold text-muted small text-uppercase mb-0"><i class="fas fa-tag me-2"></i>Flavour Pricing</h6>
+                    <button class="btn btn-sm btn-primary" onclick="saveFlavourPrices(${company.company_id})">
+                        <i class="fas fa-save me-1"></i>Save
+                    </button>
+                </div>
+                <div class="flavour-pricing-list">
+                    ${company.current_flavours.map(f => `
+                        <div class="flavour-price-row">
+                            <span class="flavour-name">${escapeHtml(f)}</span>
+                            <div class="price-input-wrapper">
+                                <span class="currency">&euro;</span>
+                                <input type="number" step="0.01" min="0"
+                                       class="form-control form-control-sm flavour-price-input"
+                                       data-flavour="${escapeHtml(f)}"
+                                       value="${company.flavour_prices && company.flavour_prices[f] ? company.flavour_prices[f] : ''}"
+                                       placeholder="0.00">
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
             </div>
             ` : ''}
@@ -2795,7 +2976,23 @@ function showCompanyDetails(companyId) {
                 <small class="text-muted">Last updated: ${new Date().toLocaleDateString()}</small>
             </div>
         </div>
-        
+
+        <!-- Photos Section -->
+        <div class="detail-section mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-camera me-2 text-muted"></i>Photos</h6>
+                <label class="btn btn-sm btn-outline-primary py-0 px-2 mb-0">
+                    <i class="fas fa-plus me-1"></i>Add Photo
+                    <input type="file" accept="image/*" hidden onchange="uploadCompanyPhoto(${company.company_id}, this)">
+                </label>
+            </div>
+            <div class="company-photos-grid" id="company-photos-${company.company_id}">
+                <div class="text-center text-muted py-4" id="photos-loading-${company.company_id}">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Loading photos...
+                </div>
+            </div>
+        </div>
+
             <!-- Recent Invoices -->
             <div class="mt-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -2850,6 +3047,9 @@ function showCompanyDetails(companyId) {
     
     // Load trips related to this company
     loadCompanyTrips(company.company_id);
+
+    // Load photos for this company
+    loadCompanyPhotos(company.company_id);
 }
 
 // Filter invoices by year in sidepanel
@@ -3188,6 +3388,190 @@ function showSaveSuccess(message) {
     toast.innerHTML = `<i class="fas fa-check-circle me-2"></i>${message}`;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2000);
+}
+
+// =====================================================
+// FLAVOUR PRICING FUNCTIONS
+// =====================================================
+
+// Save flavour prices for a company
+async function saveFlavourPrices(companyId) {
+    try {
+        const inputs = document.querySelectorAll('.flavour-price-input');
+        const prices = {};
+        inputs.forEach(input => {
+            const flavour = input.dataset.flavour;
+            if (input.value && input.value.trim() !== '') {
+                prices[flavour] = input.value.trim();
+            }
+        });
+
+        const response = await fetch(`/api/company-flavour-prices/${companyId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prices })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSaveSuccess('Prices saved!');
+            // Update local company data
+            const company = allCompanies.find(c => c.company_id === companyId);
+            if (company) {
+                company.flavour_prices = prices;
+            }
+        } else {
+            alert('Error saving prices: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error saving flavour prices:', error);
+        alert('Error saving prices');
+    }
+}
+
+// =====================================================
+// COMPANY PHOTOS FUNCTIONS
+// =====================================================
+
+// Load photos for a company
+async function loadCompanyPhotos(companyId) {
+    const container = document.getElementById(`company-photos-${companyId}`);
+    if (!container) return;
+
+    try {
+        const response = await fetch(`/api/company-attachments/${companyId}`);
+        const data = await response.json();
+
+        if (data.success && data.attachments) {
+            if (data.attachments.length === 0) {
+                container.innerHTML = `
+                    <div class="company-photos-empty">
+                        <i class="fas fa-camera"></i>
+                        <div>No photos yet</div>
+                        <small>Click "Add Photo" to upload</small>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = data.attachments.map(photo => `
+                    <div class="company-photo" onclick="openPhotoLightbox('${photo.url}')">
+                        <img src="${photo.url}" alt="${escapeHtml(photo.file_name)}" loading="lazy">
+                        <button class="delete-btn" onclick="event.stopPropagation(); deleteCompanyPhoto(${photo.id}, ${companyId})" title="Delete photo">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `).join('');
+            }
+        } else {
+            container.innerHTML = `<div class="text-muted text-center py-3">Could not load photos</div>`;
+        }
+    } catch (error) {
+        console.error('Error loading photos:', error);
+        container.innerHTML = `<div class="text-muted text-center py-3">Error loading photos</div>`;
+    }
+}
+
+// Upload a photo for a company
+async function uploadCompanyPhoto(companyId, input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+        alert('Please select an image file (JPEG, PNG, GIF, or WebP)');
+        input.value = '';
+        return;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('Image is too large. Maximum size is 10MB.');
+        input.value = '';
+        return;
+    }
+
+    const container = document.getElementById(`company-photos-${companyId}`);
+    const originalContent = container.innerHTML;
+    container.innerHTML = `
+        <div class="text-center py-4">
+            <i class="fas fa-spinner fa-spin fa-2x text-primary mb-2"></i>
+            <div class="text-muted">Uploading photo...</div>
+        </div>
+    `;
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`/api/company-attachments/${companyId}/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSaveSuccess('Photo uploaded!');
+            await loadCompanyPhotos(companyId);
+        } else {
+            container.innerHTML = originalContent;
+            alert('Error uploading photo: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error uploading photo:', error);
+        container.innerHTML = originalContent;
+        alert('Error uploading photo');
+    }
+
+    // Reset the file input
+    input.value = '';
+}
+
+// Delete a photo
+async function deleteCompanyPhoto(attachmentId, companyId) {
+    if (!confirm('Are you sure you want to delete this photo?')) return;
+
+    try {
+        const response = await fetch(`/api/company-attachments/${attachmentId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSaveSuccess('Photo deleted');
+            await loadCompanyPhotos(companyId);
+        } else {
+            alert('Error deleting photo: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error deleting photo:', error);
+        alert('Error deleting photo');
+    }
+}
+
+// Open photo in lightbox
+function openPhotoLightbox(imageUrl) {
+    const lightbox = document.createElement('div');
+    lightbox.className = 'photo-lightbox';
+    lightbox.onclick = () => lightbox.remove();
+    lightbox.innerHTML = `
+        <button class="close-btn" onclick="event.stopPropagation(); this.parentElement.remove();">
+            <i class="fas fa-times"></i>
+        </button>
+        <img src="${imageUrl}" alt="Photo" onclick="event.stopPropagation();">
+    `;
+    document.body.appendChild(lightbox);
+
+    // Close on Escape key
+    const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+            lightbox.remove();
+            document.removeEventListener('keydown', handleEscape);
+        }
+    };
+    document.addEventListener('keydown', handleEscape);
 }
 
 // Save contact details to Supabase
