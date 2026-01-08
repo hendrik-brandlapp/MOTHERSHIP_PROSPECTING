@@ -1831,23 +1831,16 @@ function filterCompanies() {
     // Update statistics based on filtered companies
     updateFilteredStats();
 
-    console.log('[DEBUG] filterCompanies: filteredCompanies.length =', filteredCompanies.length);
-
     sortCompanies();
 }
 
 function updateFilteredStats() {
     // Calculate statistics based on filtered companies
     const totalCompanies = filteredCompanies.length;
-    const totalRevenue = filteredCompanies.reduce((sum, company) => sum + (company.total_revenue || 0), 0);
-    const totalInvoices = filteredCompanies.reduce((sum, company) => sum + (company.invoice_count || 0), 0);
-    const avgRevenue = totalCompanies > 0 ? (totalRevenue / totalCompanies) : 0;
-    
-    // Update the stats display
-    document.getElementById('stat-total-companies').textContent = totalCompanies;
-    document.getElementById('stat-total-revenue').textContent = '€' + totalRevenue.toLocaleString('nl-BE', {minimumFractionDigits: 2});
-    document.getElementById('stat-total-invoices').textContent = totalInvoices;
-    document.getElementById('stat-avg-revenue').textContent = '€' + avgRevenue.toLocaleString('nl-BE', {minimumFractionDigits: 2});
+
+    // Update the stats display (only update elements that exist)
+    const statCompaniesEl = document.getElementById('stat-total-companies');
+    if (statCompaniesEl) statCompaniesEl.textContent = totalCompanies;
     
     // Update year breakdown if in combined view
     if (currentYear === 'combined') {
@@ -2234,40 +2227,33 @@ function escapeHtml(text) {
 }
 
 function sortCompanies() {
-    console.log('[DEBUG] sortCompanies: starting, filteredCompanies.length =', filteredCompanies.length);
-    try {
-        const sortByEl = document.getElementById('sortBy');
-        const sortBy = sortByEl ? sortByEl.value : 'revenue_desc';
-        console.log('[DEBUG] sortCompanies: sortBy =', sortBy);
+    const sortByEl = document.getElementById('sortBy');
+    const sortBy = sortByEl ? sortByEl.value : 'revenue_desc';
 
-        filteredCompanies.sort((a, b) => {
-            switch (sortBy) {
-                case 'revenue_desc':
-                    return (b.total_revenue || 0) - (a.total_revenue || 0);
-                case 'revenue_asc':
-                    return (a.total_revenue || 0) - (b.total_revenue || 0);
-                case 'name_asc':
-                    return (a.name || '').localeCompare(b.name || '');
-                case 'name_desc':
-                    return (b.name || '').localeCompare(a.name || '');
-                case 'invoices_desc':
-                    return (b.invoice_count || 0) - (a.invoice_count || 0);
-                case 'invoices_asc':
-                    return (a.invoice_count || 0) - (b.invoice_count || 0);
-                case 'avg_desc':
-                    return (b.average_invoice_value || 0) - (a.average_invoice_value || 0);
-                case 'avg_asc':
-                    return (a.average_invoice_value || 0) - (b.average_invoice_value || 0);
-                default:
-                    return (b.total_revenue || 0) - (a.total_revenue || 0);
-            }
-        });
+    filteredCompanies.sort((a, b) => {
+        switch (sortBy) {
+            case 'revenue_desc':
+                return (b.total_revenue || 0) - (a.total_revenue || 0);
+            case 'revenue_asc':
+                return (a.total_revenue || 0) - (b.total_revenue || 0);
+            case 'name_asc':
+                return (a.name || '').localeCompare(b.name || '');
+            case 'name_desc':
+                return (b.name || '').localeCompare(a.name || '');
+            case 'invoices_desc':
+                return (b.invoice_count || 0) - (a.invoice_count || 0);
+            case 'invoices_asc':
+                return (a.invoice_count || 0) - (b.invoice_count || 0);
+            case 'avg_desc':
+                return (b.average_invoice_value || 0) - (a.average_invoice_value || 0);
+            case 'avg_asc':
+                return (a.average_invoice_value || 0) - (b.average_invoice_value || 0);
+            default:
+                return (b.total_revenue || 0) - (a.total_revenue || 0);
+        }
+    });
 
-        console.log('[DEBUG] sortCompanies: sort complete, calling displayCompanies');
-        displayCompanies();
-    } catch (error) {
-        console.error('[DEBUG] sortCompanies ERROR:', error);
-    }
+    displayCompanies();
 }
 
 function changeViewMode() {
@@ -2276,58 +2262,48 @@ function changeViewMode() {
 }
 
 function displayCompanies() {
-    console.log('[DEBUG] displayCompanies: starting, filteredCompanies.length =', filteredCompanies.length, 'currentViewMode =', currentViewMode);
-    try {
-        const cardsContainer = document.getElementById('companies-cards');
-        const tableContainer = document.getElementById('companies-table');
-        const resultsInfo = document.getElementById('results-info');
-        const noResults = document.getElementById('no-results');
+    const cardsContainer = document.getElementById('companies-cards');
+    const tableContainer = document.getElementById('companies-table');
+    const resultsInfo = document.getElementById('results-info');
+    const noResults = document.getElementById('no-results');
 
-        // Update results info
-        document.getElementById('showing-count').textContent = filteredCompanies.length;
-        document.getElementById('total-count').textContent = allCompanies.length;
-        resultsInfo.style.display = 'block';
+    // Update results info
+    document.getElementById('showing-count').textContent = filteredCompanies.length;
+    document.getElementById('total-count').textContent = allCompanies.length;
+    resultsInfo.style.display = 'block';
 
-        if (filteredCompanies.length === 0) {
-            cardsContainer.style.display = 'none';
-            tableContainer.style.display = 'none';
-            noResults.style.display = 'block';
-            return;
-        }
+    if (filteredCompanies.length === 0) {
+        cardsContainer.style.display = 'none';
+        tableContainer.style.display = 'none';
+        noResults.style.display = 'block';
+        return;
+    }
 
-        noResults.style.display = 'none';
+    noResults.style.display = 'none';
 
-        if (currentViewMode === 'cards') {
-            console.log('[DEBUG] displayCompanies: calling displayCardsView');
-            displayCardsView();
-            cardsContainer.style.display = 'flex';
-            tableContainer.style.display = 'none';
-        } else {
-            displayTableView();
-            cardsContainer.style.display = 'none';
-            tableContainer.style.display = 'block';
-        }
-        console.log('[DEBUG] displayCompanies: completed');
-    } catch (error) {
-        console.error('[DEBUG] displayCompanies ERROR:', error);
+    if (currentViewMode === 'cards') {
+        displayCardsView();
+        cardsContainer.style.display = 'flex';
+        tableContainer.style.display = 'none';
+    } else {
+        displayTableView();
+        cardsContainer.style.display = 'none';
+        tableContainer.style.display = 'block';
     }
 }
 
 function displayCardsView() {
-    console.log('[DEBUG] displayCardsView: starting, filteredCompanies.length =', filteredCompanies.length);
-    try {
-        const container = document.getElementById('companies-cards');
-        container.innerHTML = '';
+    const container = document.getElementById('companies-cards');
+    container.innerHTML = '';
 
-        filteredCompanies.forEach((company, index) => {
-            try {
-                const card = document.createElement('div');
-                card.className = 'col-md-6 col-lg-4 mb-4';
+    filteredCompanies.forEach(company => {
+        const card = document.createElement('div');
+        card.className = 'col-md-6 col-lg-4 mb-4';
 
-                const addressParts = [
-                    company.address?.city,
-                    company.address?.country
-                ].filter(part => part).join(', ');
+        const addressParts = [
+            company.address?.city,
+            company.address?.country
+        ].filter(part => part).join(', ');
 
         // Parse raw_company_data for email and contact person
         let rawData = {};
@@ -2404,15 +2380,8 @@ function displayCardsView() {
             </div>
         `;
 
-                container.appendChild(card);
-            } catch (cardError) {
-                console.error('[DEBUG] displayCardsView: error creating card for company index', index, cardError);
-            }
-        });
-        console.log('[DEBUG] displayCardsView: finished, cards in DOM =', container.children.length);
-    } catch (error) {
-        console.error('[DEBUG] displayCardsView ERROR:', error);
-    }
+        container.appendChild(card);
+    });
 }
 
 // Helper function for status badge colors
