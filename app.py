@@ -7634,6 +7634,58 @@ def api_companies_with_alerts():
         return jsonify({'error': str(e)}), 500
 
 
+def extract_flavours_from_invoice(invoice_data):
+    """Extract flavour names from invoice line items.
+
+    Yugen product names follow patterns like:
+    - "Box Yugen Ginger Lemon Bio Cans 24x32cl"
+    - "Yugen Original Tonic Bio 24x32cl"
+    - "Pallet Yugen Elderflower Bio Cans 24x32cl"
+
+    Returns a list of unique flavour names.
+    """
+    if not invoice_data:
+        return []
+
+    line_items = invoice_data.get('invoice_line_items') or []
+    flavours = set()
+
+    # Known Yugen flavours to match against
+    known_flavours = [
+        'Ginger Lemon', 'Original Tonic', 'Elderflower', 'Yuzu Citrus',
+        'Cucumber Mint', 'Hibiscus Rose', 'Grapefruit', 'Blood Orange',
+        'Lemon', 'Lime', 'Apple Ginger', 'Passion Fruit', 'Mango',
+        'Peach', 'Raspberry', 'Strawberry', 'Blueberry', 'Pomegranate'
+    ]
+
+    for item in line_items:
+        product = item.get('product') or {}
+        product_name = product.get('name') or item.get('description') or ''
+
+        if not product_name:
+            continue
+
+        # Try to match known flavours first
+        product_upper = product_name.upper()
+        for flavour in known_flavours:
+            if flavour.upper() in product_upper:
+                flavours.add(flavour)
+                break
+        else:
+            # Try to extract flavour from "Yugen [Flavour] Bio" pattern
+            import re
+            # Match pattern: Yugen <flavour words> Bio
+            match = re.search(r'Yugen\s+([A-Za-z\s]+?)\s+Bio', product_name, re.IGNORECASE)
+            if match:
+                flavour_text = match.group(1).strip()
+                # Clean up common prefixes/suffixes
+                flavour_text = re.sub(r'^(Box|Pallet|Case)\s+', '', flavour_text, flags=re.IGNORECASE)
+                if flavour_text and len(flavour_text) > 2:
+                    flavours.add(flavour_text.title())
+
+    return sorted(list(flavours))
+
+
 @app.route('/api/companies-from-db', methods=['GET'])
 def api_companies_from_db():
     """
@@ -7785,6 +7837,8 @@ def api_companies_from_db():
                     'count_2025': 0,
                     'revenue_2026': 0.0,
                     'count_2026': 0,
+                    'latest_invoice_date': None,
+                    'latest_invoice_data': None,
                 }
             
             # Get the amount - DUANO's "Omzet" is the sum of line item revenues (ex-VAT)
@@ -7801,7 +7855,13 @@ def api_companies_from_db():
             company_metrics[cid]['total_revenue'] += amount
             company_metrics[cid]['invoice_count'] += 1
             company_metrics[cid]['invoices'].append(inv.get('invoice_date'))
-            
+
+            # Track latest invoice for flavour extraction
+            inv_date = inv.get('invoice_date')
+            if inv_date and (not company_metrics[cid]['latest_invoice_date'] or inv_date > company_metrics[cid]['latest_invoice_date']):
+                company_metrics[cid]['latest_invoice_date'] = inv_date
+                company_metrics[cid]['latest_invoice_data'] = invoice_data
+
             # Track by year
             inv_year = inv.get('year')
             if inv_year == '2024':
@@ -7893,9 +7953,11 @@ def api_companies_from_db():
                     'country': details.get('country_name', ''),
                     'street': details.get('address_line1', ''),
                     'postal_code': details.get('post_code', '')
-                }
+                },
+                # Flavours from latest invoice
+                'current_flavours': extract_flavours_from_invoice(metrics.get('latest_invoice_data'))
             }
-            
+
             # Add year breakdown for combined view
             if year_filter == 'combined':
                 company_data['years_data'] = {
