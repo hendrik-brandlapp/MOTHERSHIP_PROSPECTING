@@ -9,6 +9,8 @@ import urllib.parse
 import secrets
 import os
 import time
+import threading
+import atexit
 from datetime import datetime, timedelta
 import json
 import math
@@ -42,6 +44,12 @@ try:
     from whatsapp_service import WhatsAppService
 except Exception:
     WhatsAppService = None
+
+try:
+    from automation_engine import AutomationEngine, AUTOMATION_TEMPLATES
+except Exception:
+    AutomationEngine = None
+    AUTOMATION_TEMPLATES = []
 
 try:
     from route_optimizer import optimize_trip_route
@@ -85,6 +93,58 @@ if create_client and Client:
         supabase_client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
     except Exception:
         supabase_client = None
+
+# Initialize Automation Engine
+automation_engine = None
+if supabase_client and AutomationEngine:
+    try:
+        automation_engine = AutomationEngine(supabase_client)
+    except Exception:
+        automation_engine = None
+
+# Background scheduler for time-based automations
+automation_scheduler_running = False
+automation_scheduler_thread = None
+
+def run_automation_scheduler():
+    """Background thread that processes time-based automations every 15 minutes"""
+    global automation_scheduler_running
+    while automation_scheduler_running:
+        try:
+            if automation_engine:
+                result = automation_engine.process_time_based_queue()
+                if result.get('processed', 0) > 0:
+                    print(f"[Automation Scheduler] Processed {result['processed']} time-based automations")
+        except Exception as e:
+            print(f"[Automation Scheduler] Error: {e}")
+
+        # Sleep for 15 minutes (check every 30 seconds to allow graceful shutdown)
+        for _ in range(30):
+            if not automation_scheduler_running:
+                break
+            time.sleep(30)
+
+def start_automation_scheduler():
+    """Start the background automation scheduler"""
+    global automation_scheduler_running, automation_scheduler_thread
+    if automation_engine and not automation_scheduler_running:
+        automation_scheduler_running = True
+        automation_scheduler_thread = threading.Thread(target=run_automation_scheduler, daemon=True)
+        automation_scheduler_thread.start()
+        print("[Automation Scheduler] Started background processing for time-based automations")
+
+def stop_automation_scheduler():
+    """Stop the background automation scheduler"""
+    global automation_scheduler_running
+    automation_scheduler_running = False
+    print("[Automation Scheduler] Stopped")
+
+# Register cleanup on app shutdown
+atexit.register(stop_automation_scheduler)
+
+# Start scheduler if automation engine is available
+if automation_engine:
+    start_automation_scheduler()
 
 # DOUANO API Configuration
 DOUANO_CONFIG = {
@@ -2268,15 +2328,25 @@ def api_update_prospect(prospect_id):
     """Update a prospect's status or other fields"""
     if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
-    
+
     if not supabase_client:
         return jsonify({'error': 'Supabase not configured'}), 500
-    
+
     try:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
-        
+
+        # Get current prospect state before update (for automation triggers)
+        old_prospect = None
+        if 'status' in data:
+            try:
+                old_result = supabase_client.table('prospects').select('*').eq('id', prospect_id).execute()
+                if old_result.data:
+                    old_prospect = old_result.data[0]
+            except Exception as e:
+                print(f"Error fetching old prospect state: {e}")
+
         # Prepare update data
         update_data = {
             'updated_at': datetime.now().isoformat()
@@ -2323,7 +2393,25 @@ def api_update_prospect(prospect_id):
             # Create automated tasks based on status change
             if 'status' in data:
                 create_automated_tasks(prospect_id, data['status'], updated_prospect)
-            
+
+                # Trigger no-code automations for status change
+                if automation_engine and old_prospect:
+                    old_status = old_prospect.get('status')
+                    new_status = data['status']
+                    if old_status != new_status:
+                        try:
+                            current_user = session.get('user_name', 'system')
+                            automation_engine.evaluate_status_change(
+                                prospect_id=prospect_id,
+                                old_status=old_status,
+                                new_status=new_status,
+                                prospect_data=updated_prospect,
+                                triggered_by=current_user
+                            )
+                        except Exception as auto_error:
+                            print(f"Automation engine error: {auto_error}")
+                            # Don't fail the main update if automation fails
+
             return jsonify({
                 'prospect': updated_prospect,
                 'message': 'Prospect updated successfully'
@@ -13466,6 +13554,419 @@ def api_test_duano_speed():
             'success': False,
             'error': str(e)
         }), 500
+
+
+# =====================================================
+# AUTOMATION BUILDER ENDPOINTS
+# =====================================================
+
+@app.route('/automations')
+def automations_page():
+    """Task Automations Builder page"""
+    return render_template('automations.html')
+
+
+@app.route('/api/automations', methods=['GET'])
+def api_get_automations():
+    """List all automation rules for the current user"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get all automations (can filter by created_by if auth is implemented)
+        result = supabase_client.table('automation_rules').select(
+            '*'
+        ).order('created_at', desc=True).execute()
+
+        return jsonify({
+            'success': True,
+            'automations': result.data or []
+        })
+
+    except Exception as e:
+        print(f"Error fetching automations: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations', methods=['POST'])
+def api_create_automation():
+    """Create a new automation rule"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        data = request.get_json()
+
+        automation_data = {
+            'name': data.get('name', 'Untitled Automation'),
+            'description': data.get('description', ''),
+            'created_by': data.get('created_by', session.get('user_email', 'unknown')),
+            'is_global': data.get('is_global', False),
+            'is_enabled': data.get('is_enabled', False),
+            'is_draft': data.get('is_draft', True),
+            'trigger_type': data.get('trigger_type'),
+            'trigger_config': data.get('trigger_config', {}),
+            'conditions': data.get('conditions', []),
+            'actions': data.get('actions', [])
+        }
+
+        result = supabase_client.table('automation_rules').insert(automation_data).execute()
+
+        if result.data:
+            return jsonify({
+                'success': True,
+                'automation': result.data[0]
+            })
+        else:
+            return jsonify({'error': 'Failed to create automation'}), 500
+
+    except Exception as e:
+        print(f"Error creating automation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/<automation_id>', methods=['GET'])
+def api_get_automation(automation_id):
+    """Get a specific automation rule"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        result = supabase_client.table('automation_rules').select(
+            '*'
+        ).eq('id', automation_id).execute()
+
+        if result.data:
+            return jsonify({
+                'success': True,
+                'automation': result.data[0]
+            })
+        else:
+            return jsonify({'error': 'Automation not found'}), 404
+
+    except Exception as e:
+        print(f"Error fetching automation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/<automation_id>', methods=['PATCH'])
+def api_update_automation(automation_id):
+    """Update an automation rule"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        data = request.get_json()
+
+        # Only update provided fields
+        update_data = {'updated_at': datetime.now().isoformat()}
+
+        allowed_fields = ['name', 'description', 'is_global', 'is_enabled', 'is_draft',
+                          'trigger_type', 'trigger_config', 'conditions', 'actions']
+
+        for field in allowed_fields:
+            if field in data:
+                update_data[field] = data[field]
+
+        result = supabase_client.table('automation_rules').update(
+            update_data
+        ).eq('id', automation_id).execute()
+
+        if result.data:
+            return jsonify({
+                'success': True,
+                'automation': result.data[0]
+            })
+        else:
+            return jsonify({'error': 'Automation not found'}), 404
+
+    except Exception as e:
+        print(f"Error updating automation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/<automation_id>', methods=['DELETE'])
+def api_delete_automation(automation_id):
+    """Delete an automation rule"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        result = supabase_client.table('automation_rules').delete().eq(
+            'id', automation_id
+        ).execute()
+
+        return jsonify({'success': True, 'message': 'Automation deleted'})
+
+    except Exception as e:
+        print(f"Error deleting automation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/<automation_id>/toggle', methods=['POST'])
+def api_toggle_automation(automation_id):
+    """Enable or disable an automation"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get current state
+        result = supabase_client.table('automation_rules').select(
+            'is_enabled'
+        ).eq('id', automation_id).execute()
+
+        if not result.data:
+            return jsonify({'error': 'Automation not found'}), 404
+
+        current_enabled = result.data[0].get('is_enabled', False)
+        new_enabled = not current_enabled
+
+        # Update state
+        update_result = supabase_client.table('automation_rules').update({
+            'is_enabled': new_enabled,
+            'is_draft': False if new_enabled else result.data[0].get('is_draft', True),
+            'updated_at': datetime.now().isoformat()
+        }).eq('id', automation_id).execute()
+
+        if update_result.data:
+            return jsonify({
+                'success': True,
+                'is_enabled': new_enabled,
+                'automation': update_result.data[0]
+            })
+        else:
+            return jsonify({'error': 'Failed to toggle automation'}), 500
+
+    except Exception as e:
+        print(f"Error toggling automation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/<automation_id>/test', methods=['POST'])
+def api_test_automation(automation_id):
+    """Test an automation with a sample prospect (dry run)"""
+    try:
+        if not automation_engine:
+            return jsonify({'error': 'Automation engine not available'}), 500
+
+        data = request.get_json() or {}
+        sample_prospect_id = data.get('prospect_id')
+
+        result = automation_engine.test_automation(automation_id, sample_prospect_id)
+
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"Error testing automation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/<automation_id>/executions', methods=['GET'])
+def api_get_automation_executions(automation_id):
+    """Get execution history for an automation"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        limit = request.args.get('limit', 50, type=int)
+
+        result = supabase_client.table('automation_executions').select(
+            '*'
+        ).eq('automation_rule_id', automation_id).order(
+            'executed_at', desc=True
+        ).limit(limit).execute()
+
+        return jsonify({
+            'success': True,
+            'executions': result.data or []
+        })
+
+    except Exception as e:
+        print(f"Error fetching executions: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/templates', methods=['GET'])
+def api_get_automation_templates():
+    """Get pre-built automation templates"""
+    return jsonify({
+        'success': True,
+        'templates': AUTOMATION_TEMPLATES
+    })
+
+
+@app.route('/api/automations/stats', methods=['GET'])
+def api_get_automation_stats():
+    """Get automation statistics"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Count active automations
+        active_result = supabase_client.table('automation_rules').select(
+            'id', count='exact'
+        ).eq('is_enabled', True).execute()
+
+        # Count total automations
+        total_result = supabase_client.table('automation_rules').select(
+            'id', count='exact'
+        ).execute()
+
+        # Count executions today
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        today_executions = supabase_client.table('automation_executions').select(
+            'id', count='exact'
+        ).gte('executed_at', today).execute()
+
+        # Count successful executions today
+        successful_today = supabase_client.table('automation_executions').select(
+            'id', count='exact'
+        ).gte('executed_at', today).eq('status', 'success').execute()
+
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_automations': total_result.count or 0,
+                'active_automations': active_result.count or 0,
+                'executions_today': today_executions.count or 0,
+                'successful_today': successful_today.count or 0
+            }
+        })
+
+    except Exception as e:
+        print(f"Error fetching automation stats: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/process-queue', methods=['POST'])
+def api_process_automation_queue():
+    """Manually trigger processing of time-based automation queue"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not automation_engine:
+            return jsonify({'error': 'Automation engine not available'}), 500
+
+        result = automation_engine.process_time_based_queue()
+
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+
+    except Exception as e:
+        print(f"Error processing automation queue: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/automations/scheduler-status', methods=['GET'])
+def api_automation_scheduler_status():
+    """Get the status of the background automation scheduler"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    return jsonify({
+        'running': automation_scheduler_running,
+        'engine_available': automation_engine is not None,
+        'message': 'Time-based automations are processed automatically every 15 minutes' if automation_scheduler_running else 'Scheduler not running'
+    })
+
+
+@app.route('/api/automations/available-triggers', methods=['GET'])
+def api_get_available_triggers():
+    """Get list of available trigger types and their configurations"""
+    triggers = [
+        {
+            'type': 'status_change',
+            'label': 'Status Change',
+            'description': 'When a prospect moves to a specific funnel stage',
+            'icon': 'fas fa-exchange-alt',
+            'config_fields': [
+                {'name': 'from_status', 'type': 'select', 'label': 'From Status', 'required': False},
+                {'name': 'to_status', 'type': 'select', 'label': 'To Status', 'required': True}
+            ]
+        },
+        {
+            'type': 'time_based',
+            'label': 'Time-Based',
+            'description': 'X days after an event (last contact, created, etc.)',
+            'icon': 'fas fa-clock',
+            'config_fields': [
+                {'name': 'days_offset', 'type': 'number', 'label': 'Days', 'required': True, 'default': 7},
+                {'name': 'event', 'type': 'select', 'label': 'After Event', 'required': True,
+                 'options': ['created_at', 'last_contact_date', 'status_changed_at']},
+                {'name': 'status_filter', 'type': 'multiselect', 'label': 'For Prospects With Status', 'required': False}
+            ]
+        },
+        {
+            'type': 'field_change',
+            'label': 'Field Change',
+            'description': 'When a specific field is updated',
+            'icon': 'fas fa-edit',
+            'config_fields': [
+                {'name': 'field', 'type': 'select', 'label': 'Field', 'required': True,
+                 'options': ['assigned_salesperson', 'region', 'priority_level', 'tags', 'notes']},
+                {'name': 'change_type', 'type': 'select', 'label': 'Change Type', 'required': True,
+                 'options': ['set', 'changed', 'cleared']}
+            ]
+        }
+    ]
+
+    return jsonify({'success': True, 'triggers': triggers})
+
+
+@app.route('/api/automations/available-actions', methods=['GET'])
+def api_get_available_actions():
+    """Get list of available action types"""
+    actions = [
+        {
+            'type': 'create_task',
+            'label': 'Create Task',
+            'description': 'Create a follow-up task',
+            'icon': 'fas fa-tasks',
+            'config_fields': [
+                {'name': 'title_template', 'type': 'text', 'label': 'Task Title', 'required': True,
+                 'placeholder': 'Follow up with {{prospect_name}}'},
+                {'name': 'description_template', 'type': 'textarea', 'label': 'Description', 'required': False},
+                {'name': 'task_type', 'type': 'select', 'label': 'Task Type', 'required': True,
+                 'options': ['call', 'email', 'meeting', 'follow_up', 'demo', 'proposal', 'research']},
+                {'name': 'priority', 'type': 'select', 'label': 'Priority', 'required': True,
+                 'options': [1, 2, 3, 4, 5], 'default': 3},
+                {'name': 'due_date_offset_days', 'type': 'number', 'label': 'Due In (days)', 'required': True, 'default': 1},
+                {'name': 'assigned_to', 'type': 'text', 'label': 'Assign To', 'required': False,
+                 'placeholder': '{{current_user}}'}
+            ]
+        },
+        {
+            'type': 'update_prospect_status',
+            'label': 'Update Status',
+            'description': 'Change the prospect status',
+            'icon': 'fas fa-exchange-alt',
+            'config_fields': [
+                {'name': 'new_status', 'type': 'select', 'label': 'New Status', 'required': True}
+            ]
+        }
+    ]
+
+    return jsonify({'success': True, 'actions': actions})
+
+
+@app.route('/api/automations/available-statuses', methods=['GET'])
+def api_get_available_statuses():
+    """Get list of available prospect statuses"""
+    statuses = [
+        {'value': 'new_lead', 'label': 'New Lead'},
+        {'value': 'first_contact', 'label': 'First Contact'},
+        {'value': 'meeting_planned', 'label': 'Meeting Planned'},
+        {'value': 'follow_up', 'label': 'Follow Up'},
+        {'value': 'customer', 'label': 'Customer'},
+        {'value': 'contact_later', 'label': 'Contact Later'},
+        {'value': 'ex_customer', 'label': 'Ex Customer'},
+        {'value': 'unqualified', 'label': 'Unqualified'}
+    ]
+
+    return jsonify({'success': True, 'statuses': statuses})
 
 
 # =====================================================

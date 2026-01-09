@@ -1,0 +1,1314 @@
+{% extends 'base.html' %}
+
+{% block title %}Automations · CRMinal{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Stats Cards */
+    .stat-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 1.25rem;
+        text-align: center;
+        transition: all 0.2s;
+    }
+
+    .stat-card:hover {
+        border-color: var(--accent);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .stat-number {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--accent);
+        display: block;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 0.25rem;
+    }
+
+    /* Template Cards */
+    .template-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .template-card:hover {
+        border-color: var(--accent);
+        box-shadow: var(--shadow-sm);
+        transform: translateY(-2px);
+    }
+
+    .template-card .template-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-md);
+        background: var(--accent-light);
+        color: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.75rem;
+        font-size: 1.1rem;
+    }
+
+    .template-card h6 {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .template-card p {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        margin-bottom: 0;
+    }
+
+    /* Automation Cards */
+    .automation-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.25rem;
+        margin-bottom: 0.75rem;
+        transition: all 0.2s;
+    }
+
+    .automation-card:hover {
+        border-color: var(--border-hover);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .automation-card.disabled {
+        opacity: 0.6;
+    }
+
+    .automation-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
+    }
+
+    .automation-title {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+
+    .automation-description {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+    }
+
+    .automation-meta {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+
+    .automation-meta i {
+        margin-right: 0.25rem;
+    }
+
+    .automation-toggle {
+        position: relative;
+        width: 44px;
+        height: 24px;
+    }
+
+    .automation-toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .automation-toggle .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .3s;
+        border-radius: 24px;
+    }
+
+    .automation-toggle .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: .3s;
+        border-radius: 50%;
+    }
+
+    .automation-toggle input:checked + .slider {
+        background-color: var(--accent);
+    }
+
+    .automation-toggle input:checked + .slider:before {
+        transform: translateX(20px);
+    }
+
+    /* Trigger/Action badges */
+    .trigger-badge, .action-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .trigger-badge {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .action-badge {
+        background: #dcfce7;
+        color: #16a34a;
+    }
+
+    /* Builder Modal */
+    .builder-step {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .builder-step:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+
+    .step-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: var(--text-primary);
+    }
+
+    .step-label .badge {
+        font-size: 0.7rem;
+    }
+
+    /* Trigger Type Selection */
+    .trigger-type-btn {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 1rem;
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-md);
+        background: var(--bg-surface);
+        cursor: pointer;
+        transition: all 0.2s;
+        margin-bottom: 0.5rem;
+    }
+
+    .trigger-type-btn:hover {
+        border-color: var(--accent);
+    }
+
+    .trigger-type-btn.selected {
+        border-color: var(--accent);
+        background: var(--accent-light);
+    }
+
+    .trigger-type-btn i {
+        font-size: 1.1rem;
+        margin-right: 0.75rem;
+        color: var(--accent);
+    }
+
+    .trigger-type-btn strong {
+        display: block;
+        color: var(--text-primary);
+    }
+
+    .trigger-type-btn small {
+        color: var(--text-secondary);
+    }
+
+    /* Action Card in Builder */
+    .action-card-builder {
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+        position: relative;
+    }
+
+    .action-card-builder .action-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+    }
+
+    .action-card-builder .remove-action {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0.25rem;
+    }
+
+    .action-card-builder .remove-action:hover {
+        color: var(--danger);
+    }
+
+    /* Preview Box */
+    .preview-box {
+        background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+    }
+
+    .preview-box p {
+        margin-bottom: 0;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--text-secondary);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        opacity: 0.3;
+        margin-bottom: 1rem;
+    }
+
+    .empty-state h5 {
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+
+    /* Status indicator */
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 0.5rem;
+    }
+
+    .status-dot.enabled {
+        background: #22c55e;
+    }
+
+    .status-dot.disabled {
+        background: #9ca3af;
+    }
+
+    .status-dot.draft {
+        background: #f59e0b;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h2 mb-1 fw-bold text-dark">Task Automations</h1>
+            <p class="text-muted mb-0">Create automatic tasks based on prospect activity</p>
+        </div>
+        <button class="btn btn-primary" onclick="showCreateModal()">
+            <i class="fas fa-plus me-2"></i>New Automation
+        </button>
+    </div>
+
+    <!-- Scheduler Status Banner -->
+    <div id="scheduler-status" class="alert alert-info d-flex align-items-center mb-4" style="display: none;">
+        <i class="fas fa-clock me-2"></i>
+        <span id="scheduler-message">Checking scheduler status...</span>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <span class="stat-number" id="stat-total">0</span>
+                <div class="stat-label">Total Automations</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <span class="stat-number" id="stat-active">0</span>
+                <div class="stat-label">Active</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <span class="stat-number" id="stat-executions">0</span>
+                <div class="stat-label">Runs Today</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <span class="stat-number" id="stat-successful">0</span>
+                <div class="stat-label">Successful</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Start Templates -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Quick Start Templates</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3" id="templates-container">
+                <!-- Templates loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Automations List -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Your Automations</h5>
+            <div class="btn-group btn-group-sm" role="group">
+                <button class="btn btn-outline-secondary active" data-filter="all" onclick="filterAutomations('all')">All</button>
+                <button class="btn btn-outline-secondary" data-filter="enabled" onclick="filterAutomations('enabled')">Enabled</button>
+                <button class="btn btn-outline-secondary" data-filter="draft" onclick="filterAutomations('draft')">Drafts</button>
+            </div>
+        </div>
+        <div class="card-body" id="automations-container">
+            <div class="text-center py-4">
+                <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create/Edit Automation Modal -->
+<div class="modal fade" id="automationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Create Automation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editAutomationId">
+
+                <!-- Step 1: Name -->
+                <div class="builder-step">
+                    <div class="step-label">
+                        <span class="badge bg-secondary">1</span>
+                        Name your automation
+                    </div>
+                    <input type="text" class="form-control mb-2" id="automationName" placeholder="e.g., First Contact Follow-up">
+                    <textarea class="form-control" id="automationDescription" rows="2" placeholder="Description (optional)"></textarea>
+                </div>
+
+                <!-- Step 2: Trigger (IF) -->
+                <div class="builder-step">
+                    <div class="step-label">
+                        <span class="badge bg-primary">IF</span>
+                        When should this run?
+                    </div>
+
+                    <div id="triggerTypeSelector">
+                        <div class="trigger-type-btn selected" data-type="status_change" onclick="selectTriggerType('status_change')">
+                            <i class="fas fa-exchange-alt"></i>
+                            <strong>Status Change</strong>
+                            <small>When a prospect moves to a specific stage</small>
+                        </div>
+                        <div class="trigger-type-btn" data-type="time_based" onclick="selectTriggerType('time_based')">
+                            <i class="fas fa-clock"></i>
+                            <strong>Time-Based</strong>
+                            <small>X days after an event (last contact, created, etc.)</small>
+                        </div>
+                        <div class="trigger-type-btn" data-type="field_change" onclick="selectTriggerType('field_change')">
+                            <i class="fas fa-edit"></i>
+                            <strong>Field Change</strong>
+                            <small>When a specific field is updated</small>
+                        </div>
+                    </div>
+
+                    <div id="triggerConfig" class="mt-3">
+                        <!-- Dynamic config based on trigger type -->
+                    </div>
+                </div>
+
+                <!-- Step 3: Actions (THEN) -->
+                <div class="builder-step">
+                    <div class="step-label">
+                        <span class="badge bg-success">THEN</span>
+                        What should happen?
+                    </div>
+
+                    <div id="actionsContainer">
+                        <!-- Action cards added here -->
+                    </div>
+
+                    <div class="dropdown">
+                        <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-plus me-1"></i>Add Action
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" onclick="addAction('create_task'); return false;">
+                                <i class="fas fa-tasks me-2"></i>Create Task
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="addAction('update_prospect_status'); return false;">
+                                <i class="fas fa-exchange-alt me-2"></i>Update Prospect Status
+                            </a></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Preview -->
+                <div class="builder-step">
+                    <div class="step-label">
+                        <i class="fas fa-eye me-2"></i>Preview
+                    </div>
+                    <div class="preview-box">
+                        <p id="automationPreview">Configure your automation above to see a preview...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="testAutomation()">
+                    <i class="fas fa-flask me-1"></i>Test
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="saveAutomation(true)">
+                    Save as Draft
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveAutomation(false)">
+                    <i class="fas fa-check me-1"></i>Save & Enable
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Execution History Modal -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Execution History</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="historyContent">
+                <!-- History loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let allAutomations = [];
+let allTemplates = [];
+let availableStatuses = [];
+let currentFilter = 'all';
+let currentTriggerType = 'status_change';
+let actionCounter = 0;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadSchedulerStatus();
+    loadStatuses();
+    loadStats();
+    loadTemplates();
+    loadAutomations();
+});
+
+async function loadSchedulerStatus() {
+    try {
+        const response = await fetch('/api/automations/scheduler-status');
+        const data = await response.json();
+        const banner = document.getElementById('scheduler-status');
+        const message = document.getElementById('scheduler-message');
+
+        if (data.running) {
+            banner.className = 'alert alert-success d-flex align-items-center mb-4';
+            banner.querySelector('i').className = 'fas fa-check-circle me-2';
+            message.textContent = 'Time-based automations run automatically every 15 minutes';
+            banner.style.display = 'flex';
+        } else if (!data.engine_available) {
+            banner.className = 'alert alert-warning d-flex align-items-center mb-4';
+            banner.querySelector('i').className = 'fas fa-exclamation-triangle me-2';
+            message.textContent = 'Automation engine not available. Please run the database migration.';
+            banner.style.display = 'flex';
+        }
+    } catch (error) {
+        console.error('Error loading scheduler status:', error);
+    }
+}
+
+async function loadStatuses() {
+    try {
+        const response = await fetch('/api/automations/available-statuses');
+        const data = await response.json();
+        if (data.success) {
+            availableStatuses = data.statuses;
+        }
+    } catch (error) {
+        console.error('Error loading statuses:', error);
+    }
+}
+
+async function loadStats() {
+    try {
+        const response = await fetch('/api/automations/stats');
+        const data = await response.json();
+        if (data.success) {
+            document.getElementById('stat-total').textContent = data.stats.total_automations;
+            document.getElementById('stat-active').textContent = data.stats.active_automations;
+            document.getElementById('stat-executions').textContent = data.stats.executions_today;
+            document.getElementById('stat-successful').textContent = data.stats.successful_today;
+        }
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+
+async function loadTemplates() {
+    try {
+        const response = await fetch('/api/automations/templates');
+        const data = await response.json();
+        if (data.success) {
+            allTemplates = data.templates;
+            renderTemplates();
+        }
+    } catch (error) {
+        console.error('Error loading templates:', error);
+    }
+}
+
+function renderTemplates() {
+    const container = document.getElementById('templates-container');
+    container.innerHTML = allTemplates.map(template => `
+        <div class="col-md-3">
+            <div class="template-card" onclick="createFromTemplate('${template.id}')">
+                <div class="template-icon">
+                    <i class="fas fa-${template.trigger_type === 'status_change' ? 'exchange-alt' : template.trigger_type === 'time_based' ? 'clock' : 'edit'}"></i>
+                </div>
+                <h6>${escapeHtml(template.name)}</h6>
+                <p>${escapeHtml(template.description)}</p>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadAutomations() {
+    try {
+        const response = await fetch('/api/automations');
+        const data = await response.json();
+        if (data.success) {
+            allAutomations = data.automations;
+            renderAutomations();
+        }
+    } catch (error) {
+        console.error('Error loading automations:', error);
+        document.getElementById('automations-container').innerHTML = '<div class="text-danger">Error loading automations</div>';
+    }
+}
+
+function filterAutomations(filter) {
+    currentFilter = filter;
+    document.querySelectorAll('[data-filter]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+    });
+    renderAutomations();
+}
+
+function renderAutomations() {
+    const container = document.getElementById('automations-container');
+    let filtered = allAutomations;
+
+    if (currentFilter === 'enabled') {
+        filtered = allAutomations.filter(a => a.is_enabled);
+    } else if (currentFilter === 'draft') {
+        filtered = allAutomations.filter(a => a.is_draft);
+    }
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-robot"></i>
+                <h5>No automations yet</h5>
+                <p>Create your first automation or start from a template above.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map(automation => {
+        const statusDot = automation.is_enabled ? 'enabled' : (automation.is_draft ? 'draft' : 'disabled');
+        const triggerLabel = getTriggerLabel(automation);
+        const actionCount = automation.actions ? automation.actions.length : 0;
+
+        return `
+            <div class="automation-card ${automation.is_enabled ? '' : 'disabled'}">
+                <div class="automation-header">
+                    <div>
+                        <div class="automation-title">
+                            <span class="status-dot ${statusDot}"></span>
+                            ${escapeHtml(automation.name)}
+                        </div>
+                        <div class="automation-description">${escapeHtml(automation.description || '')}</div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="automation-toggle">
+                            <input type="checkbox" ${automation.is_enabled ? 'checked' : ''} onchange="toggleAutomation('${automation.id}')">
+                            <span class="slider"></span>
+                        </label>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#" onclick="editAutomation('${automation.id}'); return false;">
+                                    <i class="fas fa-edit me-2"></i>Edit
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" onclick="showHistory('${automation.id}'); return false;">
+                                    <i class="fas fa-history me-2"></i>View History
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item text-danger" href="#" onclick="deleteAutomation('${automation.id}'); return false;">
+                                    <i class="fas fa-trash me-2"></i>Delete
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <span class="trigger-badge">
+                        <i class="fas fa-bolt"></i>
+                        ${triggerLabel}
+                    </span>
+                    <span class="action-badge">
+                        <i class="fas fa-tasks"></i>
+                        ${actionCount} action${actionCount !== 1 ? 's' : ''}
+                    </span>
+                </div>
+                <div class="automation-meta mt-2">
+                    <span><i class="fas fa-play"></i>${automation.execution_count || 0} runs</span>
+                    ${automation.last_executed_at ? `<span><i class="fas fa-clock"></i>Last: ${formatDate(automation.last_executed_at)}</span>` : ''}
+                    <span><i class="fas fa-user"></i>${escapeHtml(automation.created_by)}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getTriggerLabel(automation) {
+    const config = automation.trigger_config || {};
+    if (automation.trigger_type === 'status_change') {
+        const from = config.from_status ? getStatusLabel(config.from_status) : 'Any';
+        const to = getStatusLabel(config.to_status);
+        return `${from} → ${to}`;
+    } else if (automation.trigger_type === 'time_based') {
+        return `${config.days_offset || 7} days after ${config.event || 'created'}`;
+    } else if (automation.trigger_type === 'field_change') {
+        return `${config.field || 'field'} ${config.change_type || 'changed'}`;
+    }
+    return automation.trigger_type;
+}
+
+function getStatusLabel(value) {
+    const status = availableStatuses.find(s => s.value === value);
+    return status ? status.label : value;
+}
+
+function showCreateModal() {
+    document.getElementById('editAutomationId').value = '';
+    document.getElementById('modalTitle').textContent = 'Create Automation';
+    document.getElementById('automationName').value = '';
+    document.getElementById('automationDescription').value = '';
+    currentTriggerType = 'status_change';
+    actionCounter = 0;
+
+    // Reset trigger selection
+    document.querySelectorAll('.trigger-type-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.type === 'status_change');
+    });
+
+    renderTriggerConfig();
+    document.getElementById('actionsContainer').innerHTML = '';
+    updatePreview();
+
+    new bootstrap.Modal(document.getElementById('automationModal')).show();
+}
+
+function selectTriggerType(type) {
+    currentTriggerType = type;
+    document.querySelectorAll('.trigger-type-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.type === type);
+    });
+    renderTriggerConfig();
+    updatePreview();
+}
+
+function renderTriggerConfig() {
+    const container = document.getElementById('triggerConfig');
+
+    if (currentTriggerType === 'status_change') {
+        const statusOptions = availableStatuses.map(s => `<option value="${s.value}">${s.label}</option>`).join('');
+        container.innerHTML = `
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold">From Status (optional)</label>
+                    <select class="form-select" id="triggerFromStatus" onchange="updatePreview()">
+                        <option value="">Any status</option>
+                        ${statusOptions}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end justify-content-center pb-2">
+                    <i class="fas fa-arrow-right text-muted"></i>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold">To Status</label>
+                    <select class="form-select" id="triggerToStatus" onchange="updatePreview()" required>
+                        <option value="">Select status...</option>
+                        ${statusOptions}
+                    </select>
+                </div>
+            </div>
+        `;
+    } else if (currentTriggerType === 'time_based') {
+        const statusOptions = availableStatuses.map(s => `<option value="${s.value}">${s.label}</option>`).join('');
+        container.innerHTML = `
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Days</label>
+                    <input type="number" class="form-control" id="triggerDays" value="7" min="1" onchange="updatePreview()">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">After Event</label>
+                    <select class="form-select" id="triggerEvent" onchange="updatePreview()">
+                        <option value="created_at">Prospect Created</option>
+                        <option value="last_contact_date">Last Contact</option>
+                        <option value="status_changed_at">Status Changed</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold">For Prospects With Status</label>
+                    <select class="form-select" id="triggerStatusFilter" multiple onchange="updatePreview()">
+                        ${statusOptions}
+                    </select>
+                </div>
+            </div>
+        `;
+    } else if (currentTriggerType === 'field_change') {
+        container.innerHTML = `
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">Field</label>
+                    <select class="form-select" id="triggerField" onchange="updatePreview()">
+                        <option value="assigned_salesperson">Assigned Salesperson</option>
+                        <option value="region">Region</option>
+                        <option value="priority_level">Priority Level</option>
+                        <option value="tags">Tags</option>
+                        <option value="notes">Notes</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold">Change Type</label>
+                    <select class="form-select" id="triggerChangeType" onchange="updatePreview()">
+                        <option value="set">Is Set (newly filled)</option>
+                        <option value="changed">Is Changed</option>
+                        <option value="cleared">Is Cleared</option>
+                    </select>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function addAction(type) {
+    actionCounter++;
+    const container = document.getElementById('actionsContainer');
+
+    if (type === 'create_task') {
+        const html = `
+            <div class="action-card-builder" data-action-id="${actionCounter}" data-action-type="create_task">
+                <div class="action-header">
+                    <span class="action-badge"><i class="fas fa-tasks"></i> Create Task</span>
+                    <button class="remove-action" onclick="removeAction(${actionCounter})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">Task Title</label>
+                        <input type="text" class="form-control action-title" placeholder="Follow up with {{prospect_name}}" onchange="updatePreview()">
+                        <small class="text-muted">Use {{prospect_name}}, {{salesperson}}, {{current_user}}</small>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold">Description</label>
+                        <textarea class="form-control action-description" rows="2" placeholder="Task details..." onchange="updatePreview()"></textarea>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">Task Type</label>
+                        <select class="form-select action-task-type" onchange="updatePreview()">
+                            <option value="call">Call</option>
+                            <option value="email">Email</option>
+                            <option value="meeting">Meeting</option>
+                            <option value="follow_up">Follow-up</option>
+                            <option value="demo">Demo</option>
+                            <option value="proposal">Proposal</option>
+                            <option value="research">Research</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">Priority</label>
+                        <select class="form-select action-priority" onchange="updatePreview()">
+                            <option value="1">High (Urgent)</option>
+                            <option value="2">Medium-High</option>
+                            <option value="3" selected>Medium</option>
+                            <option value="4">Medium-Low</option>
+                            <option value="5">Low</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold">Due In (days)</label>
+                        <input type="number" class="form-control action-due-days" value="1" min="0" onchange="updatePreview()">
+                    </div>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', html);
+    } else if (type === 'update_prospect_status') {
+        const statusOptions = availableStatuses.map(s => `<option value="${s.value}">${s.label}</option>`).join('');
+        const html = `
+            <div class="action-card-builder" data-action-id="${actionCounter}" data-action-type="update_prospect_status">
+                <div class="action-header">
+                    <span class="action-badge"><i class="fas fa-exchange-alt"></i> Update Status</span>
+                    <button class="remove-action" onclick="removeAction(${actionCounter})">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">New Status</label>
+                        <select class="form-select action-new-status" onchange="updatePreview()">
+                            <option value="">Select status...</option>
+                            ${statusOptions}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', html);
+    }
+
+    updatePreview();
+}
+
+function removeAction(id) {
+    const card = document.querySelector(`[data-action-id="${id}"]`);
+    if (card) card.remove();
+    updatePreview();
+}
+
+function updatePreview() {
+    let preview = '';
+
+    // Trigger preview
+    if (currentTriggerType === 'status_change') {
+        const from = document.getElementById('triggerFromStatus')?.value;
+        const to = document.getElementById('triggerToStatus')?.value;
+        if (to) {
+            preview = `When a prospect moves ${from ? 'from ' + getStatusLabel(from) + ' ' : ''}to <strong>${getStatusLabel(to)}</strong>`;
+        } else {
+            preview = 'Select a target status...';
+        }
+    } else if (currentTriggerType === 'time_based') {
+        const days = document.getElementById('triggerDays')?.value || 7;
+        const event = document.getElementById('triggerEvent')?.value || 'created_at';
+        const eventLabel = {
+            'created_at': 'prospect created',
+            'last_contact_date': 'last contact',
+            'status_changed_at': 'status changed'
+        }[event];
+        preview = `<strong>${days} days</strong> after ${eventLabel}`;
+    } else if (currentTriggerType === 'field_change') {
+        const field = document.getElementById('triggerField')?.value || 'assigned_salesperson';
+        const changeType = document.getElementById('triggerChangeType')?.value || 'set';
+        preview = `When <strong>${field}</strong> is ${changeType}`;
+    }
+
+    // Actions preview
+    const actionCards = document.querySelectorAll('.action-card-builder');
+    if (actionCards.length > 0) {
+        preview += ', then ';
+        const actionPreviews = [];
+        actionCards.forEach(card => {
+            const type = card.dataset.actionType;
+            if (type === 'create_task') {
+                const taskType = card.querySelector('.action-task-type')?.value || 'task';
+                const dueDays = card.querySelector('.action-due-days')?.value || 1;
+                actionPreviews.push(`create a <strong>${taskType}</strong> task due in ${dueDays} day${dueDays != 1 ? 's' : ''}`);
+            } else if (type === 'update_prospect_status') {
+                const newStatus = card.querySelector('.action-new-status')?.value;
+                if (newStatus) {
+                    actionPreviews.push(`change status to <strong>${getStatusLabel(newStatus)}</strong>`);
+                }
+            }
+        });
+        preview += actionPreviews.join(', and ');
+    }
+
+    document.getElementById('automationPreview').innerHTML = preview || 'Configure your automation above to see a preview...';
+}
+
+function buildAutomationData(isDraft) {
+    const name = document.getElementById('automationName').value.trim();
+    const description = document.getElementById('automationDescription').value.trim();
+
+    // Build trigger config
+    let triggerConfig = {};
+    if (currentTriggerType === 'status_change') {
+        triggerConfig = {
+            from_status: document.getElementById('triggerFromStatus')?.value || null,
+            to_status: document.getElementById('triggerToStatus')?.value
+        };
+    } else if (currentTriggerType === 'time_based') {
+        const statusFilter = Array.from(document.getElementById('triggerStatusFilter')?.selectedOptions || []).map(o => o.value);
+        triggerConfig = {
+            days_offset: parseInt(document.getElementById('triggerDays')?.value) || 7,
+            event: document.getElementById('triggerEvent')?.value,
+            status_filter: statusFilter.length > 0 ? statusFilter : null
+        };
+    } else if (currentTriggerType === 'field_change') {
+        triggerConfig = {
+            field: document.getElementById('triggerField')?.value,
+            change_type: document.getElementById('triggerChangeType')?.value
+        };
+    }
+
+    // Build actions
+    const actions = [];
+    document.querySelectorAll('.action-card-builder').forEach(card => {
+        const type = card.dataset.actionType;
+        if (type === 'create_task') {
+            actions.push({
+                type: 'create_task',
+                config: {
+                    title_template: card.querySelector('.action-title')?.value || '',
+                    description_template: card.querySelector('.action-description')?.value || '',
+                    task_type: card.querySelector('.action-task-type')?.value || 'follow_up',
+                    priority: parseInt(card.querySelector('.action-priority')?.value) || 3,
+                    due_date_offset_days: parseInt(card.querySelector('.action-due-days')?.value) || 1,
+                    assigned_to: '{{current_user}}'
+                }
+            });
+        } else if (type === 'update_prospect_status') {
+            const newStatus = card.querySelector('.action-new-status')?.value;
+            if (newStatus) {
+                actions.push({
+                    type: 'update_prospect_status',
+                    config: {
+                        new_status: newStatus
+                    }
+                });
+            }
+        }
+    });
+
+    return {
+        name: name || 'Untitled Automation',
+        description,
+        trigger_type: currentTriggerType,
+        trigger_config: triggerConfig,
+        conditions: [],
+        actions,
+        is_draft: isDraft,
+        is_enabled: !isDraft
+    };
+}
+
+async function saveAutomation(isDraft) {
+    const data = buildAutomationData(isDraft);
+    const editId = document.getElementById('editAutomationId').value;
+
+    try {
+        let response;
+        if (editId) {
+            response = await fetch(`/api/automations/${editId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } else {
+            response = await fetch('/api/automations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        }
+
+        const result = await response.json();
+
+        if (result.success || result.automation) {
+            bootstrap.Modal.getInstance(document.getElementById('automationModal')).hide();
+            loadAutomations();
+            loadStats();
+            showToast(editId ? 'Automation updated!' : 'Automation created!', 'success');
+        } else {
+            showToast('Error: ' + (result.error || 'Failed to save'), 'error');
+        }
+    } catch (error) {
+        console.error('Error saving automation:', error);
+        showToast('Error saving automation', 'error');
+    }
+}
+
+async function toggleAutomation(id) {
+    try {
+        const response = await fetch(`/api/automations/${id}/toggle`, { method: 'POST' });
+        const data = await response.json();
+
+        if (data.success) {
+            loadAutomations();
+            loadStats();
+        } else {
+            showToast('Error toggling automation', 'error');
+        }
+    } catch (error) {
+        console.error('Error toggling automation:', error);
+        showToast('Error toggling automation', 'error');
+    }
+}
+
+async function editAutomation(id) {
+    const automation = allAutomations.find(a => a.id === id);
+    if (!automation) return;
+
+    document.getElementById('editAutomationId').value = id;
+    document.getElementById('modalTitle').textContent = 'Edit Automation';
+    document.getElementById('automationName').value = automation.name;
+    document.getElementById('automationDescription').value = automation.description || '';
+
+    currentTriggerType = automation.trigger_type;
+    document.querySelectorAll('.trigger-type-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.type === currentTriggerType);
+    });
+
+    renderTriggerConfig();
+
+    // Set trigger config values
+    setTimeout(() => {
+        const config = automation.trigger_config || {};
+        if (currentTriggerType === 'status_change') {
+            if (config.from_status) document.getElementById('triggerFromStatus').value = config.from_status;
+            if (config.to_status) document.getElementById('triggerToStatus').value = config.to_status;
+        } else if (currentTriggerType === 'time_based') {
+            document.getElementById('triggerDays').value = config.days_offset || 7;
+            document.getElementById('triggerEvent').value = config.event || 'created_at';
+        } else if (currentTriggerType === 'field_change') {
+            document.getElementById('triggerField').value = config.field || 'assigned_salesperson';
+            document.getElementById('triggerChangeType').value = config.change_type || 'set';
+        }
+
+        // Rebuild actions
+        document.getElementById('actionsContainer').innerHTML = '';
+        actionCounter = 0;
+        (automation.actions || []).forEach(action => {
+            addAction(action.type);
+            const card = document.querySelector(`[data-action-id="${actionCounter}"]`);
+            if (card && action.type === 'create_task') {
+                card.querySelector('.action-title').value = action.config.title_template || '';
+                card.querySelector('.action-description').value = action.config.description_template || '';
+                card.querySelector('.action-task-type').value = action.config.task_type || 'follow_up';
+                card.querySelector('.action-priority').value = action.config.priority || 3;
+                card.querySelector('.action-due-days').value = action.config.due_date_offset_days || 1;
+            } else if (card && action.type === 'update_prospect_status') {
+                card.querySelector('.action-new-status').value = action.config.new_status || '';
+            }
+        });
+
+        updatePreview();
+    }, 100);
+
+    new bootstrap.Modal(document.getElementById('automationModal')).show();
+}
+
+async function deleteAutomation(id) {
+    if (!confirm('Are you sure you want to delete this automation?')) return;
+
+    try {
+        const response = await fetch(`/api/automations/${id}`, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (data.success) {
+            loadAutomations();
+            loadStats();
+            showToast('Automation deleted', 'success');
+        } else {
+            showToast('Error deleting automation', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting automation:', error);
+        showToast('Error deleting automation', 'error');
+    }
+}
+
+function createFromTemplate(templateId) {
+    const template = allTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    document.getElementById('editAutomationId').value = '';
+    document.getElementById('modalTitle').textContent = 'Create from Template';
+    document.getElementById('automationName').value = template.name;
+    document.getElementById('automationDescription').value = template.description;
+
+    currentTriggerType = template.trigger_type;
+    document.querySelectorAll('.trigger-type-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.type === currentTriggerType);
+    });
+
+    renderTriggerConfig();
+
+    setTimeout(() => {
+        const config = template.trigger_config || {};
+        if (currentTriggerType === 'status_change') {
+            if (config.from_status) document.getElementById('triggerFromStatus').value = config.from_status;
+            if (config.to_status) document.getElementById('triggerToStatus').value = config.to_status;
+        } else if (currentTriggerType === 'time_based') {
+            document.getElementById('triggerDays').value = config.days_offset || 7;
+            document.getElementById('triggerEvent').value = config.event || 'created_at';
+        } else if (currentTriggerType === 'field_change') {
+            document.getElementById('triggerField').value = config.field || 'assigned_salesperson';
+            document.getElementById('triggerChangeType').value = config.change_type || 'set';
+        }
+
+        document.getElementById('actionsContainer').innerHTML = '';
+        actionCounter = 0;
+        (template.actions || []).forEach(action => {
+            addAction(action.type);
+            const card = document.querySelector(`[data-action-id="${actionCounter}"]`);
+            if (card && action.type === 'create_task') {
+                card.querySelector('.action-title').value = action.config.title_template || '';
+                card.querySelector('.action-description').value = action.config.description_template || '';
+                card.querySelector('.action-task-type').value = action.config.task_type || 'follow_up';
+                card.querySelector('.action-priority').value = action.config.priority || 3;
+                card.querySelector('.action-due-days').value = action.config.due_date_offset_days || 1;
+            } else if (card && action.type === 'update_prospect_status') {
+                card.querySelector('.action-new-status').value = action.config.new_status || '';
+            }
+        });
+
+        updatePreview();
+    }, 100);
+
+    new bootstrap.Modal(document.getElementById('automationModal')).show();
+}
+
+async function showHistory(automationId) {
+    const container = document.getElementById('historyContent');
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+
+    new bootstrap.Modal(document.getElementById('historyModal')).show();
+
+    try {
+        const response = await fetch(`/api/automations/${automationId}/executions?limit=20`);
+        const data = await response.json();
+
+        if (data.success && data.executions.length > 0) {
+            container.innerHTML = data.executions.map(exec => `
+                <div class="border-bottom py-2">
+                    <div class="d-flex justify-content-between">
+                        <span class="badge bg-${exec.status === 'success' ? 'success' : exec.status === 'failed' ? 'danger' : 'secondary'}">${exec.status}</span>
+                        <small class="text-muted">${formatDate(exec.executed_at)}</small>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        ${exec.actions_executed ? exec.actions_executed.length + ' action(s) executed' : ''}
+                    </small>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<div class="text-center text-muted py-4">No execution history yet</div>';
+        }
+    } catch (error) {
+        container.innerHTML = '<div class="text-danger">Error loading history</div>';
+    }
+}
+
+async function testAutomation() {
+    const editId = document.getElementById('editAutomationId').value;
+    if (!editId) {
+        showToast('Save the automation first to test it', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/automations/${editId}/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+
+        if (data.success || data.would_trigger !== undefined) {
+            let msg = data.would_trigger ? 'Automation would trigger!' : 'Automation would NOT trigger';
+            if (data.actions_preview) {
+                msg += ` (${data.actions_preview.length} actions)`;
+            }
+            showToast(msg, data.would_trigger ? 'success' : 'info');
+        } else {
+            showToast('Test error: ' + (data.error || 'Unknown'), 'error');
+        }
+    } catch (error) {
+        showToast('Error testing automation', 'error');
+    }
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    toast.innerHTML = `${message}<button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+}
+</script>
+{% endblock %}
