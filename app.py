@@ -12007,6 +12007,280 @@ def reoptimize_trip(trip_id):
 
 
 # =====================================================
+# ROUTE SCHEDULING ENDPOINTS
+# =====================================================
+
+@app.route('/api/trips/quick-create', methods=['POST'])
+def quick_create_trip():
+    """Create a quick trip with a single stop (Schedule Visit)"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+
+        data = request.json
+        location = data.get('location')
+
+        if not location or not location.get('lat') or not location.get('lng'):
+            return jsonify({'error': 'Valid location with coordinates required'}), 400
+
+        trip_date = data.get('trip_date', datetime.now().strftime('%Y-%m-%d'))
+        start_time = data.get('start_time', '09:00')
+
+        # Create trip
+        trip_data = {
+            'name': data.get('name', f"Visit: {location.get('name', 'Location')}"),
+            'trip_date': trip_date,
+            'start_location': location.get('address', location.get('name', 'Start')),
+            'start_time': start_time,
+            'start_lat': location['lat'],
+            'start_lng': location['lng'],
+            'status': 'planned',
+            'total_distance_km': 0,
+            'estimated_duration_minutes': 30,
+            'created_by': data.get('salesperson', session.get('user_email', '')),
+            'notes': data.get('notes', '')
+        }
+
+        trip_response = supabase_client.table('trips').insert(trip_data).execute()
+
+        if not trip_response.data:
+            return jsonify({'error': 'Failed to create trip'}), 500
+
+        trip_id = trip_response.data[0]['id']
+
+        # Create single stop
+        stop_data = {
+            'trip_id': trip_id,
+            'company_id': str(location.get('company_id')) if location.get('company_id') else None,
+            'company_name': location.get('name', 'Unknown'),
+            'address': location.get('address', ''),
+            'latitude': location['lat'],
+            'longitude': location['lng'],
+            'stop_order': 1,
+            'duration_minutes': 30,
+            'notes': f"Google Place ID: {location.get('google_place_id')}" if location.get('google_place_id') else ''
+        }
+
+        supabase_client.table('trip_stops').insert(stop_data).execute()
+
+        return jsonify({
+            'success': True,
+            'trip': trip_response.data[0],
+            'message': 'Visit scheduled successfully'
+        })
+
+    except Exception as e:
+        print(f"Error creating quick trip: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/<trip_id>/add-stop', methods=['POST'])
+def add_stop_to_trip(trip_id):
+    """Add a new stop to an existing trip"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+
+        data = request.json
+        location = data.get('location')
+
+        if not location or not location.get('lat') or not location.get('lng'):
+            return jsonify({'error': 'Valid location with coordinates required'}), 400
+
+        # Verify trip exists
+        trip_response = supabase_client.table('trips').select('*').eq('id', trip_id).execute()
+        if not trip_response.data:
+            return jsonify({'error': 'Trip not found'}), 404
+
+        # Get current max stop_order
+        stops_response = supabase_client.table('trip_stops').select('stop_order').eq('trip_id', trip_id).order('stop_order', desc=True).limit(1).execute()
+        max_order = stops_response.data[0]['stop_order'] if stops_response.data else 0
+
+        # Create new stop
+        stop_data = {
+            'trip_id': trip_id,
+            'company_id': str(location.get('company_id')) if location.get('company_id') else None,
+            'company_name': location.get('name', 'Unknown'),
+            'address': location.get('address', ''),
+            'latitude': location['lat'],
+            'longitude': location['lng'],
+            'stop_order': max_order + 1,
+            'duration_minutes': 30,
+            'notes': f"Google Place ID: {location.get('google_place_id')}" if location.get('google_place_id') else ''
+        }
+
+        stop_response = supabase_client.table('trip_stops').insert(stop_data).execute()
+
+        if not stop_response.data:
+            return jsonify({'error': 'Failed to add stop'}), 500
+
+        return jsonify({
+            'success': True,
+            'stop': stop_response.data[0],
+            'message': f'Added as stop #{max_order + 1}'
+        })
+
+    except Exception as e:
+        print(f"Error adding stop to trip: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/for-location', methods=['GET'])
+def get_trips_for_location():
+    """Get all trips containing a specific location"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+
+        company_id = request.args.get('company_id')
+        lat = request.args.get('lat')
+        lng = request.args.get('lng')
+
+        stops_data = []
+
+        if company_id:
+            # Search by company_id (try both string and int)
+            stops_result = supabase_client.table('trip_stops').select('id, trip_id, stop_order').eq('company_id', company_id).execute()
+            stops_data = stops_result.data or []
+
+            if not stops_data:
+                try:
+                    stops_result = supabase_client.table('trip_stops').select('id, trip_id, stop_order').eq('company_id', int(company_id)).execute()
+                    stops_data = stops_result.data or []
+                except:
+                    pass
+
+        elif lat and lng:
+            # Search by coordinates with tolerance
+            lat_f = float(lat)
+            lng_f = float(lng)
+            tolerance = 0.0001
+
+            all_stops = supabase_client.table('trip_stops').select('id, trip_id, stop_order, latitude, longitude').execute()
+
+            stops_data = [
+                {'id': s['id'], 'trip_id': s['trip_id'], 'stop_order': s['stop_order']}
+                for s in (all_stops.data or [])
+                if s.get('latitude') and s.get('longitude') and
+                   abs(float(s['latitude']) - lat_f) < tolerance and
+                   abs(float(s['longitude']) - lng_f) < tolerance
+            ]
+        else:
+            return jsonify({'error': 'Either company_id or lat/lng required'}), 400
+
+        if not stops_data:
+            return jsonify({'success': True, 'trips': []})
+
+        # Get unique trip IDs and stop IDs
+        trip_stops_map = {}
+        for stop in stops_data:
+            trip_stops_map[stop['trip_id']] = stop['id']
+
+        trip_ids = list(trip_stops_map.keys())
+
+        # Fetch trip details
+        trips_result = supabase_client.table('trips').select('*').in_('id', trip_ids).order('trip_date', desc=True).execute()
+
+        trips = []
+        for trip in trips_result.data or []:
+            trips.append({
+                'id': trip['id'],
+                'name': trip.get('name', 'Unnamed Trip'),
+                'date': trip.get('trip_date'),
+                'status': trip.get('status', 'planned'),
+                'salesperson': trip.get('created_by', ''),
+                'stop_id': trip_stops_map.get(trip['id'])
+            })
+
+        return jsonify({'success': True, 'trips': trips})
+
+    except Exception as e:
+        print(f"Error getting trips for location: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trips/by-location', methods=['DELETE'])
+def delete_trips_by_location():
+    """Delete all scheduled visits for a location"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+
+        company_id = request.args.get('company_id')
+        lat = request.args.get('lat')
+        lng = request.args.get('lng')
+
+        stops_to_delete = []
+
+        if company_id:
+            stops_result = supabase_client.table('trip_stops').select('id, trip_id').eq('company_id', company_id).execute()
+            stops_to_delete = stops_result.data or []
+
+            if not stops_to_delete:
+                try:
+                    stops_result = supabase_client.table('trip_stops').select('id, trip_id').eq('company_id', int(company_id)).execute()
+                    stops_to_delete = stops_result.data or []
+                except:
+                    pass
+
+        elif lat and lng:
+            lat_f = float(lat)
+            lng_f = float(lng)
+            tolerance = 0.0001
+
+            all_stops = supabase_client.table('trip_stops').select('id, trip_id, latitude, longitude').execute()
+
+            stops_to_delete = [
+                {'id': s['id'], 'trip_id': s['trip_id']}
+                for s in (all_stops.data or [])
+                if s.get('latitude') and s.get('longitude') and
+                   abs(float(s['latitude']) - lat_f) < tolerance and
+                   abs(float(s['longitude']) - lng_f) < tolerance
+            ]
+        else:
+            return jsonify({'error': 'Either company_id or lat/lng required'}), 400
+
+        if not stops_to_delete:
+            return jsonify({'success': True, 'deleted_count': 0, 'trips_affected': []})
+
+        affected_trip_ids = list(set(s['trip_id'] for s in stops_to_delete))
+        stop_ids = [s['id'] for s in stops_to_delete]
+
+        # Delete the stops
+        for stop_id in stop_ids:
+            supabase_client.table('trip_stops').delete().eq('id', stop_id).execute()
+
+        # Reorder remaining stops in affected trips
+        for trip_id in affected_trip_ids:
+            remaining = supabase_client.table('trip_stops').select('*').eq('trip_id', trip_id).order('stop_order').execute()
+            for idx, stop in enumerate(remaining.data or []):
+                if stop['stop_order'] != idx + 1:
+                    supabase_client.table('trip_stops').update({'stop_order': idx + 1}).eq('id', stop['id']).execute()
+
+        return jsonify({
+            'success': True,
+            'deleted_count': len(stop_ids),
+            'trips_affected': affected_trip_ids
+        })
+
+    except Exception as e:
+        print(f"Error deleting trips by location: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
 # AI CHAT ENDPOINT - RAG with Database Context
 # =====================================================
 

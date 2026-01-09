@@ -155,6 +155,100 @@
         </div>
     </div>
 </div>
+
+<!-- Route Selector Modal -->
+<div class="modal fade" id="routeSelectorModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-map-marked-alt me-2"></i>Route Options
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Location Summary -->
+                <div class="location-summary mb-4 p-3 bg-light rounded">
+                    <h6 class="mb-1" id="routeLocationName">Location Name</h6>
+                    <p class="text-muted small mb-0" id="routeLocationAddress">Address</p>
+                </div>
+
+                <!-- Action Options -->
+                <ul class="nav nav-pills nav-fill mb-3" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="schedule-tab" data-bs-toggle="pill" data-bs-target="#scheduleVisitPane" type="button">
+                            <i class="fas fa-calendar-plus me-1"></i>Schedule
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="addroute-tab" data-bs-toggle="pill" data-bs-target="#addToRoutePane" type="button">
+                            <i class="fas fa-route me-1"></i>Add to Route
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="manage-tab" data-bs-toggle="pill" data-bs-target="#manageVisitsPane" type="button">
+                            <i class="fas fa-list me-1"></i>Manage
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Schedule Visit Tab -->
+                    <div class="tab-pane fade show active" id="scheduleVisitPane" role="tabpanel">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Salesperson</label>
+                            <select class="form-select" id="scheduleVisitSalesperson">
+                                <option value="">Select salesperson...</option>
+                                <option value="Caitlin">Caitlin</option>
+                                <option value="Kesha">Kesha</option>
+                                <option value="Django">Django</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Visit Date</label>
+                            <input type="date" class="form-control" id="scheduleVisitDate">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Time</label>
+                            <input type="time" class="form-control" id="scheduleVisitTime" value="09:00">
+                        </div>
+                        <button class="btn btn-primary w-100" onclick="scheduleVisit()">
+                            <i class="fas fa-calendar-check me-2"></i>Schedule Visit
+                        </button>
+                    </div>
+
+                    <!-- Add to Route Tab -->
+                    <div class="tab-pane fade" id="addToRoutePane" role="tabpanel">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Select Route</label>
+                            <select class="form-select" id="selectRouteDropdown">
+                                <option value="">Loading routes...</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-info small mb-3">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Only routes with status "Planned" are shown.
+                        </div>
+                        <button class="btn btn-success w-100" onclick="addToExistingRoute()">
+                            <i class="fas fa-plus me-2"></i>Add to Selected Route
+                        </button>
+                    </div>
+
+                    <!-- Manage Visits Tab -->
+                    <div class="tab-pane fade" id="manageVisitsPane" role="tabpanel">
+                        <div id="existingVisitsList" class="mb-3">
+                            <p class="text-muted">Loading scheduled visits...</p>
+                        </div>
+                        <button class="btn btn-outline-danger w-100" onclick="deleteAllVisits()" id="deleteAllVisitsBtn" style="display:none;">
+                            <i class="fas fa-trash me-2"></i>Remove from All Routes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -645,6 +739,27 @@
         background: #4f46e5;
     }
 
+    .info-window-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+    }
+
+    .info-window-actions .btn-add {
+        flex: 1;
+        margin-top: 0;
+        padding: 0.4rem 0.5rem;
+        font-size: 0.75rem;
+    }
+
+    .info-window .btn-route {
+        background: #10b981;
+    }
+
+    .info-window .btn-route:hover {
+        background: #059669;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
         .map-sidebar {
@@ -1074,15 +1189,29 @@ function showCustomerInfoWindow(company, marker) {
     ).join(' ') : '';
     const displayName = company.public_name || company.name;
 
+    // Prepare location data for route scheduling
+    const locationData = JSON.stringify({
+        name: displayName,
+        address: company.address?.line1 || company.address?.city || '',
+        lat: company.latitude,
+        lng: company.longitude,
+        company_id: company.company_id
+    }).replace(/'/g, "\\'");
+
     const content = `
         <div class="info-window">
             <h6>${escapeHtml(displayName)}</h6>
             <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(company.address?.city || 'Unknown')}</p>
             ${company.assigned_salesperson ? `<p><i class="fas fa-user"></i> ${escapeHtml(company.assigned_salesperson)}</p>` : ''}
             ${alertBadges ? `<div style="margin-top:0.5rem">${alertBadges}</div>` : ''}
-            <button class="btn-add" onclick="window.location='/data?company=${company.company_id}'">
-                <i class="fas fa-eye"></i> View Details
-            </button>
+            <div class="info-window-actions">
+                <button class="btn-add" onclick="window.location='/data?company=${company.company_id}'">
+                    <i class="fas fa-eye"></i> View
+                </button>
+                <button class="btn-add btn-route" onclick="showRouteSelectorModal(JSON.parse('${locationData}'), false)">
+                    <i class="fas fa-route"></i> Route
+                </button>
+            </div>
         </div>
     `;
 
@@ -1314,14 +1443,28 @@ function clearGoogleMarkers() {
 
 // Show Google place info window
 function showGooglePlaceInfoWindow(place, marker, index) {
+    // Prepare location data for route scheduling
+    const locationData = JSON.stringify({
+        name: place.name,
+        address: place.formatted_address || place.vicinity || '',
+        lat: place.geometry?.location?.lat,
+        lng: place.geometry?.location?.lng,
+        place_id: place.place_id
+    }).replace(/'/g, "\\'");
+
     const content = `
         <div class="info-window">
             <h6>${escapeHtml(place.name)}</h6>
             <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(place.formatted_address || place.vicinity || '')}</p>
             ${place.rating ? `<p><i class="fas fa-star" style="color:#f59e0b"></i> ${place.rating} (${place.user_ratings_total || 0} reviews)</p>` : ''}
-            <button class="btn-add" onclick="showAddProspectModal(${index})">
-                <i class="fas fa-plus"></i> Add as Prospect
-            </button>
+            <div class="info-window-actions">
+                <button class="btn-add" onclick="showAddProspectModal(${index})">
+                    <i class="fas fa-plus"></i> Prospect
+                </button>
+                <button class="btn-add btn-route" onclick="showRouteSelectorModal(JSON.parse('${locationData}'), true)">
+                    <i class="fas fa-route"></i> Route
+                </button>
+            </div>
         </div>
     `;
 
@@ -1506,6 +1649,251 @@ function showToast(message, type = 'info') {
     `;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
+}
+
+// =====================================================
+// ROUTE SCHEDULING FUNCTIONS
+// =====================================================
+
+let selectedRouteLocation = null;
+
+// Show route selector modal
+function showRouteSelectorModal(location, isGooglePlace = false) {
+    selectedRouteLocation = {
+        name: location.name || location.company_name || 'Unknown',
+        address: location.address || location.formatted_address || location.vicinity || '',
+        lat: location.lat || location.latitude || (location.geometry?.location?.lat),
+        lng: location.lng || location.longitude || (location.geometry?.location?.lng),
+        company_id: location.company_id || null,
+        google_place_id: location.place_id || null,
+        isGooglePlace: isGooglePlace
+    };
+
+    // Update modal content
+    document.getElementById('routeLocationName').textContent = selectedRouteLocation.name;
+    document.getElementById('routeLocationAddress').textContent = selectedRouteLocation.address || 'No address available';
+
+    // Set default date to today
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('scheduleVisitDate').value = today;
+
+    // Load available routes
+    loadAvailableRoutes();
+
+    // Load existing visits for this location
+    loadExistingVisits();
+
+    // Reset to first tab
+    document.getElementById('schedule-tab').click();
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('routeSelectorModal'));
+    modal.show();
+}
+
+// Load available routes for dropdown
+async function loadAvailableRoutes() {
+    const dropdown = document.getElementById('selectRouteDropdown');
+    dropdown.innerHTML = '<option value="">Loading...</option>';
+
+    try {
+        const response = await fetch('/api/trips?status=planned');
+        const data = await response.json();
+
+        dropdown.innerHTML = '<option value="">Select a route...</option>';
+
+        if (data.trips && data.trips.length > 0) {
+            data.trips.forEach(trip => {
+                const date = new Date(trip.trip_date).toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short'
+                });
+                dropdown.innerHTML += `<option value="${trip.id}">${trip.name} (${date})</option>`;
+            });
+        } else {
+            dropdown.innerHTML += '<option value="" disabled>No planned routes available</option>';
+        }
+    } catch (error) {
+        console.error('Error loading routes:', error);
+        dropdown.innerHTML = '<option value="">Error loading routes</option>';
+    }
+}
+
+// Load existing visits for this location
+async function loadExistingVisits() {
+    const container = document.getElementById('existingVisitsList');
+    const deleteBtn = document.getElementById('deleteAllVisitsBtn');
+
+    container.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</p>';
+
+    try {
+        let url = '/api/trips/for-location?';
+        if (selectedRouteLocation.company_id) {
+            url += `company_id=${selectedRouteLocation.company_id}`;
+        } else if (selectedRouteLocation.lat && selectedRouteLocation.lng) {
+            url += `lat=${selectedRouteLocation.lat}&lng=${selectedRouteLocation.lng}`;
+        } else {
+            container.innerHTML = '<p class="text-muted">Cannot search for this location.</p>';
+            deleteBtn.style.display = 'none';
+            return;
+        }
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.trips && data.trips.length > 0) {
+            container.innerHTML = data.trips.map(trip => {
+                const date = new Date(trip.date).toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                });
+                const statusBadge = trip.status === 'planned' ? 'bg-primary' :
+                                    trip.status === 'in_progress' ? 'bg-warning' : 'bg-success';
+                return `
+                    <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+                        <div>
+                            <strong>${escapeHtml(trip.name)}</strong>
+                            <small class="text-muted d-block">${date}</small>
+                            ${trip.salesperson ? `<small class="text-muted"><i class="fas fa-user me-1"></i>${escapeHtml(trip.salesperson)}</small>` : ''}
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge ${statusBadge}">${trip.status}</span>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeFromTrip('${trip.id}', '${trip.stop_id}')" title="Remove from this route">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            deleteBtn.style.display = 'block';
+        } else {
+            container.innerHTML = '<p class="text-muted fst-italic">No scheduled visits for this location.</p>';
+            deleteBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error loading existing visits:', error);
+        container.innerHTML = '<p class="text-danger">Error loading visits.</p>';
+        deleteBtn.style.display = 'none';
+    }
+}
+
+// Schedule a single visit (create new trip with one stop)
+async function scheduleVisit() {
+    const salesperson = document.getElementById('scheduleVisitSalesperson').value;
+    const date = document.getElementById('scheduleVisitDate').value;
+    const time = document.getElementById('scheduleVisitTime').value;
+
+    if (!date) {
+        showToast('Please select a date', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/trips/quick-create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: `Visit: ${selectedRouteLocation.name}`,
+                trip_date: date,
+                start_time: time,
+                salesperson: salesperson,
+                location: selectedRouteLocation
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('Visit scheduled successfully!', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('routeSelectorModal')).hide();
+        } else {
+            showToast(data.error || 'Failed to schedule visit', 'error');
+        }
+    } catch (error) {
+        console.error('Error scheduling visit:', error);
+        showToast('Error scheduling visit', 'error');
+    }
+}
+
+// Add to existing route
+async function addToExistingRoute() {
+    const tripId = document.getElementById('selectRouteDropdown').value;
+
+    if (!tripId) {
+        showToast('Please select a route', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/trips/${tripId}/add-stop`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ location: selectedRouteLocation })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message || 'Added to route!', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('routeSelectorModal')).hide();
+        } else {
+            showToast(data.error || 'Failed to add to route', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding to route:', error);
+        showToast('Error adding to route', 'error');
+    }
+}
+
+// Remove from a specific trip
+async function removeFromTrip(tripId, stopId) {
+    if (!confirm('Remove this location from the route?')) return;
+
+    try {
+        const response = await fetch(`/api/trips/${tripId}/stops/${stopId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast('Removed from route', 'success');
+            loadExistingVisits();
+        } else {
+            showToast(data.error || 'Failed to remove', 'error');
+        }
+    } catch (error) {
+        console.error('Error removing from trip:', error);
+        showToast('Error removing from route', 'error');
+    }
+}
+
+// Delete all visits for this location
+async function deleteAllVisits() {
+    if (!confirm('Remove this location from ALL routes?')) return;
+
+    try {
+        let url = '/api/trips/by-location?';
+        if (selectedRouteLocation.company_id) {
+            url += `company_id=${selectedRouteLocation.company_id}`;
+        } else if (selectedRouteLocation.lat && selectedRouteLocation.lng) {
+            url += `lat=${selectedRouteLocation.lat}&lng=${selectedRouteLocation.lng}`;
+        } else {
+            showToast('Cannot identify location', 'error');
+            return;
+        }
+
+        const response = await fetch(url, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(`Removed from ${data.deleted_count} route(s)`, 'success');
+            loadExistingVisits();
+        } else {
+            showToast(data.error || 'Failed to remove visits', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting visits:', error);
+        showToast('Error removing visits', 'error');
+    }
 }
 </script>
 
