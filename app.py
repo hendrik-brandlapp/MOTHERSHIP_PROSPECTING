@@ -12304,6 +12304,218 @@ def delete_trips_by_location():
 
 
 # =====================================================
+# TRIP STOP NOTES ENDPOINTS
+# =====================================================
+
+@app.route('/api/trip-stop-notes/<int:stop_id>', methods=['GET'])
+def get_trip_stop_notes(stop_id):
+    """Get all notes for a trip stop with their attachments"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get notes for this stop
+        notes_result = supabase_client.table('trip_stop_notes').select('*').eq(
+            'trip_stop_id', stop_id
+        ).order('created_at', desc=True).execute()
+
+        notes = notes_result.data or []
+
+        # Get attachments for each note
+        for note in notes:
+            attachments_result = supabase_client.table('trip_stop_attachments').select('*').eq(
+                'note_id', note['id']
+            ).execute()
+
+            attachments = attachments_result.data or []
+
+            # Generate public URLs for each attachment
+            for att in attachments:
+                try:
+                    url_response = supabase_client.storage.from_('trip-attachments').get_public_url(
+                        att['storage_path']
+                    )
+                    att['url'] = url_response
+                except Exception as e:
+                    print(f"Error getting attachment URL: {e}")
+                    att['url'] = None
+
+            note['attachments'] = attachments
+
+        return jsonify({'success': True, 'notes': notes})
+
+    except Exception as e:
+        print(f"Error getting trip stop notes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trip-stop-notes/<int:stop_id>', methods=['POST'])
+def create_trip_stop_note(stop_id):
+    """Create a new note for a trip stop with optional image uploads"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        note_text = request.form.get('note_text', '')
+
+        # Create the note
+        note_result = supabase_client.table('trip_stop_notes').insert({
+            'trip_stop_id': stop_id,
+            'note_text': note_text,
+            'created_by': session.get('user_email', 'unknown')
+        }).execute()
+
+        if not note_result.data:
+            return jsonify({'error': 'Failed to create note'}), 500
+
+        note = note_result.data[0]
+        note_id = note['id']
+
+        # Handle image uploads
+        uploaded_attachments = []
+        files = request.files.getlist('images')
+
+        for file in files:
+            if file and file.filename:
+                # Generate unique filename
+                ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+                unique_filename = f"stop_{stop_id}/{note_id}/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+
+                # Read file content
+                file_content = file.read()
+                file_size = len(file_content)
+
+                try:
+                    # Upload to Supabase Storage
+                    upload_response = supabase_client.storage.from_('trip-attachments').upload(
+                        unique_filename,
+                        file_content,
+                        {'content-type': file.content_type or 'image/jpeg'}
+                    )
+
+                    # Create attachment record
+                    attachment_data = {
+                        'trip_stop_id': stop_id,
+                        'note_id': note_id,
+                        'file_name': file.filename,
+                        'file_type': file.content_type or 'image/jpeg',
+                        'file_size': file_size,
+                        'storage_path': unique_filename,
+                        'created_by': session.get('user_email', 'unknown')
+                    }
+
+                    att_result = supabase_client.table('trip_stop_attachments').insert(attachment_data).execute()
+
+                    if att_result.data:
+                        att = att_result.data[0]
+                        # Get public URL
+                        url_response = supabase_client.storage.from_('trip-attachments').get_public_url(unique_filename)
+                        att['url'] = url_response
+                        uploaded_attachments.append(att)
+
+                except Exception as upload_error:
+                    print(f"Error uploading file {file.filename}: {upload_error}")
+
+        note['attachments'] = uploaded_attachments
+
+        return jsonify({'success': True, 'note': note})
+
+    except Exception as e:
+        print(f"Error creating trip stop note: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trip-stop-notes/<int:note_id>', methods=['DELETE'])
+def delete_trip_stop_note(note_id):
+    """Delete a trip stop note and its attachments"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get attachments to delete from storage
+        attachments = supabase_client.table('trip_stop_attachments').select('storage_path').eq(
+            'note_id', note_id
+        ).execute()
+
+        # Delete files from storage
+        for att in (attachments.data or []):
+            try:
+                supabase_client.storage.from_('trip-attachments').remove([att['storage_path']])
+            except Exception:
+                pass
+
+        # Delete note (attachments cascade due to FK)
+        supabase_client.table('trip_stop_notes').delete().eq('id', note_id).execute()
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        print(f"Error deleting trip stop note: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/trip-stop-notes/<int:note_id>/attachment', methods=['POST'])
+def add_trip_stop_note_attachment(note_id):
+    """Add an image to an existing trip stop note"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get note to find stop_id
+        note_result = supabase_client.table('trip_stop_notes').select('trip_stop_id').eq(
+            'id', note_id
+        ).execute()
+
+        if not note_result.data:
+            return jsonify({'error': 'Note not found'}), 404
+
+        stop_id = note_result.data[0]['trip_stop_id']
+
+        file = request.files.get('file')
+        if not file or not file.filename:
+            return jsonify({'error': 'No file provided'}), 400
+
+        # Generate unique filename
+        unique_filename = f"stop_{stop_id}/{note_id}/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+
+        # Read file content
+        file_content = file.read()
+        file_size = len(file_content)
+
+        # Upload to Supabase Storage
+        supabase_client.storage.from_('trip-attachments').upload(
+            unique_filename,
+            file_content,
+            {'content-type': file.content_type or 'image/jpeg'}
+        )
+
+        # Create attachment record
+        attachment_data = {
+            'trip_stop_id': stop_id,
+            'note_id': note_id,
+            'file_name': file.filename,
+            'file_type': file.content_type or 'image/jpeg',
+            'file_size': file_size,
+            'storage_path': unique_filename,
+            'created_by': session.get('user_email', 'unknown')
+        }
+
+        att_result = supabase_client.table('trip_stop_attachments').insert(attachment_data).execute()
+
+        if att_result.data:
+            att = att_result.data[0]
+            url_response = supabase_client.storage.from_('trip-attachments').get_public_url(unique_filename)
+            att['url'] = url_response
+            return jsonify({'success': True, 'attachment': att})
+
+        return jsonify({'error': 'Failed to save attachment'}), 500
+
+    except Exception as e:
+        print(f"Error adding attachment: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =====================================================
 # AI CHAT ENDPOINT - RAG with Database Context
 # =====================================================
 

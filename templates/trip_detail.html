@@ -603,18 +603,12 @@ async function loadAllStopNotes() {
     if (!trip.stops) return;
 
     await Promise.all(trip.stops.map(async (stop) => {
-        // Check for valid company_id (must be a number, not null/undefined/empty)
-        const companyId = stop.company_id;
-        if (companyId && !isNaN(parseInt(companyId))) {
-            try {
-                const response = await fetch(`/api/company-notes/${companyId}`);
-                const data = await response.json();
-                stop.notes = data.success ? (data.notes || []) : [];
-            } catch (e) {
-                console.error('Error loading notes for company', companyId, e);
-                stop.notes = [];
-            }
-        } else {
+        try {
+            const response = await fetch(`/api/trip-stop-notes/${stop.id}`);
+            const data = await response.json();
+            stop.notes = data.success ? (data.notes || []) : [];
+        } catch (e) {
+            console.error('Error loading notes for stop', stop.id, e);
             stop.notes = [];
         }
     }));
@@ -732,25 +726,21 @@ function renderStops() {
                         </div>
 
                         <!-- Add Note Form -->
-                        ${hasValidCompanyId(stop) ? `
-                            <div class="add-note-form">
-                                <textarea class="add-note-textarea" id="noteText-${stop.id}" placeholder="Add a note for this visit..."></textarea>
-                                <div class="add-note-actions">
-                                    <div class="add-note-upload">
-                                        <input type="file" id="noteFiles-${stop.id}" accept="image/*" multiple onchange="previewImages('${stop.id}')">
-                                        <button class="add-note-upload-btn" onclick="document.getElementById('noteFiles-${stop.id}').click()">
-                                            <i class="fas fa-camera"></i> Add Images
-                                        </button>
-                                        <div class="add-note-preview" id="preview-${stop.id}"></div>
-                                    </div>
-                                    <button class="btn-save-note" onclick="saveNote('${stop.id}', ${stop.company_id})">
-                                        <i class="fas fa-save me-1"></i>Save Note
+                        <div class="add-note-form">
+                            <textarea class="add-note-textarea" id="noteText-${stop.id}" placeholder="Add a note for this visit..."></textarea>
+                            <div class="add-note-actions">
+                                <div class="add-note-upload">
+                                    <input type="file" id="noteFiles-${stop.id}" accept="image/*" multiple onchange="previewImages('${stop.id}')">
+                                    <button class="add-note-upload-btn" onclick="document.getElementById('noteFiles-${stop.id}').click()">
+                                        <i class="fas fa-camera"></i> Add Images
                                     </button>
+                                    <div class="add-note-preview" id="preview-${stop.id}"></div>
                                 </div>
+                                <button class="btn-save-note" onclick="saveNote('${stop.id}')">
+                                    <i class="fas fa-save me-1"></i>Save Note
+                                </button>
                             </div>
-                        ` : `
-                            <div class="no-notes">Notes not available for Google Places locations</div>
-                        `}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -786,7 +776,7 @@ function renderStopNotes(stop) {
                 <span class="note-block-meta">
                     ${note.created_by || 'Unknown'} - ${formatDateTime(note.created_at)}
                 </span>
-                <button class="note-block-delete" onclick="deleteNote(${note.id}, ${stop.company_id}, '${stop.id}')" title="Delete note">
+                <button class="note-block-delete" onclick="deleteNote(${note.id}, '${stop.id}')" title="Delete note">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -833,7 +823,7 @@ function removePreviewImage(stopId, index) {
     previewImages(stopId);
 }
 
-async function saveNote(stopId, companyId) {
+async function saveNote(stopId) {
     const textarea = document.getElementById(`noteText-${stopId}`);
     const fileInput = document.getElementById(`noteFiles-${stopId}`);
     const noteText = textarea.value.trim();
@@ -854,7 +844,7 @@ async function saveNote(stopId, companyId) {
             formData.append('images', file);
         }
 
-        const response = await fetch(`/api/company-notes/${companyId}`, {
+        const response = await fetch(`/api/trip-stop-notes/${stopId}`, {
             method: 'POST',
             body: formData
         });
@@ -873,7 +863,7 @@ async function saveNote(stopId, companyId) {
         document.getElementById(`preview-${stopId}`).innerHTML = '';
 
         // Reload notes for this stop
-        await reloadStopNotes(stopId, companyId);
+        await reloadStopNotes(stopId);
 
     } catch (error) {
         console.error('Error saving note:', error);
@@ -881,17 +871,17 @@ async function saveNote(stopId, companyId) {
     }
 }
 
-async function deleteNote(noteId, companyId, stopId) {
+async function deleteNote(noteId, stopId) {
     if (!confirm('Delete this note?')) return;
 
     try {
-        const response = await fetch(`/api/company-notes/${noteId}`, {
+        const response = await fetch(`/api/trip-stop-notes/${noteId}`, {
             method: 'DELETE'
         });
 
         if (response.ok) {
             showToast('Note deleted', 'success');
-            await reloadStopNotes(stopId, companyId);
+            await reloadStopNotes(stopId);
         } else {
             showToast('Failed to delete note', 'error');
         }
@@ -900,9 +890,9 @@ async function deleteNote(noteId, companyId, stopId) {
     }
 }
 
-async function reloadStopNotes(stopId, companyId) {
+async function reloadStopNotes(stopId) {
     try {
-        const response = await fetch(`/api/company-notes/${companyId}`);
+        const response = await fetch(`/api/trip-stop-notes/${stopId}`);
         const data = await response.json();
 
         const stop = trip.stops.find(s => s.id == stopId);
@@ -1060,11 +1050,6 @@ function showError(msg) {
 }
 
 // Utilities
-function hasValidCompanyId(stop) {
-    const companyId = stop.company_id;
-    return companyId && !isNaN(parseInt(companyId)) && parseInt(companyId) > 0;
-}
-
 function formatDate(d) {
     if (!d) return '';
     return new Date(d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
