@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS trip_stop_notes (
     id BIGSERIAL PRIMARY KEY,
-    trip_stop_id BIGINT NOT NULL REFERENCES trip_stops(id) ON DELETE CASCADE,
+    trip_stop_id UUID NOT NULL REFERENCES trip_stops(id) ON DELETE CASCADE,
     note_text TEXT,
     created_by VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -22,7 +22,7 @@ ON trip_stop_notes(created_at DESC);
 -- Create trip_stop_attachments table for storing image metadata
 CREATE TABLE IF NOT EXISTS trip_stop_attachments (
     id BIGSERIAL PRIMARY KEY,
-    trip_stop_id BIGINT NOT NULL REFERENCES trip_stops(id) ON DELETE CASCADE,
+    trip_stop_id UUID NOT NULL REFERENCES trip_stops(id) ON DELETE CASCADE,
     note_id BIGINT REFERENCES trip_stop_notes(id) ON DELETE CASCADE,
     file_name TEXT NOT NULL,
     file_type TEXT,
