@@ -45,9 +45,18 @@
             <!-- Category Filter -->
             <div class="filter-group">
                 <label class="filter-label">Category</label>
-                <select id="categoryFilter" class="filter-select" onchange="filterCustomers()">
-                    <option value="">All categories</option>
-                </select>
+                <div class="custom-dropdown" id="categoryDropdown">
+                    <div class="dropdown-trigger" onclick="toggleCategoryDropdown()">
+                        <span id="categoryTriggerText">All categories</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </div>
+                    <div class="dropdown-menu" id="categoryDropdownMenu">
+                        <div class="dropdown-search">
+                            <input type="text" placeholder="Search..." id="categorySearchInput" oninput="filterCategoryOptions(this.value)">
+                        </div>
+                        <div class="dropdown-options" id="categoryOptions"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Alert Filter -->
@@ -296,6 +305,94 @@
         outline: none;
         border-color: var(--primary-color);
         box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+
+    /* Custom Dropdown */
+    .custom-dropdown {
+        position: relative;
+    }
+
+    .dropdown-trigger {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        font-size: 0.875rem;
+        background: white;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .dropdown-trigger:hover {
+        border-color: var(--primary-color);
+    }
+
+    .dropdown-trigger.active {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+
+    .dropdown-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        z-index: 1000;
+        display: none;
+        max-height: 300px;
+        overflow: hidden;
+        flex-direction: column;
+    }
+
+    .dropdown-menu.show {
+        display: flex;
+    }
+
+    .dropdown-search {
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .dropdown-search input {
+        width: 100%;
+        padding: 0.4rem 0.6rem;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 0.8rem;
+    }
+
+    .dropdown-options {
+        overflow-y: auto;
+        max-height: 250px;
+    }
+
+    .dropdown-option {
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .dropdown-option:hover {
+        background: var(--primary-soft);
+    }
+
+    .dropdown-option.selected {
+        background: var(--primary-soft);
+        color: var(--primary-color);
+        font-weight: 500;
+    }
+
+    .dropdown-option i {
+        color: var(--primary-color);
     }
 
     /* Search Input */
@@ -691,28 +788,20 @@ async function loadCustomers(forceRefresh = false) {
     }
 }
 
+// Track selected category
+let selectedCategory = '';
+let allCategoryOptions = [];
+
 // Populate category filter
 function populateCategoryFilter() {
     const categories = new Set();
 
-    // Debug: log first few customers' category data
-    console.log('📂 Checking categories from customers...');
-    let debugCount = 0;
-
     allCustomers.forEach(c => {
-        // Debug first 3 customers with categories
-        if (debugCount < 3 && c.company_categories) {
-            console.log(`Customer ${c.name}:`, c.company_categories, typeof c.company_categories);
-            debugCount++;
-        }
-
-        // Try parsing if it's a JSON string
         let cats = c.company_categories;
         if (typeof cats === 'string') {
             try {
                 cats = JSON.parse(cats);
             } catch (e) {
-                // Not JSON, might be comma-separated string
                 if (cats.includes(',')) {
                     cats = cats.split(',').map(s => s.trim());
                 } else if (cats.trim()) {
@@ -725,10 +814,9 @@ function populateCategoryFilter() {
 
         if (cats && Array.isArray(cats)) {
             cats.forEach(cat => {
-                // Handle both string categories and object categories with 'name' property
                 let catName = cat;
                 if (typeof cat === 'object' && cat !== null) {
-                    catName = cat.name || cat.category_name || cat.label || JSON.stringify(cat);
+                    catName = cat.name || cat.category_name || cat.label || '';
                 }
                 if (catName && typeof catName === 'string' && catName.trim()) {
                     categories.add(catName.trim());
@@ -737,28 +825,78 @@ function populateCategoryFilter() {
         }
     });
 
-    const select = document.getElementById('categoryFilter');
-    if (!select) {
-        console.error('❌ categoryFilter select element not found!');
-        return;
-    }
+    allCategoryOptions = [...categories].sort();
+    renderCategoryOptions(allCategoryOptions);
+    console.log(`📂 Populated ${categories.size} categories`);
+}
 
-    console.log(`📂 Select element found, current options: ${select.options.length}`);
+// Render category options
+function renderCategoryOptions(categories) {
+    const container = document.getElementById('categoryOptions');
+    if (!container) return;
 
-    [...categories].sort().forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        select.appendChild(option);
+    let html = `
+        <div class="dropdown-option ${!selectedCategory ? 'selected' : ''}" onclick="selectCategory('')">
+            <span>All categories</span>
+            ${!selectedCategory ? '<i class="fas fa-check"></i>' : ''}
+        </div>
+    `;
+
+    categories.forEach(cat => {
+        const isSelected = selectedCategory === cat;
+        html += `
+            <div class="dropdown-option ${isSelected ? 'selected' : ''}" onclick="selectCategory('${cat.replace(/'/g, "\\'")}')">
+                <span>${cat}</span>
+                ${isSelected ? '<i class="fas fa-check"></i>' : ''}
+            </div>
+        `;
     });
 
-    console.log(`📂 Populated ${categories.size} categories, select now has ${select.options.length} options:`, [...categories]);
+    container.innerHTML = html;
 }
+
+// Toggle category dropdown
+function toggleCategoryDropdown() {
+    const menu = document.getElementById('categoryDropdownMenu');
+    const trigger = document.querySelector('#categoryDropdown .dropdown-trigger');
+    menu.classList.toggle('show');
+    trigger.classList.toggle('active');
+    if (menu.classList.contains('show')) {
+        document.getElementById('categorySearchInput').focus();
+    }
+}
+
+// Select a category
+function selectCategory(cat) {
+    selectedCategory = cat;
+    document.getElementById('categoryTriggerText').textContent = cat || 'All categories';
+    document.getElementById('categoryDropdownMenu').classList.remove('show');
+    document.querySelector('#categoryDropdown .dropdown-trigger').classList.remove('active');
+    renderCategoryOptions(allCategoryOptions);
+    filterCustomers();
+}
+
+// Filter category options by search
+function filterCategoryOptions(searchTerm) {
+    const filtered = allCategoryOptions.filter(cat =>
+        cat.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    renderCategoryOptions(filtered);
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const dropdown = document.getElementById('categoryDropdown');
+    if (dropdown && !dropdown.contains(e.target)) {
+        document.getElementById('categoryDropdownMenu')?.classList.remove('show');
+        document.querySelector('#categoryDropdown .dropdown-trigger')?.classList.remove('active');
+    }
+});
 
 // Filter customers
 function filterCustomers() {
     const searchTerm = document.getElementById('customerSearch').value.toLowerCase();
-    const category = document.getElementById('categoryFilter').value;
+    const category = selectedCategory;
     const alertType = document.getElementById('alertFilter').value;
     const salesperson = document.getElementById('salespersonFilter').value;
 
@@ -832,7 +970,9 @@ function filterCustomers() {
 // Clear all filters
 function clearAllFilters() {
     document.getElementById('customerSearch').value = '';
-    document.getElementById('categoryFilter').value = '';
+    selectedCategory = '';
+    document.getElementById('categoryTriggerText').textContent = 'All categories';
+    renderCategoryOptions(allCategoryOptions);
     document.getElementById('alertFilter').value = '';
     document.getElementById('salespersonFilter').value = '';
     filterCustomers();
