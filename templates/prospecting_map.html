@@ -738,6 +738,13 @@ function populateCategoryFilter() {
     });
 
     const select = document.getElementById('categoryFilter');
+    if (!select) {
+        console.error('❌ categoryFilter select element not found!');
+        return;
+    }
+
+    console.log(`📂 Select element found, current options: ${select.options.length}`);
+
     [...categories].sort().forEach(cat => {
         const option = document.createElement('option');
         option.value = cat;
@@ -745,7 +752,7 @@ function populateCategoryFilter() {
         select.appendChild(option);
     });
 
-    console.log(`📂 Populated ${categories.size} categories:`, [...categories]);
+    console.log(`📂 Populated ${categories.size} categories, select now has ${select.options.length} options:`, [...categories]);
 }
 
 // Filter customers
