@@ -1152,6 +1152,19 @@
         border: 1px solid #ddd6fe;
     }
 
+    .prospect-note-form {
+        background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+        border: 1px solid #ddd6fe;
+    }
+
+    .prospect-note-block {
+        border-left: 3px solid #8b5cf6;
+    }
+
+    .prospect-note-block:hover {
+        background: #faf5ff;
+    }
+
     .enrichment-status-card {
         background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
         border: 1px solid #c4b5fd;
@@ -4167,10 +4180,35 @@ function showProspectDetails(prospectId) {
                 </div>
             </div>
 
-            <!-- Notes -->
+            <!-- Notes with Images -->
             <div class="detail-section prospect-section mb-4">
-                <h6 class="fw-bold mb-3"><i class="fas fa-sticky-note me-2"></i>Notes</h6>
-                <textarea class="form-control" id="prospectNotes" rows="4" placeholder="Add notes about this prospect...">${escapeHtml(prospect.notes || '')}</textarea>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-sticky-note me-2"></i>Notes</h6>
+                </div>
+
+                <!-- Add Note Form -->
+                <div class="add-note-form prospect-note-form" id="add-prospect-note-form-${prospectId}">
+                    <textarea id="new-prospect-note-text-${prospectId}" placeholder="Add a note about this prospect..." rows="2"></textarea>
+                    <div class="add-note-footer">
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="btn btn-sm btn-outline-secondary mb-0" title="Attach images">
+                                <i class="fas fa-image me-1"></i>Add Images
+                                <input type="file" accept="image/*" multiple hidden id="new-prospect-note-images-${prospectId}" onchange="previewProspectNoteImages('${prospectId}')">
+                            </label>
+                            <div class="add-note-images-preview" id="new-prospect-note-preview-${prospectId}"></div>
+                        </div>
+                        <button class="btn btn-sm btn-primary" onclick="createProspectNote('${prospectId}')">
+                            <i class="fas fa-plus me-1"></i>Add Note
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Notes List -->
+                <div class="note-blocks-container" id="prospect-notes-${prospectId}">
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-spinner fa-spin me-2"></i>Loading notes...
+                    </div>
+                </div>
             </div>
 
             <!-- Actions -->
@@ -4192,6 +4230,9 @@ function showProspectDetails(prospectId) {
     document.getElementById('companyPanel').classList.add('prospect-panel');
 
     openCompanyPanel();
+
+    // Load prospect notes
+    loadProspectNotes(prospectId);
 }
 
 // Run AI enrichment for a prospect
@@ -4269,7 +4310,6 @@ async function saveProspectDetails(prospectId) {
         const updateData = {
             status: document.getElementById('prospectStatus').value,
             assigned_salesperson: document.getElementById('prospectSalesperson').value || null,
-            notes: document.getElementById('prospectNotes').value,
             website: document.getElementById('prospectWebsite').value,
             address: document.getElementById('prospectAddress').value,
             enriched_data: {
@@ -4294,8 +4334,18 @@ async function saveProspectDetails(prospectId) {
 
         showToast('Prospect saved successfully!', 'success');
 
-        // Refresh data
-        await loadData(true);
+        // Update local prospect data without full page refresh
+        const prospectIndex = allProspects.findIndex(p => p.prospect_id === prospectId);
+        if (prospectIndex !== -1) {
+            allProspects[prospectIndex] = {
+                ...allProspects[prospectIndex],
+                ...updateData,
+                enriched_data: {
+                    ...allProspects[prospectIndex].enriched_data,
+                    ...updateData.enriched_data
+                }
+            };
+        }
 
     } catch (error) {
         console.error('Save error:', error);
@@ -4987,6 +5037,181 @@ async function deleteNoteImage(attachmentId, companyId) {
     } catch (error) {
         console.error('Error deleting image:', error);
         alert('Error deleting image');
+    }
+}
+
+// =====================================================
+// PROSPECT NOTES WITH IMAGES
+// =====================================================
+
+// Load notes for a prospect
+async function loadProspectNotes(prospectId) {
+    const container = document.getElementById(`prospect-notes-${prospectId}`);
+    if (!container) return;
+
+    try {
+        const response = await fetch(`/api/prospect-note-blocks/${prospectId}`);
+        const data = await response.json();
+
+        if (data.success) {
+            if (!data.notes || data.notes.length === 0) {
+                container.innerHTML = '<div class="text-muted small fst-italic py-2">No notes yet. Add your first note above.</div>';
+            } else {
+                container.innerHTML = data.notes.map(note => renderProspectNoteBlock(note, prospectId)).join('');
+            }
+        } else {
+            container.innerHTML = '<div class="text-danger small">Error loading notes</div>';
+        }
+    } catch (error) {
+        console.error('Error loading prospect notes:', error);
+        container.innerHTML = '<div class="text-danger small">Error loading notes</div>';
+    }
+}
+
+// Render a single prospect note block
+function renderProspectNoteBlock(note, prospectId) {
+    const date = new Date(note.created_at).toLocaleDateString('en-GB', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    const imagesHtml = (note.attachments || []).map(att => `
+        <div class="note-image-thumb" onclick="openPhotoLightbox('${att.url}')">
+            <img src="${att.url}" alt="${att.file_name || 'Image'}">
+        </div>
+    `).join('');
+
+    return `
+        <div class="note-block prospect-note-block" data-note-id="${note.id}">
+            <div class="note-header">
+                <span class="note-date">${date}</span>
+                <div class="note-actions">
+                    <button class="add-img-to-note" onclick="triggerAddImageToProspectNote(${note.id}, '${prospectId}')" title="Add image">
+                        <i class="fas fa-image"></i>
+                    </button>
+                    <button class="delete-note" onclick="deleteProspectNote(${note.id}, '${prospectId}')" title="Delete note">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            ${note.note_text ? `<div class="note-text">${escapeHtml(note.note_text)}</div>` : ''}
+            ${imagesHtml ? `<div class="note-images">${imagesHtml}</div>` : ''}
+        </div>
+    `;
+}
+
+// Preview selected images for prospect note
+function previewProspectNoteImages(prospectId) {
+    const input = document.getElementById(`new-prospect-note-images-${prospectId}`);
+    const preview = document.getElementById(`new-prospect-note-preview-${prospectId}`);
+
+    preview.innerHTML = '';
+    for (const file of input.files) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.className = 'preview-thumb';
+        preview.appendChild(img);
+    }
+}
+
+// Create a new prospect note with optional images
+async function createProspectNote(prospectId) {
+    const textInput = document.getElementById(`new-prospect-note-text-${prospectId}`);
+    const imageInput = document.getElementById(`new-prospect-note-images-${prospectId}`);
+    const preview = document.getElementById(`new-prospect-note-preview-${prospectId}`);
+
+    const noteText = textInput ? textInput.value.trim() : '';
+    const files = imageInput ? imageInput.files : [];
+
+    if (!noteText && files.length === 0) {
+        alert('Please add some text or images to the note');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('note_text', noteText);
+    for (let i = 0; i < files.length; i++) {
+        formData.append('files', files[i]);
+    }
+
+    try {
+        const response = await fetch(`/api/prospect-note-blocks/${prospectId}`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSaveSuccess('Note added!');
+            if (textInput) textInput.value = '';
+            if (imageInput) imageInput.value = '';
+            if (preview) preview.innerHTML = '';
+            await loadProspectNotes(prospectId);
+        } else {
+            alert('Error creating note: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error creating prospect note:', error);
+        alert('Error creating note');
+    }
+}
+
+// Delete a prospect note
+async function deleteProspectNote(noteId, prospectId) {
+    if (!confirm('Delete this note and all its images?')) return;
+
+    try {
+        const response = await fetch(`/api/prospect-note-blocks/${noteId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSaveSuccess('Note deleted');
+            await loadProspectNotes(prospectId);
+        } else {
+            alert('Error deleting note: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error deleting prospect note:', error);
+        alert('Error deleting note');
+    }
+}
+
+// Trigger file input to add image to existing prospect note
+function triggerAddImageToProspectNote(noteId, prospectId) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = () => addImageToProspectNote(noteId, prospectId, input.files[0]);
+    input.click();
+}
+
+// Add image to an existing prospect note
+async function addImageToProspectNote(noteId, prospectId, file) {
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch(`/api/prospect-note-blocks/${noteId}/attachment`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showSaveSuccess('Image added!');
+            await loadProspectNotes(prospectId);
+        } else {
+            alert('Error adding image: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error adding image to prospect note:', error);
+        alert('Error adding image');
     }
 }
 

@@ -11166,6 +11166,258 @@ def api_update_prospect_notes(prospect_id):
 
 
 # ========================================
+# PROSPECT NOTES WITH IMAGES
+# ========================================
+
+@app.route('/api/prospect-note-blocks/<prospect_id>', methods=['GET'])
+def get_prospect_notes(prospect_id):
+    """Get all note blocks for a prospect with their attachments"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get notes
+        notes_result = supabase_client.table('prospect_notes').select('*').eq(
+            'prospect_id', prospect_id
+        ).order('created_at', desc=True).execute()
+
+        notes = notes_result.data or []
+
+        # Get attachments for all notes
+        if notes:
+            note_ids = [n['id'] for n in notes]
+            attachments_result = supabase_client.table('prospect_attachments').select('*').in_(
+                'note_id', note_ids
+            ).execute()
+
+            attachments = attachments_result.data or []
+
+            # Generate signed URLs for attachments
+            for att in attachments:
+                try:
+                    url_result = supabase_client.storage.from_('prospect-attachments').create_signed_url(
+                        att['storage_path'], 3600
+                    )
+                    att['url'] = url_result.get('signedURL') or url_result.get('signed_url')
+                except Exception:
+                    att['url'] = None
+
+            # Group attachments by note_id
+            att_by_note = {}
+            for att in attachments:
+                note_id = att['note_id']
+                if note_id not in att_by_note:
+                    att_by_note[note_id] = []
+                att_by_note[note_id].append(att)
+
+            # Attach to notes
+            for note in notes:
+                note['attachments'] = att_by_note.get(note['id'], [])
+        else:
+            for note in notes:
+                note['attachments'] = []
+
+        return jsonify({'success': True, 'notes': notes})
+
+    except Exception as e:
+        print(f"Error getting prospect notes: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/prospect-note-blocks/<prospect_id>', methods=['POST'])
+def create_prospect_note(prospect_id):
+    """Create a new note for a prospect with optional image uploads"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        note_text = request.form.get('note_text', '')
+
+        # Create the note
+        note_result = supabase_client.table('prospect_notes').insert({
+            'prospect_id': prospect_id,
+            'note_text': note_text,
+            'created_by': session.get('user_email', 'unknown')
+        }).execute()
+
+        if not note_result.data:
+            return jsonify({'error': 'Failed to create note'}), 500
+
+        note_id = note_result.data[0]['id']
+        attachments = []
+
+        # Handle file uploads
+        files = request.files.getlist('files')
+        import uuid
+        for file in files:
+            if file and file.filename:
+                # Validate file type
+                allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+                if file.content_type not in allowed_types:
+                    continue
+
+                ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+                unique_filename = f"{uuid.uuid4()}.{ext}"
+                storage_path = f"{prospect_id}/{unique_filename}"
+
+                file_content = file.read()
+                file_size = len(file_content)
+
+                # Upload to storage
+                supabase_client.storage.from_('prospect-attachments').upload(
+                    storage_path,
+                    file_content,
+                    {'content-type': file.content_type}
+                )
+
+                # Save attachment metadata
+                att_result = supabase_client.table('prospect_attachments').insert({
+                    'prospect_id': prospect_id,
+                    'note_id': note_id,
+                    'file_name': file.filename,
+                    'file_type': file.content_type,
+                    'file_size': file_size,
+                    'storage_path': storage_path,
+                    'created_by': session.get('user_email', 'unknown')
+                }).execute()
+
+                # Generate signed URL
+                signed_url = None
+                try:
+                    url_result = supabase_client.storage.from_('prospect-attachments').create_signed_url(
+                        storage_path, 3600
+                    )
+                    signed_url = url_result.get('signedURL') or url_result.get('signed_url')
+                except Exception:
+                    pass
+
+                attachments.append({
+                    'id': att_result.data[0]['id'] if att_result.data else None,
+                    'file_name': file.filename,
+                    'url': signed_url
+                })
+
+        return jsonify({
+            'success': True,
+            'note': {
+                'id': note_id,
+                'note_text': note_text,
+                'created_at': note_result.data[0].get('created_at'),
+                'attachments': attachments
+            }
+        })
+
+    except Exception as e:
+        print(f"Error creating prospect note: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/prospect-note-blocks/<int:note_id>', methods=['DELETE'])
+def delete_prospect_note(note_id):
+    """Delete a prospect note and its attachments"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get attachments first to delete from storage
+        attachments_result = supabase_client.table('prospect_attachments').select('*').eq(
+            'note_id', note_id
+        ).execute()
+
+        # Delete files from storage
+        for att in (attachments_result.data or []):
+            try:
+                supabase_client.storage.from_('prospect-attachments').remove([att['storage_path']])
+            except Exception:
+                pass
+
+        # Delete note (attachments cascade)
+        supabase_client.table('prospect_notes').delete().eq('id', note_id).execute()
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        print(f"Error deleting prospect note: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/prospect-note-blocks/<int:note_id>/attachment', methods=['POST'])
+def add_prospect_note_attachment(note_id):
+    """Add an image to an existing prospect note"""
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get note to find prospect_id
+        note_result = supabase_client.table('prospect_notes').select('prospect_id').eq(
+            'id', note_id
+        ).execute()
+
+        if not note_result.data:
+            return jsonify({'error': 'Note not found'}), 404
+
+        prospect_id = note_result.data[0]['prospect_id']
+
+        file = request.files.get('file')
+        if not file or not file.filename:
+            return jsonify({'error': 'No file provided'}), 400
+
+        # Validate file type
+        allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+        if file.content_type not in allowed_types:
+            return jsonify({'error': 'Invalid file type'}), 400
+
+        import uuid
+        ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+        unique_filename = f"{uuid.uuid4()}.{ext}"
+        storage_path = f"{prospect_id}/{unique_filename}"
+
+        file_content = file.read()
+        file_size = len(file_content)
+
+        # Upload to storage
+        supabase_client.storage.from_('prospect-attachments').upload(
+            storage_path,
+            file_content,
+            {'content-type': file.content_type}
+        )
+
+        # Save attachment metadata
+        att_result = supabase_client.table('prospect_attachments').insert({
+            'prospect_id': prospect_id,
+            'note_id': note_id,
+            'file_name': file.filename,
+            'file_type': file.content_type,
+            'file_size': file_size,
+            'storage_path': storage_path,
+            'created_by': session.get('user_email', 'unknown')
+        }).execute()
+
+        # Generate signed URL
+        signed_url = None
+        try:
+            url_result = supabase_client.storage.from_('prospect-attachments').create_signed_url(
+                storage_path, 3600
+            )
+            signed_url = url_result.get('signedURL') or url_result.get('signed_url')
+        except Exception:
+            pass
+
+        return jsonify({
+            'success': True,
+            'attachment': {
+                'id': att_result.data[0]['id'] if att_result.data else None,
+                'file_name': file.filename,
+                'url': signed_url
+            }
+        })
+
+    except Exception as e:
+        print(f"Error adding attachment: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ========================================
 # TRIPS MANAGEMENT ENDPOINTS
 # ========================================
 
