@@ -138,6 +138,13 @@
                     </select>
                 </div>
 
+                <!-- Region Filter -->
+                <div class="filter-cell">
+                    <select class="filter-select" id="regionFilter" onchange="filterCompanies()">
+                        <option value="">All regions</option>
+                    </select>
+                </div>
+
                 <!-- Sort By -->
                 <div class="filter-cell">
                     <select class="filter-select" id="sortBy" onchange="sortCompanies()">
@@ -1054,6 +1061,31 @@
         transform: translateY(-2px);
     }
 
+    /* Prospect Card Styling - Subtle lavender/purple tint */
+    .company-card-modern.prospect-card {
+        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+        border-color: #c4b5fd;
+    }
+
+    .company-card-modern.prospect-card:hover {
+        border-color: #8b5cf6;
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
+    }
+
+    .prospect-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.5rem;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        color: white;
+        font-size: 0.65rem;
+        font-weight: 600;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
     .company-header {
         padding: 1.25rem 1.25rem 0.75rem;
         display: flex;
@@ -1663,9 +1695,11 @@
 </style>
 <script>
 let allCompanies = [];
+let allProspects = [];
 let filteredCompanies = [];
 let currentViewMode = 'cards';
 let currentYear = 'combined'; // Always load all companies
+let showProspects = true; // Whether to include prospects in the view
 let categoryStates = {}; // Track category filter states: 'included', 'excluded', or null (removed)
 let selectedFlavours = []; // Track selected flavours for filtering
 let showOnlyMajorRetailers = false; // Filter for major retailers
@@ -1870,20 +1904,25 @@ async function loadData(forceRefresh = false) {
         if (cachedData) {
             console.log(`📦 Using cached data for ${currentYear} (${cachedData.companies?.length || 0} companies)`);
             document.getElementById('loading').style.display = 'none';
-            
+
             allCompanies = cachedData.companies || [];
-            filteredCompanies = [...allCompanies];
-            
+
+            // Also fetch prospects (not cached, always fresh for prospects pipeline)
+            await fetchAndMergeProspects();
+
+            filteredCompanies = [...allCompanies, ...allProspects];
+
             // Populate filter dropdowns
             populateCategories();
             populateFlavours();
+            populateRegions();
 
             // Update stats
             updateStats(cachedData);
-            
+
             // Display companies
             displayCompanies();
-            
+
             // Show cached indicator
             showCacheIndicator(true);
             return;
@@ -1910,13 +1949,18 @@ async function loadData(forceRefresh = false) {
         // Cache the data
         setCachedData(currentYear, data);
         console.log(`✅ Cached ${data.companies?.length || 0} companies for ${currentYear}`);
-        
+
         allCompanies = data.companies || [];
-        filteredCompanies = [...allCompanies];
-        
+
+        // Also fetch prospects
+        await fetchAndMergeProspects();
+
+        filteredCompanies = [...allCompanies, ...allProspects];
+
         // Populate filter dropdowns
         populateCategories();
         populateFlavours();
+        populateRegions();
 
         // Update stats
         updateStats(data);
@@ -1948,6 +1992,110 @@ function forceRefreshData() {
 function updateStats(data) {
     document.getElementById('year-stats').style.display = 'flex';
     document.getElementById('stat-total-companies').textContent = data.total_companies || 0;
+}
+
+// Fetch prospects and convert them to company-like format
+async function fetchAndMergeProspects() {
+    try {
+        const response = await fetch('/api/prospects');
+        if (!response.ok) {
+            console.warn('Failed to fetch prospects');
+            allProspects = [];
+            return;
+        }
+
+        const data = await response.json();
+        const prospects = data.prospects || [];
+
+        // Convert prospects to company-like format for unified display
+        allProspects = prospects.map(prospect => {
+            // Extract location from enriched_data or address
+            const enrichedData = prospect.enriched_data || {};
+            const city = enrichedData.city || extractCityFromAddress(prospect.address);
+
+            return {
+                // Use negative IDs to distinguish prospects from companies
+                id: `prospect_${prospect.id}`,
+                company_id: `prospect_${prospect.id}`,
+                prospect_id: prospect.id,
+                is_prospect: true,
+                name: prospect.name,
+                public_name: prospect.name,
+                address: {
+                    city: city,
+                    street: prospect.address,
+                    country: 'Belgium'
+                },
+                email: enrichedData.email || '',
+                phone: enrichedData.phone || '',
+                website: prospect.website || enrichedData.site || '',
+                latitude: enrichedData.latitude,
+                longitude: enrichedData.longitude,
+                status: prospect.status,
+                assigned_salesperson: prospect.assigned_salesperson,
+                company_categories: ['Prospects'],
+                notes: prospect.notes,
+                enriched_data: enrichedData,
+                created_at: prospect.created_at,
+                // No invoice data for prospects
+                total_revenue: 0,
+                invoice_count: 0,
+                alerts: []
+            };
+        });
+
+        console.log(`📦 Loaded ${allProspects.length} prospects`);
+    } catch (error) {
+        console.error('Error fetching prospects:', error);
+        allProspects = [];
+    }
+}
+
+// Helper to extract city from address string
+function extractCityFromAddress(address) {
+    if (!address) return '';
+    // Try to extract city from common Belgian address formats
+    const cityPatterns = [
+        /\b(Antwerp(?:en)?|Brussels|Brussel|Bruxelles|Gent|Ghent|Leuven|Louvain|Bruges|Brugge|Liège|Luik|Charleroi|Namur|Namen|Mons|Bergen|Mechelen|Kortrijk|Hasselt|Ostend|Oostende|Aalst|La Louvière|Sint-Niklaas|Tournai|Doornik|Genk|Seraing|Roeselare|Mouscron|Verviers|Dendermonde|Beringen|Turnhout|Dil(?:beek)?|Waregem)\b/i
+    ];
+    for (const pattern of cityPatterns) {
+        const match = address.match(pattern);
+        if (match) return match[1];
+    }
+    // Try to extract from postal code pattern like "1000 Brussels"
+    const postalMatch = address.match(/\d{4}\s+([A-Za-z\-]+)/);
+    if (postalMatch) return postalMatch[1];
+    return '';
+}
+
+// Populate region filter from company data
+function populateRegions() {
+    const regionSet = new Set();
+
+    // Extract regions from companies
+    [...allCompanies, ...allProspects].forEach(company => {
+        const city = company.address?.city;
+        if (city && city.trim()) {
+            regionSet.add(city.trim());
+        }
+    });
+
+    const sortedRegions = Array.from(regionSet).sort();
+    const select = document.getElementById('regionFilter');
+    if (!select) return;
+
+    // Clear existing options except the first "All regions"
+    while (select.options.length > 1) {
+        select.remove(1);
+    }
+
+    // Add regions
+    sortedRegions.forEach(region => {
+        const option = document.createElement('option');
+        option.value = region;
+        option.textContent = region;
+        select.appendChild(option);
+    });
 }
 
 async function syncLatestData(fullSync = false) {
@@ -2248,8 +2396,12 @@ function filterCompanies() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const alertFilter = document.getElementById('alertFilter').value;
     const salespersonFilter = document.getElementById('salespersonFilter').value;
+    const regionFilter = document.getElementById('regionFilter')?.value || '';
 
-    filteredCompanies = allCompanies.filter(company => {
+    // Combine companies and prospects for filtering
+    const allItems = [...allCompanies, ...allProspects];
+
+    filteredCompanies = allItems.filter(company => {
         // Category filtering
         const companyCategories = getCompanyCategories(company);
         const excludedCategories = Object.keys(categoryStates).filter(cat => categoryStates[cat] === 'excluded');
@@ -2269,13 +2421,14 @@ function filterCompanies() {
         }
 
         // Flavour filtering - if flavours selected, company must have at least one of them
+        // (Prospects won't have flavours, so they'll be filtered out if flavours are selected)
         if (selectedFlavours.length > 0) {
             const companyFlavours = company.current_flavours || [];
             const hasSelectedFlavour = companyFlavours.some(f => selectedFlavours.includes(f));
             if (!hasSelectedFlavour) return false;
         }
 
-        // Alert filtering
+        // Alert filtering (prospects have no alerts)
         if (alertFilter) {
             const companyAlerts = company.alerts || [];
             if (alertFilter === 'any') {
@@ -2293,6 +2446,12 @@ function filterCompanies() {
             } else {
                 if (company.assigned_salesperson !== salespersonFilter) return false;
             }
+        }
+
+        // Region/City filtering
+        if (regionFilter) {
+            const companyCity = company.address?.city || '';
+            if (companyCity.toLowerCase() !== regionFilter.toLowerCase()) return false;
         }
 
         // Search term filtering
@@ -2406,21 +2565,21 @@ function isHorecaCompany(company) {
 
 function populateCategories() {
     const categorySet = new Set();
-    
-    // Extract all unique categories from all companies
-    allCompanies.forEach(company => {
+
+    // Extract all unique categories from all companies and prospects
+    [...allCompanies, ...allProspects].forEach(company => {
         const categories = getCompanyCategories(company);
         categories.forEach(cat => categorySet.add(cat));
     });
-    
+
     const sortedCategories = Array.from(categorySet).sort();
-    
+
     // Initialize all categories as included by default
     categoryStates = {};
     sortedCategories.forEach(cat => {
         categoryStates[cat] = 'included';
     });
-    
+
     renderCategoryTags();
 }
 
@@ -2977,15 +3136,24 @@ function displayCardsView() {
         const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
 
         const displayName = company.public_name || company.name;
+        const isProspect = company.is_prospect === true;
 
         // Build alert tags HTML
         const alertTagsHtml = buildAlertTags(company.alerts || []);
 
+        // Prospect badge for prospect cards
+        const prospectBadge = isProspect ? `<span class="prospect-badge"><i class="fas fa-user-plus"></i> Prospect</span>` : '';
+        const statusBadge = !isProspect && company.customer_status ? `<span class="badge badge-soft-${getStatusColor(company.customer_status)}">${escapeHtml(company.customer_status)}</span>` : '';
+
+        // For prospects, use the prospect_id for the onclick, otherwise use company.id
+        const clickId = isProspect ? `'${company.prospect_id}'` : company.id;
+        const clickHandler = isProspect ? `showProspectDetails('${company.prospect_id}')` : `showCompanyDetails(${company.id})`;
+
         card.innerHTML = `
-            <div class="company-card-modern h-100" data-company-id="${company.id}" onclick="showCompanyDetails(${company.id})" style="cursor: pointer;">
+            <div class="company-card-modern h-100 ${isProspect ? 'prospect-card' : ''}" data-company-id="${company.id}" onclick="${clickHandler}" style="cursor: pointer;">
                 <div class="company-header">
                     <h5 class="company-name">${escapeHtml(displayName)}</h5>
-                    ${company.customer_status ? `<span class="badge badge-soft-${getStatusColor(company.customer_status)}">${escapeHtml(company.customer_status)}</span>` : ''}
+                    ${prospectBadge}${statusBadge}
                 </div>
 
                 ${alertTagsHtml ? `<div class="company-alerts">${alertTagsHtml}</div>` : ''}
@@ -3005,13 +3173,13 @@ function displayCardsView() {
                     <button class="action-btn whatsapp" title="WhatsApp" onclick="event.stopPropagation(); whatsappCompany('${escapeHtml(cleanPhone)}')" ${!phone ? 'disabled' : ''}>
                         <i class="fab fa-whatsapp"></i>
                     </button>
-                    <button class="action-btn" title="Add to Trip" onclick="event.stopPropagation(); addToTrip(${company.id}, '${escapeHtml(displayName)}')">
+                    ${!isProspect ? `<button class="action-btn" title="Add to Trip" onclick="event.stopPropagation(); addToTrip(${company.id}, '${escapeHtml(displayName)}')">
                         <i class="fas fa-route"></i>
-                    </button>
-                    <button class="action-btn" title="Create Task" onclick="event.stopPropagation(); createTask(${company.id}, '${escapeHtml(displayName)}')">
+                    </button>` : ''}
+                    <button class="action-btn" title="Create Task" onclick="event.stopPropagation(); createTask(${isProspect ? `'${company.prospect_id}'` : company.id}, '${escapeHtml(displayName)}')">
                         <i class="fas fa-tasks"></i>
                     </button>
-                    <button class="action-btn primary" onclick="event.stopPropagation(); showCompanyDetails(${company.id})">
+                    <button class="action-btn primary" onclick="event.stopPropagation(); ${clickHandler}">
                         <i class="fas fa-eye"></i> View
                     </button>
                 </div>
@@ -3527,6 +3695,19 @@ function showCompanyDetails(companyId) {
 
     // Load notes for this company (unified notes with images)
     loadCompanyNotes(company.company_id);
+}
+
+// Show prospect details - redirects to prospects management page
+function showProspectDetails(prospectId) {
+    // Find the prospect in allProspects
+    const prospect = allProspects.find(p => p.prospect_id === prospectId);
+    if (!prospect) {
+        console.warn('Prospect not found:', prospectId);
+        return;
+    }
+
+    // Redirect to prospects page with the prospect selected
+    window.location.href = `/prospecting?prospect=${prospectId}`;
 }
 
 // Filter invoices by year in sidepanel

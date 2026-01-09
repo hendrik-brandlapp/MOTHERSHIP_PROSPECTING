@@ -795,6 +795,7 @@ function updateCustomerMarkers() {
         const hasAlerts = company.alerts && company.alerts.length > 0;
 
         // Create marker
+        const displayName = company.public_name || company.name;
         const marker = new google.maps.Marker({
             position,
             icon: {
@@ -805,7 +806,7 @@ function updateCustomerMarkers() {
                 strokeColor: 'white',
                 strokeWeight: 2
             },
-            title: company.name
+            title: displayName
         });
 
         marker.addListener('click', () => {
@@ -862,10 +863,11 @@ function showCustomerInfoWindow(company, marker) {
     const alertBadges = hasAlerts ? company.alerts.map(a =>
         `<span class="badge bg-danger">${getAlertLabel(a.type)}</span>`
     ).join(' ') : '';
+    const displayName = company.public_name || company.name;
 
     const content = `
         <div class="info-window">
-            <h6>${escapeHtml(company.name)}</h6>
+            <h6>${escapeHtml(displayName)}</h6>
             <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(company.address?.city || 'Unknown')}</p>
             ${company.assigned_salesperson ? `<p><i class="fas fa-user"></i> ${escapeHtml(company.assigned_salesperson)}</p>` : ''}
             ${alertBadges ? `<div style="margin-top:0.5rem">${alertBadges}</div>` : ''}
@@ -900,11 +902,12 @@ function updateCustomerList() {
         const hasAlerts = company.alerts && company.alerts.length > 0;
         const badgeClass = hasAlerts ? 'badge-alert' : 'badge-healthy';
         const badgeText = hasAlerts ? 'Alert' : 'Healthy';
+        const displayName = company.public_name || company.name;
 
         return `
             <div class="result-item" onclick="focusCustomer(${company.company_id})">
                 <div class="result-item-header">
-                    <h6 class="result-item-name">${escapeHtml(company.name)}</h6>
+                    <h6 class="result-item-name">${escapeHtml(displayName)}</h6>
                     <span class="result-item-badge ${badgeClass}">${badgeText}</span>
                 </div>
                 <p class="result-item-address">${escapeHtml(company.address?.city || 'Unknown location')}</p>
@@ -934,8 +937,9 @@ function focusCustomer(companyId) {
     map.setZoom(15);
 
     // Find and click the marker
+    const displayName = company.public_name || company.name;
     const marker = customerMarkers.find(m =>
-        m.getTitle() === company.name
+        m.getTitle() === displayName
     );
     if (marker) {
         showCustomerInfoWindow(company, marker);
