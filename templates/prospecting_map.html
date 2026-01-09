@@ -584,6 +584,36 @@ let googleResults = [];
 let currentTab = 'filter';
 let selectedPlaceForProspect = null;
 
+// Cache settings - shared with Companies page
+const CACHE_KEY = 'companies_shared_cache';
+const CACHE_TIME_KEY = 'companies_shared_cache_time';
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+function isCacheValid() {
+    const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+    if (!cachedTime) return false;
+    return (Date.now() - parseInt(cachedTime)) < CACHE_DURATION;
+}
+
+function getCachedData() {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    try {
+        return JSON.parse(cached);
+    } catch (e) {
+        return null;
+    }
+}
+
+function setCachedData(data) {
+    try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
+    } catch (e) {
+        console.warn('Failed to cache data:', e);
+    }
+}
+
 // Initialize Map
 function initMap() {
     map = new google.maps.Map(document.getElementById('map'), {
@@ -604,11 +634,38 @@ function initMap() {
     loadCustomers();
 }
 
-// Load customers from API
-async function loadCustomers() {
+// Load customers from API (with caching)
+async function loadCustomers(forceRefresh = false) {
     try {
+        // Check cache first
+        const cachedData = !forceRefresh ? getCachedData() : null;
+
+        if (cachedData && isCacheValid()) {
+            console.log('📦 Using cached customer data');
+            allCustomers = cachedData.companies || [];
+            filteredCustomers = [...allCustomers];
+
+            document.getElementById('total-count').textContent = allCustomers.length;
+            populateCategoryFilter();
+            updateCustomerMarkers();
+            updateCustomerList();
+            return;
+        }
+
+        // Fetch fresh data
+        console.log('🔄 Fetching fresh customer data...');
+        document.getElementById('customerList').innerHTML = `
+            <div class="loading-state">
+                <div class="spinner-border spinner-border-sm text-primary"></div>
+                <span>Loading customers...</span>
+            </div>
+        `;
+
         const response = await fetch('/api/companies-from-db?year=combined');
         const data = await response.json();
+
+        // Cache the data
+        setCachedData(data);
 
         allCustomers = data.companies || [];
         filteredCustomers = [...allCustomers];
