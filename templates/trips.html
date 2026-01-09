@@ -4,10 +4,9 @@
 
 {% block extra_head %}
 <style>
-    /* Routes Overview Layout */
     .routes-container {
         padding: var(--space-lg);
-        max-width: 1400px;
+        max-width: 1200px;
         margin: 0 auto;
     }
 
@@ -17,7 +16,11 @@
         gap: var(--space-md);
         margin-bottom: var(--space-lg);
         flex-wrap: wrap;
-        align-items: center;
+        align-items: flex-end;
+        background: var(--bg-surface);
+        padding: var(--space-md);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-color);
     }
 
     .filter-group {
@@ -27,42 +30,37 @@
     }
 
     .filter-group label {
-        font-size: 0.75rem;
+        font-size: 0.6875rem;
         font-weight: 600;
-        color: var(--text-secondary);
+        color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
 
     .filter-group select,
     .filter-group input {
-        min-width: 150px;
+        min-width: 130px;
         padding: 0.5rem 0.75rem;
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
-        background: var(--bg-surface);
+        background: var(--bg-primary);
         font-size: 0.875rem;
     }
 
     .filter-group input[type="date"] {
-        min-width: 140px;
-    }
-
-    .filter-actions {
-        display: flex;
-        gap: var(--space-sm);
-        margin-left: auto;
+        min-width: 130px;
     }
 
     .btn-clear-filters {
-        padding: 0.5rem 1rem;
+        padding: 0.5rem 0.875rem;
         background: transparent;
         border: 1px solid var(--border-color);
         border-radius: var(--radius-md);
         color: var(--text-secondary);
         cursor: pointer;
-        font-size: 0.875rem;
+        font-size: 0.8125rem;
         transition: all 0.2s;
+        margin-left: auto;
     }
 
     .btn-clear-filters:hover {
@@ -70,11 +68,11 @@
         color: var(--text-primary);
     }
 
-    /* Routes Grid */
-    .routes-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-        gap: var(--space-lg);
+    /* Routes List */
+    .routes-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-md);
     }
 
     /* Route Card */
@@ -85,42 +83,39 @@
         padding: var(--space-lg);
         cursor: pointer;
         transition: all 0.2s ease;
-        position: relative;
-        overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: var(--space-lg);
     }
 
     .route-card:hover {
         border-color: var(--accent);
-        box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .route-card-main {
+        flex: 1;
+        min-width: 0;
     }
 
     .route-card-header {
         display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: var(--space-md);
+        align-items: center;
+        gap: var(--space-md);
+        margin-bottom: 0.5rem;
     }
 
     .route-card-title {
-        font-size: 1.125rem;
+        font-size: 1rem;
         font-weight: 600;
         color: var(--text-primary);
-        margin: 0 0 0.25rem 0;
-    }
-
-    .route-card-date {
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
+        margin: 0;
     }
 
     .route-status-badge {
-        padding: 0.25rem 0.75rem;
+        padding: 0.2rem 0.5rem;
         border-radius: var(--radius-full);
-        font-size: 0.75rem;
+        font-size: 0.6875rem;
         font-weight: 600;
         text-transform: uppercase;
     }
@@ -140,65 +135,50 @@
         color: var(--success);
     }
 
-    .route-card-body {
-        border-top: 1px solid var(--border-subtle);
-        padding-top: var(--space-md);
-    }
-
-    .route-meta-row {
-        display: flex;
-        align-items: center;
-        gap: var(--space-sm);
-        margin-bottom: 0.5rem;
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-    }
-
-    .route-meta-row i {
-        width: 20px;
-        color: var(--text-muted);
-    }
-
-    .route-meta-row strong {
-        color: var(--text-primary);
-    }
-
-    .route-stops-preview {
+    .route-card-meta {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.5rem;
-        margin-top: var(--space-md);
+        gap: var(--space-md);
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
     }
 
-    .stop-preview-chip {
+    .route-card-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+
+    .route-card-meta-item i {
+        color: var(--text-muted);
+        width: 14px;
+    }
+
+    .route-card-stops {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: var(--space-sm) var(--space-md);
         background: var(--bg-primary);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-full);
-        padding: 0.25rem 0.625rem;
+        border-radius: var(--radius-md);
+        flex-shrink: 0;
+    }
+
+    .route-card-stops-count {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--accent);
+    }
+
+    .route-card-stops-label {
         font-size: 0.75rem;
         color: var(--text-secondary);
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
     }
 
-    .stop-preview-chip .stop-num {
-        background: var(--accent);
-        color: white;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.625rem;
-        font-weight: 600;
-    }
-
-    .more-stops-chip {
-        background: var(--accent-subtle);
-        color: var(--accent);
-        border-color: var(--accent);
+    .route-card-arrow {
+        color: var(--text-muted);
+        font-size: 1.25rem;
+        flex-shrink: 0;
     }
 
     /* Empty State */
@@ -206,11 +186,14 @@
         text-align: center;
         padding: var(--space-2xl);
         color: var(--text-secondary);
+        background: var(--bg-surface);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-color);
     }
 
     .routes-empty-state i {
-        font-size: 4rem;
-        margin-bottom: var(--space-lg);
+        font-size: 3rem;
+        margin-bottom: var(--space-md);
         opacity: 0.3;
     }
 
@@ -219,65 +202,11 @@
         color: var(--text-primary);
     }
 
-    /* Quick Stats */
-    .routes-stats {
-        display: flex;
-        gap: var(--space-lg);
-        margin-bottom: var(--space-lg);
-        flex-wrap: wrap;
-    }
-
-    .stat-card {
-        background: var(--bg-surface);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-lg);
-        padding: var(--space-lg);
-        flex: 1;
-        min-width: 200px;
-    }
-
-    .stat-card-value {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        font-family: 'Inter Tight', sans-serif;
-    }
-
-    .stat-card-label {
-        font-size: 0.875rem;
+    /* Results count */
+    .routes-results-count {
+        font-size: 0.8125rem;
         color: var(--text-secondary);
-        margin-top: 0.25rem;
-    }
-
-    .stat-card-icon {
-        float: right;
-        width: 40px;
-        height: 40px;
-        border-radius: var(--radius-md);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.25rem;
-    }
-
-    .stat-card-icon.routes {
-        background: var(--accent-subtle);
-        color: var(--accent);
-    }
-
-    .stat-card-icon.stops {
-        background: var(--info-bg);
-        color: var(--info);
-    }
-
-    .stat-card-icon.upcoming {
-        background: var(--warning-bg);
-        color: var(--warning);
-    }
-
-    .stat-card-icon.completed {
-        background: var(--success-bg);
-        color: var(--success);
+        margin-bottom: var(--space-md);
     }
 </style>
 {% endblock %}
@@ -301,36 +230,12 @@
 </div>
 
 <div class="routes-container">
-    <!-- Quick Stats -->
-    <div class="routes-stats" id="routeStats">
-        <div class="stat-card">
-            <div class="stat-card-icon routes"><i class="fas fa-route"></i></div>
-            <div class="stat-card-value" id="totalRoutes">-</div>
-            <div class="stat-card-label">Total Routes</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-icon stops"><i class="fas fa-map-marker-alt"></i></div>
-            <div class="stat-card-value" id="totalStops">-</div>
-            <div class="stat-card-label">Total Stops</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-icon upcoming"><i class="fas fa-calendar-alt"></i></div>
-            <div class="stat-card-value" id="upcomingRoutes">-</div>
-            <div class="stat-card-label">Upcoming</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-card-icon completed"><i class="fas fa-check-circle"></i></div>
-            <div class="stat-card-value" id="completedRoutes">-</div>
-            <div class="stat-card-label">Completed</div>
-        </div>
-    </div>
-
     <!-- Filter Bar -->
     <div class="routes-filter-bar">
         <div class="filter-group">
             <label>Status</label>
             <select id="statusFilter" onchange="filterRoutes()">
-                <option value="">All Statuses</option>
+                <option value="">All</option>
                 <option value="planned">Planned</option>
                 <option value="in_progress">In Progress</option>
                 <option value="completed">Completed</option>
@@ -339,32 +244,27 @@
         <div class="filter-group">
             <label>Salesperson</label>
             <select id="salespersonFilter" onchange="filterRoutes()">
-                <option value="">All Salespeople</option>
+                <option value="">All</option>
             </select>
         </div>
         <div class="filter-group">
-            <label>From Date</label>
+            <label>From</label>
             <input type="date" id="dateFromFilter" onchange="filterRoutes()">
         </div>
         <div class="filter-group">
-            <label>To Date</label>
+            <label>To</label>
             <input type="date" id="dateToFilter" onchange="filterRoutes()">
         </div>
-        <div class="filter-group">
-            <label>Region</label>
-            <select id="regionFilter" onchange="filterRoutes()">
-                <option value="">All Regions</option>
-            </select>
-        </div>
-        <div class="filter-actions">
-            <button class="btn-clear-filters" onclick="clearFilters()">
-                <i class="fas fa-times me-1"></i>Clear Filters
-            </button>
-        </div>
+        <button class="btn-clear-filters" onclick="clearFilters()">
+            <i class="fas fa-times me-1"></i>Clear
+        </button>
     </div>
 
-    <!-- Routes Grid -->
-    <div class="routes-grid" id="routesGrid">
+    <!-- Results count -->
+    <div class="routes-results-count" id="routesResultsCount"></div>
+
+    <!-- Routes List -->
+    <div class="routes-list" id="routesList">
         <div class="routes-empty-state">
             <i class="fas fa-spinner fa-spin"></i>
             <h5>Loading routes...</h5>
@@ -378,7 +278,6 @@
 let allRoutes = [];
 let filteredRoutes = [];
 
-// Load routes on page load
 document.addEventListener('DOMContentLoaded', function() {
     loadRoutes();
 });
@@ -391,7 +290,7 @@ async function loadRoutes() {
         if (data.success) {
             allRoutes = data.trips || [];
 
-            // Load stops for each trip
+            // Load stops count for each trip
             await Promise.all(allRoutes.map(async (route) => {
                 try {
                     const detailResponse = await fetch(`/api/trips/${route.id}`);
@@ -405,7 +304,6 @@ async function loadRoutes() {
             }));
 
             populateFilters();
-            updateStats();
             filterRoutes();
         } else {
             showEmptyState('Failed to load routes');
@@ -417,7 +315,6 @@ async function loadRoutes() {
 }
 
 function populateFilters() {
-    // Populate salespeople dropdown
     const salespeople = [...new Set(allRoutes.map(r => r.created_by).filter(Boolean))];
     const salespersonSelect = document.getElementById('salespersonFilter');
     salespeople.forEach(sp => {
@@ -426,34 +323,6 @@ function populateFilters() {
         option.textContent = sp;
         salespersonSelect.appendChild(option);
     });
-
-    // Populate regions dropdown (extract from start_location)
-    const regions = [...new Set(allRoutes.map(r => {
-        if (r.start_location) {
-            const parts = r.start_location.split(',');
-            if (parts.length >= 2) {
-                return parts[parts.length - 2].trim();
-            }
-        }
-        return null;
-    }).filter(Boolean))];
-
-    const regionSelect = document.getElementById('regionFilter');
-    regions.sort().forEach(region => {
-        const option = document.createElement('option');
-        option.value = region;
-        option.textContent = region;
-        regionSelect.appendChild(option);
-    });
-}
-
-function updateStats() {
-    const today = new Date().toISOString().split('T')[0];
-
-    document.getElementById('totalRoutes').textContent = allRoutes.length;
-    document.getElementById('totalStops').textContent = allRoutes.reduce((sum, r) => sum + (r.stops?.length || 0), 0);
-    document.getElementById('upcomingRoutes').textContent = allRoutes.filter(r => r.trip_date >= today && r.status !== 'completed').length;
-    document.getElementById('completedRoutes').textContent = allRoutes.filter(r => r.status === 'completed').length;
 }
 
 function filterRoutes() {
@@ -461,23 +330,16 @@ function filterRoutes() {
     const salesperson = document.getElementById('salespersonFilter').value;
     const dateFrom = document.getElementById('dateFromFilter').value;
     const dateTo = document.getElementById('dateToFilter').value;
-    const region = document.getElementById('regionFilter').value;
 
     filteredRoutes = allRoutes.filter(route => {
         if (status && route.status !== status) return false;
         if (salesperson && route.created_by !== salesperson) return false;
         if (dateFrom && route.trip_date < dateFrom) return false;
         if (dateTo && route.trip_date > dateTo) return false;
-        if (region && route.start_location && !route.start_location.includes(region)) return false;
         return true;
     });
 
-    // Sort by date descending
-    filteredRoutes.sort((a, b) => {
-        if (a.trip_date === b.trip_date) return 0;
-        return a.trip_date > b.trip_date ? -1 : 1;
-    });
-
+    filteredRoutes.sort((a, b) => (a.trip_date > b.trip_date ? -1 : 1));
     renderRoutes();
 }
 
@@ -486,70 +348,64 @@ function clearFilters() {
     document.getElementById('salespersonFilter').value = '';
     document.getElementById('dateFromFilter').value = '';
     document.getElementById('dateToFilter').value = '';
-    document.getElementById('regionFilter').value = '';
     filterRoutes();
 }
 
 function renderRoutes() {
-    const grid = document.getElementById('routesGrid');
+    const list = document.getElementById('routesList');
+    const countEl = document.getElementById('routesResultsCount');
+
+    countEl.textContent = `${filteredRoutes.length} route${filteredRoutes.length !== 1 ? 's' : ''}`;
 
     if (filteredRoutes.length === 0) {
-        grid.innerHTML = `
-            <div class="routes-empty-state" style="grid-column: 1 / -1;">
+        list.innerHTML = `
+            <div class="routes-empty-state">
                 <i class="fas fa-route"></i>
                 <h5>No routes found</h5>
-                <p>Create a new route from the Prospecting Map or adjust your filters</p>
+                <p>Create a new route from the Prospecting Map</p>
             </div>
         `;
         return;
     }
 
-    grid.innerHTML = filteredRoutes.map(route => `
+    list.innerHTML = filteredRoutes.map(route => `
         <div class="route-card" onclick="viewRoute('${route.id}')">
-            <div class="route-card-header">
-                <div>
+            <div class="route-card-main">
+                <div class="route-card-header">
                     <h5 class="route-card-title">${escapeHtml(route.name)}</h5>
-                    <div class="route-card-date">
+                    <span class="route-status-badge ${route.status}">${formatStatus(route.status)}</span>
+                </div>
+                <div class="route-card-meta">
+                    <div class="route-card-meta-item">
                         <i class="fas fa-calendar"></i>
-                        ${formatDate(route.trip_date)}
-                        ${route.start_time ? `<span class="ms-2"><i class="fas fa-clock"></i> ${route.start_time}</span>` : ''}
+                        <span>${formatDate(route.trip_date)}</span>
                     </div>
+                    ${route.start_time ? `
+                        <div class="route-card-meta-item">
+                            <i class="fas fa-clock"></i>
+                            <span>${route.start_time}</span>
+                        </div>
+                    ` : ''}
+                    ${route.created_by ? `
+                        <div class="route-card-meta-item">
+                            <i class="fas fa-user"></i>
+                            <span>${escapeHtml(route.created_by)}</span>
+                        </div>
+                    ` : ''}
+                    ${route.total_distance_km ? `
+                        <div class="route-card-meta-item">
+                            <i class="fas fa-road"></i>
+                            <span>${route.total_distance_km} km</span>
+                        </div>
+                    ` : ''}
                 </div>
-                <span class="route-status-badge ${route.status}">${formatStatus(route.status)}</span>
             </div>
-            <div class="route-card-body">
-                ${route.created_by ? `
-                    <div class="route-meta-row">
-                        <i class="fas fa-user"></i>
-                        <span>${escapeHtml(route.created_by)}</span>
-                    </div>
-                ` : ''}
-                <div class="route-meta-row">
-                    <i class="fas fa-map-marker-alt"></i>
-                    <strong>${route.stops?.length || 0}</strong> stops
-                    ${route.total_distance_km ? `<span class="ms-3"><i class="fas fa-road"></i> ${route.total_distance_km} km</span>` : ''}
-                </div>
-                ${route.start_location ? `
-                    <div class="route-meta-row">
-                        <i class="fas fa-play-circle"></i>
-                        <span class="text-truncate">${escapeHtml(route.start_location.substring(0, 40))}${route.start_location.length > 40 ? '...' : ''}</span>
-                    </div>
-                ` : ''}
-                ${route.stops && route.stops.length > 0 ? `
-                    <div class="route-stops-preview">
-                        ${route.stops.slice(0, 3).map((stop, i) => `
-                            <div class="stop-preview-chip">
-                                <span class="stop-num">${i + 1}</span>
-                                ${escapeHtml((stop.company_name || 'Stop').substring(0, 15))}${(stop.company_name || '').length > 15 ? '...' : ''}
-                            </div>
-                        `).join('')}
-                        ${route.stops.length > 3 ? `
-                            <div class="stop-preview-chip more-stops-chip">
-                                +${route.stops.length - 3} more
-                            </div>
-                        ` : ''}
-                    </div>
-                ` : ''}
+            <div class="route-card-stops">
+                <div class="route-card-stops-count">${route.stops?.length || 0}</div>
+                <div class="route-card-stops-label">stops</div>
+            </div>
+            <div class="route-card-arrow">
+                <i class="fas fa-chevron-right"></i>
             </div>
         </div>
     `).join('');
@@ -560,33 +416,22 @@ function viewRoute(routeId) {
 }
 
 function showEmptyState(message) {
-    document.getElementById('routesGrid').innerHTML = `
-        <div class="routes-empty-state" style="grid-column: 1 / -1;">
+    document.getElementById('routesList').innerHTML = `
+        <div class="routes-empty-state">
             <i class="fas fa-exclamation-circle"></i>
             <h5>${escapeHtml(message)}</h5>
         </div>
     `;
 }
 
-// Utility functions
 function formatDate(dateString) {
     if (!dateString) return 'No date';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-    });
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function formatStatus(status) {
-    const statusMap = {
-        'planned': 'Planned',
-        'in_progress': 'In Progress',
-        'completed': 'Completed'
-    };
-    return statusMap[status] || status;
+    return { 'planned': 'Planned', 'in_progress': 'In Progress', 'completed': 'Completed' }[status] || status;
 }
 
 function escapeHtml(text) {
