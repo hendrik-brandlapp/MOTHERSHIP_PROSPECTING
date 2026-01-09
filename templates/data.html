@@ -2158,9 +2158,30 @@ function extractCityFromAddress(address) {
 function populateRegions() {
     const regionSet = new Set();
 
-    // Extract regions from companies
+    // Extract regions from companies - check multiple locations for city data
     [...allCompanies, ...allProspects].forEach(company => {
-        const city = company.address?.city;
+        let city = '';
+
+        // Try direct address.city first
+        if (company.address?.city) {
+            city = company.address.city;
+        }
+        // Try raw_company_data.invoice_address.city
+        else if (company.raw_company_data) {
+            try {
+                const rawData = typeof company.raw_company_data === 'string'
+                    ? JSON.parse(company.raw_company_data)
+                    : company.raw_company_data;
+                city = rawData?.invoice_address?.city || rawData?.city || '';
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+        // For prospects, check enriched_data
+        else if (company.enriched_data?.city) {
+            city = company.enriched_data.city;
+        }
+
         if (city && city.trim()) {
             regionSet.add(city.trim());
         }
@@ -2182,6 +2203,8 @@ function populateRegions() {
         option.textContent = region;
         select.appendChild(option);
     });
+
+    console.log(`📍 Populated ${sortedRegions.length} regions`);
 }
 
 async function syncLatestData(fullSync = false) {
@@ -2536,7 +2559,20 @@ function filterCompanies() {
 
         // Region/City filtering
         if (regionFilter) {
-            const companyCity = company.address?.city || '';
+            let companyCity = company.address?.city || '';
+            // Also check raw_company_data for city
+            if (!companyCity && company.raw_company_data) {
+                try {
+                    const rawData = typeof company.raw_company_data === 'string'
+                        ? JSON.parse(company.raw_company_data)
+                        : company.raw_company_data;
+                    companyCity = rawData?.invoice_address?.city || rawData?.city || '';
+                } catch (e) {}
+            }
+            // For prospects, check enriched_data
+            if (!companyCity && company.enriched_data?.city) {
+                companyCity = company.enriched_data.city;
+            }
             if (companyCity.toLowerCase() !== regionFilter.toLowerCase()) return false;
         }
 

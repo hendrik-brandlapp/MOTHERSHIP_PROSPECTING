@@ -696,7 +696,13 @@ function populateCategoryFilter() {
     const categories = new Set();
     allCustomers.forEach(c => {
         if (c.company_categories && Array.isArray(c.company_categories)) {
-            c.company_categories.forEach(cat => categories.add(cat));
+            c.company_categories.forEach(cat => {
+                // Handle both string categories and object categories with 'name' property
+                const catName = typeof cat === 'object' && cat !== null ? (cat.name || cat) : cat;
+                if (catName && typeof catName === 'string') {
+                    categories.add(catName);
+                }
+            });
         }
     });
 
@@ -707,6 +713,8 @@ function populateCategoryFilter() {
         option.textContent = cat;
         select.appendChild(option);
     });
+
+    console.log(`📂 Populated ${categories.size} categories`);
 }
 
 // Filter customers
@@ -730,7 +738,12 @@ function filterCustomers() {
         // Category filter
         if (category) {
             const cats = company.company_categories || [];
-            if (!cats.includes(category)) return false;
+            // Handle both string categories and object categories with 'name' property
+            const hasCat = cats.some(cat => {
+                const catName = typeof cat === 'object' && cat !== null ? (cat.name || cat) : cat;
+                return catName === category;
+            });
+            if (!hasCat) return false;
         }
 
         // Alert filter
