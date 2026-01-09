@@ -140,9 +140,19 @@
 
                 <!-- Region Filter -->
                 <div class="filter-cell">
-                    <select class="filter-select" id="regionFilter" onchange="filterCompanies()">
-                        <option value="">All regions</option>
-                    </select>
+                    <div class="searchable-dropdown-wrapper">
+                        <div class="filter-dropdown-trigger" id="region-dropdown-trigger">
+                            <span class="trigger-text">All regions</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="filter-dropdown-menu" id="region-dropdown-menu">
+                            <div class="dropdown-search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" placeholder="Search regions..." id="region-search-input">
+                            </div>
+                            <div class="dropdown-options-list" id="region-dropdown-options"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Sort By -->
@@ -2154,6 +2164,9 @@ function extractCityFromAddress(address) {
     return '';
 }
 
+// Track selected region
+let selectedRegion = '';
+
 // Populate region filter from company data
 function populateRegions() {
     const regionSet = new Set();
@@ -2188,23 +2201,77 @@ function populateRegions() {
     });
 
     const sortedRegions = Array.from(regionSet).sort();
-    const select = document.getElementById('regionFilter');
-    if (!select) return;
-
-    // Clear existing options except the first "All regions"
-    while (select.options.length > 1) {
-        select.remove(1);
-    }
-
-    // Add regions
-    sortedRegions.forEach(region => {
-        const option = document.createElement('option');
-        option.value = region;
-        option.textContent = region;
-        select.appendChild(option);
-    });
+    renderRegionDropdown(sortedRegions);
 
     console.log(`📍 Populated ${sortedRegions.length} regions`);
+}
+
+// Render region dropdown options
+function renderRegionDropdown(regions) {
+    const optionsContainer = document.getElementById('region-dropdown-options');
+    if (!optionsContainer) return;
+
+    // Add "All regions" option first
+    let html = `
+        <div class="dropdown-option-item ${!selectedRegion ? 'selected' : ''}"
+             onclick="selectRegion('')">
+            <span>All regions</span>
+            ${!selectedRegion ? '<i class="fas fa-check"></i>' : ''}
+        </div>
+    `;
+
+    // Add each region
+    regions.forEach(region => {
+        const isSelected = selectedRegion === region;
+        html += `
+            <div class="dropdown-option-item ${isSelected ? 'selected' : ''}"
+                 onclick="selectRegion('${escapeHtml(region)}')">
+                <span>${escapeHtml(region)}</span>
+                ${isSelected ? '<i class="fas fa-check"></i>' : ''}
+            </div>
+        `;
+    });
+
+    optionsContainer.innerHTML = html;
+}
+
+// Select a region
+function selectRegion(region) {
+    selectedRegion = region;
+
+    // Update trigger text
+    const triggerText = document.querySelector('#region-dropdown-trigger .trigger-text');
+    if (triggerText) {
+        triggerText.textContent = region || 'All regions';
+    }
+
+    // Close dropdown
+    document.getElementById('region-dropdown-menu')?.classList.remove('show');
+    document.getElementById('region-dropdown-trigger')?.classList.remove('active');
+
+    // Re-render dropdown to show checkmark
+    const regionSet = new Set();
+    [...allCompanies, ...allProspects].forEach(company => {
+        let city = company.address?.city || '';
+        if (!city && company.raw_company_data) {
+            try {
+                const rawData = typeof company.raw_company_data === 'string'
+                    ? JSON.parse(company.raw_company_data)
+                    : company.raw_company_data;
+                city = rawData?.invoice_address?.city || rawData?.city || '';
+            } catch (e) {}
+        }
+        if (!city && company.enriched_data?.city) {
+            city = company.enriched_data.city;
+        }
+        if (city && city.trim()) {
+            regionSet.add(city.trim());
+        }
+    });
+    renderRegionDropdown(Array.from(regionSet).sort());
+
+    // Filter companies
+    filterCompanies();
 }
 
 async function syncLatestData(fullSync = false) {
@@ -2505,7 +2572,7 @@ function filterCompanies() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     const alertFilter = document.getElementById('alertFilter').value;
     const salespersonFilter = document.getElementById('salespersonFilter').value;
-    const regionFilter = document.getElementById('regionFilter')?.value || '';
+    const regionFilter = selectedRegion || '';
 
     // Combine companies and prospects for filtering
     const allItems = [...allCompanies, ...allProspects];
@@ -2812,7 +2879,94 @@ document.addEventListener('DOMContentLoaded', function() {
             filterCategoryDropdown(e.target.value);
         });
     }
+
+    // Region dropdown toggle
+    const regionTrigger = document.getElementById('region-dropdown-trigger');
+    const regionMenu = document.getElementById('region-dropdown-menu');
+    const regionSearchInput = document.getElementById('region-search-input');
+
+    if (regionTrigger && regionMenu) {
+        regionTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            regionMenu.classList.toggle('show');
+            regionTrigger.classList.toggle('active');
+            if (regionMenu.classList.contains('show') && regionSearchInput) {
+                regionSearchInput.focus();
+            }
+        });
+
+        document.addEventListener('click', () => {
+            regionMenu.classList.remove('show');
+            regionTrigger.classList.remove('active');
+        });
+
+        regionMenu.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+
+    if (regionSearchInput) {
+        regionSearchInput.addEventListener('input', (e) => {
+            filterRegionDropdown(e.target.value);
+        });
+    }
 });
+
+// Filter region dropdown by search term
+function filterRegionDropdown(searchTerm) {
+    const regionSet = new Set();
+    [...allCompanies, ...allProspects].forEach(company => {
+        let city = company.address?.city || '';
+        if (!city && company.raw_company_data) {
+            try {
+                const rawData = typeof company.raw_company_data === 'string'
+                    ? JSON.parse(company.raw_company_data)
+                    : company.raw_company_data;
+                city = rawData?.invoice_address?.city || rawData?.city || '';
+            } catch (e) {}
+        }
+        if (!city && company.enriched_data?.city) {
+            city = company.enriched_data.city;
+        }
+        if (city && city.trim()) {
+            regionSet.add(city.trim());
+        }
+    });
+
+    const allRegions = Array.from(regionSet).sort();
+    const filtered = allRegions.filter(region =>
+        region.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const optionsContainer = document.getElementById('region-dropdown-options');
+    if (!optionsContainer) return;
+
+    // Add "All regions" option first (only if search is empty or matches)
+    let html = '';
+    if (!searchTerm || 'all regions'.includes(searchTerm.toLowerCase())) {
+        html += `
+            <div class="dropdown-option-item ${!selectedRegion ? 'selected' : ''}"
+                 onclick="selectRegion('')">
+                <span>All regions</span>
+                ${!selectedRegion ? '<i class="fas fa-check"></i>' : ''}
+            </div>
+        `;
+    }
+
+    // Add filtered regions
+    filtered.forEach(region => {
+        const isSelected = selectedRegion === region;
+        html += `
+            <div class="dropdown-option-item ${isSelected ? 'selected' : ''}"
+                 onclick="selectRegion('${escapeHtml(region)}')">
+                <span>${escapeHtml(region)}</span>
+                ${isSelected ? '<i class="fas fa-check"></i>' : ''}
+            </div>
+        `;
+    });
+
+    optionsContainer.innerHTML = html || '<div class="p-3 text-center text-muted small">No regions found</div>';
+}
 
 function filterCategoryDropdown(searchTerm) {
     const optionsContainer = document.getElementById('category-dropdown-options');
