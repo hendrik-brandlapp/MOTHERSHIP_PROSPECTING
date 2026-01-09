@@ -10500,18 +10500,21 @@ def whatsapp_inbox_page():
 @app.route('/api/company-notes/<company_id>', methods=['GET', 'POST'])
 def api_company_notes(company_id):
     """
-    Get or update company notes, status, and assigned salesperson
+    Get or update company notes, status, and assigned salesperson.
+    POST can be:
+    - JSON: update company metadata (notes, salesperson, status)
+    - FormData: create a new note with optional image attachments
     """
     try:
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
-        
+
         if request.method == 'GET':
             # Get company notes and status
             result = supabase_client.table('companies').select(
                 'notes, assigned_salesperson, customer_status'
             ).eq('company_id', int(company_id)).execute()
-            
+
             if result.data and len(result.data) > 0:
                 return jsonify({
                     'success': True,
@@ -10520,26 +10523,108 @@ def api_company_notes(company_id):
                     'customer_status': result.data[0].get('customer_status', 'active')
                 })
             return jsonify({'success': True, 'notes': '', 'assigned_salesperson': '', 'customer_status': 'active'})
-        
-        # POST - Update notes and status
-        data = request.get_json()
-        notes = data.get('notes', '')
-        salesperson = data.get('assigned_salesperson', '')
-        customer_status = data.get('customer_status', 'active')
-        
-        # Update in Supabase
-        result = supabase_client.table('companies').update({
-            'notes': notes,
-            'assigned_salesperson': salesperson,
-            'customer_status': customer_status,
-            'updated_at': datetime.now().isoformat()
-        }).eq('company_id', int(company_id)).execute()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Company details updated successfully'
-        })
-        
+
+        # POST - Check content type to determine which operation
+        content_type = request.content_type or ''
+
+        if 'multipart/form-data' in content_type:
+            # FormData request - Create a new note with optional attachments
+            import uuid as uuid_module
+            note_text = request.form.get('note_text', '')
+
+            # Create the note in company_notes table
+            note_result = supabase_client.table('company_notes').insert({
+                'company_id': int(company_id),
+                'note_text': note_text,
+                'created_by': session.get('user_email', 'unknown')
+            }).execute()
+
+            if not note_result.data:
+                return jsonify({'error': 'Failed to create note'}), 500
+
+            note_id = note_result.data[0]['id']
+            attachments = []
+
+            # Handle file uploads
+            files = request.files.getlist('files')
+            for file in files:
+                if file and file.filename:
+                    # Validate file type
+                    allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+                    if file.content_type not in allowed_types:
+                        continue
+
+                    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
+                    unique_filename = f"{uuid_module.uuid4()}.{ext}"
+                    storage_path = f"{company_id}/{unique_filename}"
+
+                    file_content = file.read()
+                    file_size = len(file_content)
+
+                    # Upload to storage
+                    supabase_client.storage.from_('company-attachments').upload(
+                        storage_path,
+                        file_content,
+                        {'content-type': file.content_type}
+                    )
+
+                    # Save attachment metadata with note_id
+                    att_result = supabase_client.table('company_attachments').insert({
+                        'company_id': int(company_id),
+                        'note_id': note_id,
+                        'file_name': file.filename,
+                        'file_type': file.content_type,
+                        'file_size': file_size,
+                        'storage_path': storage_path,
+                        'created_by': session.get('user_email', 'unknown')
+                    }).execute()
+
+                    # Generate signed URL
+                    signed_url = None
+                    try:
+                        url_result = supabase_client.storage.from_('company-attachments').create_signed_url(
+                            storage_path, 3600
+                        )
+                        signed_url = url_result.get('signedURL') or url_result.get('signed_url')
+                    except Exception:
+                        pass
+
+                    attachments.append({
+                        'id': att_result.data[0]['id'] if att_result.data else None,
+                        'file_name': file.filename,
+                        'url': signed_url
+                    })
+
+            return jsonify({
+                'success': True,
+                'note': {
+                    'id': note_id,
+                    'note_text': note_text,
+                    'created_at': note_result.data[0].get('created_at'),
+                    'attachments': attachments
+                }
+            })
+
+        else:
+            # JSON request - Update company metadata
+            data = request.get_json()
+            notes = data.get('notes', '')
+            salesperson = data.get('assigned_salesperson', '')
+            customer_status = data.get('customer_status', 'active')
+
+            # Update in Supabase
+            result = supabase_client.table('companies').update({
+                'notes': notes,
+                'assigned_salesperson': salesperson,
+                'customer_status': customer_status,
+                'updated_at': datetime.now().isoformat()
+            }).eq('company_id', int(company_id)).execute()
+
+            return jsonify({
+                'success': True,
+                'message': 'Company details updated successfully'
+            })
+
     except Exception as e:
         print(f"Error with company notes: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -10750,7 +10835,7 @@ def delete_company_attachment(attachment_id):
 
 # ==================== COMPANY NOTES ENDPOINTS ====================
 
-@app.route('/api/company-notes/<company_id>', methods=['GET'])
+@app.route('/api/company-note-blocks/<company_id>', methods=['GET'])
 def list_company_notes(company_id):
     """
     List all notes for a company with their attached images
@@ -10807,96 +10892,6 @@ def list_company_notes(company_id):
 
     except Exception as e:
         print(f"Error listing notes: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/company-notes/<company_id>', methods=['POST'])
-def create_company_note(company_id):
-    """
-    Create a new note for a company, optionally with image uploads
-    """
-    try:
-        if not supabase_client:
-            return jsonify({'error': 'Supabase not configured'}), 500
-
-        note_text = request.form.get('note_text', '')
-
-        # Create the note
-        note_result = supabase_client.table('company_notes').insert({
-            'company_id': int(company_id),
-            'note_text': note_text,
-            'created_by': session.get('user_email', 'unknown')
-        }).execute()
-
-        if not note_result.data:
-            return jsonify({'error': 'Failed to create note'}), 500
-
-        note_id = note_result.data[0]['id']
-        attachments = []
-
-        # Handle file uploads
-        files = request.files.getlist('files')
-        import uuid
-        for file in files:
-            if file and file.filename:
-                # Validate file type
-                allowed_types = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
-                if file.content_type not in allowed_types:
-                    continue
-
-                ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'jpg'
-                unique_filename = f"{uuid.uuid4()}.{ext}"
-                storage_path = f"{company_id}/{unique_filename}"
-
-                file_content = file.read()
-                file_size = len(file_content)
-
-                # Upload to storage
-                supabase_client.storage.from_('company-attachments').upload(
-                    storage_path,
-                    file_content,
-                    {'content-type': file.content_type}
-                )
-
-                # Save attachment metadata with note_id
-                att_result = supabase_client.table('company_attachments').insert({
-                    'company_id': int(company_id),
-                    'note_id': note_id,
-                    'file_name': file.filename,
-                    'file_type': file.content_type,
-                    'file_size': file_size,
-                    'storage_path': storage_path,
-                    'created_by': session.get('user_email', 'unknown')
-                }).execute()
-
-                # Generate signed URL
-                signed_url = None
-                try:
-                    url_result = supabase_client.storage.from_('company-attachments').create_signed_url(
-                        storage_path, 3600
-                    )
-                    signed_url = url_result.get('signedURL') or url_result.get('signed_url')
-                except Exception:
-                    pass
-
-                attachments.append({
-                    'id': att_result.data[0]['id'] if att_result.data else None,
-                    'file_name': file.filename,
-                    'url': signed_url
-                })
-
-        return jsonify({
-            'success': True,
-            'note': {
-                'id': note_id,
-                'note_text': note_text,
-                'created_at': note_result.data[0].get('created_at'),
-                'attachments': attachments
-            }
-        })
-
-    except Exception as e:
-        print(f"Error creating note: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

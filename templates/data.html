@@ -1449,14 +1449,54 @@
         display: flex;
         gap: 0.5rem;
         flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .add-note-images-preview .preview-item {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        border: 2px solid #5B5FEF;
+        box-shadow: 0 2px 8px rgba(91, 95, 239, 0.2);
+    }
+
+    .add-note-images-preview .preview-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .add-note-images-preview .preview-item .remove-preview {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(220, 53, 69, 0.9);
+        color: white;
+        border: none;
+        font-size: 0.6rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+
+    .add-note-images-preview .preview-item .remove-preview:hover {
+        background: #dc3545;
     }
 
     .add-note-images-preview .preview-img {
-        width: 48px;
-        height: 48px;
-        border-radius: 0.375rem;
+        width: 64px;
+        height: 64px;
+        border-radius: 0.5rem;
         object-fit: cover;
-        border: 1px solid #e9ecef;
+        border: 2px solid #5B5FEF;
+        box-shadow: 0 2px 8px rgba(91, 95, 239, 0.2);
     }
 
     .notes-empty {
@@ -4023,19 +4063,19 @@ function showProspectDetails(prospectId) {
             return true;
         });
 
-    // Status badge styling
+    // Status badge styling - Sales Funnel Stages
     const statusColors = {
-        'new_leads': { bg: '#dbeafe', color: '#1d4ed8', label: 'New Lead' },
-        'visited': { bg: '#fef3c7', color: '#d97706', label: 'Visited' },
+        'new_lead': { bg: '#dbeafe', color: '#1d4ed8', label: 'New Lead' },
+        'new_leads': { bg: '#dbeafe', color: '#1d4ed8', label: 'New Lead' }, // Legacy
         'first_contact': { bg: '#e0e7ff', color: '#4f46e5', label: 'First Contact' },
         'meeting_planned': { bg: '#fce7f3', color: '#be185d', label: 'Meeting Planned' },
         'follow_up': { bg: '#fed7aa', color: '#c2410c', label: 'Follow Up' },
         'customer': { bg: '#d1fae5', color: '#059669', label: 'Customer' },
-        'ex_customer': { bg: '#f3f4f6', color: '#6b7280', label: 'Ex-Customer' },
         'contact_later': { bg: '#e5e7eb', color: '#4b5563', label: 'Contact Later' },
+        'ex_customer': { bg: '#f3f4f6', color: '#6b7280', label: 'Ex Customer' },
         'unqualified': { bg: '#fee2e2', color: '#dc2626', label: 'Unqualified' }
     };
-    const statusStyle = statusColors[prospect.status] || statusColors['new_leads'];
+    const statusStyle = statusColors[prospect.status] || statusColors['new_lead'];
 
     const modalBody = document.getElementById('companyModalBody');
 
@@ -4156,15 +4196,15 @@ function showProspectDetails(prospectId) {
                 <h6 class="fw-bold mb-3"><i class="fas fa-clipboard-list me-2"></i>Status & Assignment</h6>
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label small fw-bold text-muted">Status</label>
+                        <label class="form-label small fw-bold text-muted">Funnel Stage</label>
                         <select class="form-select form-select-sm" id="prospectStatus">
-                            <option value="new_leads" ${prospect.status === 'new_leads' ? 'selected' : ''}>New Lead</option>
-                            <option value="visited" ${prospect.status === 'visited' ? 'selected' : ''}>Visited</option>
+                            <option value="new_lead" ${prospect.status === 'new_lead' || prospect.status === 'new_leads' ? 'selected' : ''}>New Lead</option>
                             <option value="first_contact" ${prospect.status === 'first_contact' ? 'selected' : ''}>First Contact</option>
                             <option value="meeting_planned" ${prospect.status === 'meeting_planned' ? 'selected' : ''}>Meeting Planned</option>
                             <option value="follow_up" ${prospect.status === 'follow_up' ? 'selected' : ''}>Follow Up</option>
                             <option value="customer" ${prospect.status === 'customer' ? 'selected' : ''}>Customer</option>
                             <option value="contact_later" ${prospect.status === 'contact_later' ? 'selected' : ''}>Contact Later</option>
+                            <option value="ex_customer" ${prospect.status === 'ex_customer' ? 'selected' : ''}>Ex Customer</option>
                             <option value="unqualified" ${prospect.status === 'unqualified' ? 'selected' : ''}>Unqualified</option>
                         </select>
                     </div>
@@ -4828,7 +4868,7 @@ async function loadCompanyNotes(companyId) {
     if (!container) return;
 
     try {
-        const response = await fetch(`/api/company-notes/${companyId}`);
+        const response = await fetch(`/api/company-note-blocks/${companyId}`);
         const data = await response.json();
 
         if (data.success && data.notes) {
@@ -4904,10 +4944,25 @@ function previewNoteImages(companyId) {
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         if (file.type.startsWith('image/')) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'preview-item';
+
             const img = document.createElement('img');
-            img.className = 'preview-img';
             img.src = URL.createObjectURL(file);
-            preview.appendChild(img);
+            img.alt = file.name;
+            wrapper.appendChild(img);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-preview';
+            removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+            removeBtn.onclick = function(e) {
+                e.preventDefault();
+                wrapper.remove();
+                // Note: Cannot truly remove file from FileList, but visual removal is done
+            };
+            wrapper.appendChild(removeBtn);
+
+            preview.appendChild(wrapper);
         }
     }
 }
@@ -5106,10 +5161,26 @@ function previewProspectNoteImages(prospectId) {
 
     preview.innerHTML = '';
     for (const file of input.files) {
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(file);
-        img.className = 'preview-thumb';
-        preview.appendChild(img);
+        if (file.type.startsWith('image/')) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'preview-item';
+
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            img.alt = file.name;
+            wrapper.appendChild(img);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-preview';
+            removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+            removeBtn.onclick = function(e) {
+                e.preventDefault();
+                wrapper.remove();
+            };
+            wrapper.appendChild(removeBtn);
+
+            preview.appendChild(wrapper);
+        }
     }
 }
 
