@@ -1966,10 +1966,10 @@ async function loadAvailableRoutes() {
         console.error('selectRouteDropdown element not found');
         return;
     }
-    dropdown.innerHTML = '<option value="">Loading...</option>';
+
+    console.log('Fetching planned routes...');
 
     try {
-        console.log('Fetching planned routes...');
         const response = await fetch('/api/trips?status=planned');
 
         if (!response.ok) {
@@ -1979,9 +1979,19 @@ async function loadAvailableRoutes() {
         const data = await response.json();
         console.log('Routes loaded:', data);
 
-        dropdown.innerHTML = '<option value="">Select a route...</option>';
+        // Clear and rebuild dropdown
+        while (dropdown.firstChild) {
+            dropdown.removeChild(dropdown.firstChild);
+        }
+
+        // Add default option
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = 'Select a route...';
+        dropdown.appendChild(defaultOpt);
 
         if (data.success && data.trips && data.trips.length > 0) {
+            console.log(`Adding ${data.trips.length} routes to dropdown`);
             data.trips.forEach(trip => {
                 const date = trip.trip_date ? new Date(trip.trip_date).toLocaleDateString('en-GB', {
                     day: 'numeric', month: 'short'
@@ -1991,6 +2001,7 @@ async function loadAvailableRoutes() {
                 option.textContent = `${trip.name} (${date})`;
                 dropdown.appendChild(option);
             });
+            console.log('Dropdown now has', dropdown.options.length, 'options');
         } else {
             const option = document.createElement('option');
             option.value = '';
@@ -2000,7 +2011,13 @@ async function loadAvailableRoutes() {
         }
     } catch (error) {
         console.error('Error loading routes:', error);
-        dropdown.innerHTML = '<option value="">Error loading routes</option>';
+        while (dropdown.firstChild) {
+            dropdown.removeChild(dropdown.firstChild);
+        }
+        const errorOpt = document.createElement('option');
+        errorOpt.value = '';
+        errorOpt.textContent = 'Error loading routes';
+        dropdown.appendChild(errorOpt);
     }
 }
 
