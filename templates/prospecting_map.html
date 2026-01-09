@@ -1962,23 +1962,41 @@ function showRouteSelectorModal(location, isGooglePlace = false) {
 // Load available routes for dropdown
 async function loadAvailableRoutes() {
     const dropdown = document.getElementById('selectRouteDropdown');
+    if (!dropdown) {
+        console.error('selectRouteDropdown element not found');
+        return;
+    }
     dropdown.innerHTML = '<option value="">Loading...</option>';
 
     try {
+        console.log('Fetching planned routes...');
         const response = await fetch('/api/trips?status=planned');
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
+        console.log('Routes loaded:', data);
 
         dropdown.innerHTML = '<option value="">Select a route...</option>';
 
-        if (data.trips && data.trips.length > 0) {
+        if (data.success && data.trips && data.trips.length > 0) {
             data.trips.forEach(trip => {
-                const date = new Date(trip.trip_date).toLocaleDateString('en-GB', {
+                const date = trip.trip_date ? new Date(trip.trip_date).toLocaleDateString('en-GB', {
                     day: 'numeric', month: 'short'
-                });
-                dropdown.innerHTML += `<option value="${trip.id}">${trip.name} (${date})</option>`;
+                }) : 'No date';
+                const option = document.createElement('option');
+                option.value = trip.id;
+                option.textContent = `${trip.name} (${date})`;
+                dropdown.appendChild(option);
             });
         } else {
-            dropdown.innerHTML += '<option value="" disabled>No planned routes available</option>';
+            const option = document.createElement('option');
+            option.value = '';
+            option.disabled = true;
+            option.textContent = 'No planned routes available';
+            dropdown.appendChild(option);
         }
     } catch (error) {
         console.error('Error loading routes:', error);
