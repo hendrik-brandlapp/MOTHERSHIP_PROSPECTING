@@ -12061,9 +12061,16 @@ def quick_create_trip():
         trip_id = trip_response.data[0]['id']
 
         # Create single stop
+        company_id_val = location.get('company_id')
+        if company_id_val:
+            try:
+                company_id_val = int(company_id_val)
+            except (ValueError, TypeError):
+                company_id_val = None
+
         stop_data = {
             'trip_id': trip_id,
-            'company_id': str(location.get('company_id')) if location.get('company_id') else None,
+            'company_id': company_id_val,
             'company_name': location.get('name', 'Unknown'),
             'address': location.get('address', ''),
             'latitude': location['lat'],
@@ -12112,9 +12119,16 @@ def add_stop_to_trip(trip_id):
         max_order = stops_response.data[0]['stop_order'] if stops_response.data else 0
 
         # Create new stop
+        company_id_val = location.get('company_id')
+        if company_id_val:
+            try:
+                company_id_val = int(company_id_val)
+            except (ValueError, TypeError):
+                company_id_val = None
+
         stop_data = {
             'trip_id': trip_id,
-            'company_id': str(location.get('company_id')) if location.get('company_id') else None,
+            'company_id': company_id_val,
             'company_name': location.get('name', 'Unknown'),
             'address': location.get('address', ''),
             'latitude': location['lat'],

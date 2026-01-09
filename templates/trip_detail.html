@@ -603,12 +603,15 @@ async function loadAllStopNotes() {
     if (!trip.stops) return;
 
     await Promise.all(trip.stops.map(async (stop) => {
-        if (stop.company_id) {
+        // Check for valid company_id (must be a number, not null/undefined/empty)
+        const companyId = stop.company_id;
+        if (companyId && !isNaN(parseInt(companyId))) {
             try {
-                const response = await fetch(`/api/company-note-blocks/${stop.company_id}`);
+                const response = await fetch(`/api/company-notes/${companyId}`);
                 const data = await response.json();
                 stop.notes = data.success ? (data.notes || []) : [];
             } catch (e) {
+                console.error('Error loading notes for company', companyId, e);
                 stop.notes = [];
             }
         } else {
@@ -729,7 +732,7 @@ function renderStops() {
                         </div>
 
                         <!-- Add Note Form -->
-                        ${stop.company_id ? `
+                        ${hasValidCompanyId(stop) ? `
                             <div class="add-note-form">
                                 <textarea class="add-note-textarea" id="noteText-${stop.id}" placeholder="Add a note for this visit..."></textarea>
                                 <div class="add-note-actions">
@@ -842,30 +845,24 @@ async function saveNote(stopId, companyId) {
     }
 
     try {
-        // Create note
-        const response = await fetch(`/api/company-note-blocks/${companyId}`, {
+        // Create note using FormData to support file uploads in one request
+        const formData = new FormData();
+        formData.append('note_text', noteText);
+
+        // Add files if any
+        for (const file of files) {
+            formData.append('images', file);
+        }
+
+        const response = await fetch(`/api/company-notes/${companyId}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ note_text: noteText })
+            body: formData
         });
 
         const data = await response.json();
         if (!data.success) {
             showToast('Failed to save note', 'error');
             return;
-        }
-
-        const noteId = data.note.id;
-
-        // Upload images
-        for (const file of files) {
-            const formData = new FormData();
-            formData.append('file', file);
-
-            await fetch(`/api/company-note-blocks/${noteId}/attachment`, {
-                method: 'POST',
-                body: formData
-            });
         }
 
         showToast('Note saved!', 'success');
@@ -888,7 +885,7 @@ async function deleteNote(noteId, companyId, stopId) {
     if (!confirm('Delete this note?')) return;
 
     try {
-        const response = await fetch(`/api/company-note-blocks/${noteId}`, {
+        const response = await fetch(`/api/company-notes/${noteId}`, {
             method: 'DELETE'
         });
 
@@ -905,7 +902,7 @@ async function deleteNote(noteId, companyId, stopId) {
 
 async function reloadStopNotes(stopId, companyId) {
     try {
-        const response = await fetch(`/api/company-note-blocks/${companyId}`);
+        const response = await fetch(`/api/company-notes/${companyId}`);
         const data = await response.json();
 
         const stop = trip.stops.find(s => s.id == stopId);
@@ -1063,6 +1060,11 @@ function showError(msg) {
 }
 
 // Utilities
+function hasValidCompanyId(stop) {
+    const companyId = stop.company_id;
+    return companyId && !isNaN(parseInt(companyId)) && parseInt(companyId) > 0;
+}
+
 function formatDate(d) {
     if (!d) return '';
     return new Date(d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });

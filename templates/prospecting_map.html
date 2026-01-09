@@ -158,92 +158,82 @@
 
 <!-- Route Selector Modal -->
 <div class="modal fade" id="routeSelectorModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-map-marked-alt me-2"></i>Route Options
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content route-modal">
+            <div class="route-modal-header">
+                <div class="route-modal-location">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <div>
+                        <h6 id="routeLocationName">Location Name</h6>
+                        <p id="routeLocationAddress">Address</p>
+                    </div>
+                </div>
+                <button type="button" class="route-modal-close" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <div class="modal-body">
-                <!-- Location Summary -->
-                <div class="location-summary mb-4 p-3 bg-light rounded">
-                    <h6 class="mb-1" id="routeLocationName">Location Name</h6>
-                    <p class="text-muted small mb-0" id="routeLocationAddress">Address</p>
+            <div class="route-modal-body">
+                <!-- Quick Actions -->
+                <div class="route-quick-actions">
+                    <button class="route-action-card active" onclick="showRouteTab('schedule')">
+                        <i class="fas fa-calendar-plus"></i>
+                        <span>Schedule Visit</span>
+                    </button>
+                    <button class="route-action-card" onclick="showRouteTab('add')">
+                        <i class="fas fa-plus-circle"></i>
+                        <span>Add to Route</span>
+                    </button>
                 </div>
 
-                <!-- Action Options -->
-                <ul class="nav nav-pills nav-fill mb-3" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="schedule-tab" data-bs-toggle="pill" data-bs-target="#scheduleVisitPane" type="button">
-                            <i class="fas fa-calendar-plus me-1"></i>Schedule
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="addroute-tab" data-bs-toggle="pill" data-bs-target="#addToRoutePane" type="button">
-                            <i class="fas fa-route me-1"></i>Add to Route
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="manage-tab" data-bs-toggle="pill" data-bs-target="#manageVisitsPane" type="button">
-                            <i class="fas fa-list me-1"></i>Manage
-                        </button>
-                    </li>
-                </ul>
+                <!-- Schedule Visit Section -->
+                <div class="route-tab-content" id="scheduleTab">
+                    <div class="route-form-group">
+                        <label>Salesperson</label>
+                        <select id="scheduleVisitSalesperson">
+                            <option value="">Select...</option>
+                            <option value="Caitlin">Caitlin</option>
+                            <option value="Kesha">Kesha</option>
+                            <option value="Django">Django</option>
+                        </select>
+                    </div>
+                    <div class="route-form-row">
+                        <div class="route-form-group">
+                            <label>Date</label>
+                            <input type="date" id="scheduleVisitDate">
+                        </div>
+                        <div class="route-form-group">
+                            <label>Time</label>
+                            <input type="time" id="scheduleVisitTime" value="09:00">
+                        </div>
+                    </div>
+                    <button class="route-submit-btn" onclick="scheduleVisit()">
+                        <i class="fas fa-check me-2"></i>Schedule Visit
+                    </button>
+                </div>
 
-                <!-- Tab Content -->
-                <div class="tab-content">
-                    <!-- Schedule Visit Tab -->
-                    <div class="tab-pane fade show active" id="scheduleVisitPane" role="tabpanel">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Salesperson</label>
-                            <select class="form-select" id="scheduleVisitSalesperson">
-                                <option value="">Select salesperson...</option>
-                                <option value="Caitlin">Caitlin</option>
-                                <option value="Kesha">Kesha</option>
-                                <option value="Django">Django</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Visit Date</label>
-                            <input type="date" class="form-control" id="scheduleVisitDate">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Time</label>
-                            <input type="time" class="form-control" id="scheduleVisitTime" value="09:00">
-                        </div>
-                        <button class="btn btn-primary w-100" onclick="scheduleVisit()">
-                            <i class="fas fa-calendar-check me-2"></i>Schedule Visit
+                <!-- Add to Route Section -->
+                <div class="route-tab-content" id="addTab" style="display:none;">
+                    <div class="route-form-group">
+                        <label>Select Existing Route</label>
+                        <select id="selectRouteDropdown">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <p class="route-hint"><i class="fas fa-info-circle"></i> Only planned routes are shown</p>
+                    <button class="route-submit-btn route-submit-success" onclick="addToExistingRoute()">
+                        <i class="fas fa-plus me-2"></i>Add to Route
+                    </button>
+                </div>
+
+                <!-- Existing Visits -->
+                <div class="route-existing" id="existingVisitsSection" style="display:none;">
+                    <div class="route-existing-header">
+                        <span>Scheduled Visits</span>
+                        <button class="route-remove-all" onclick="deleteAllVisits()" id="deleteAllVisitsBtn">
+                            <i class="fas fa-trash"></i> Remove All
                         </button>
                     </div>
-
-                    <!-- Add to Route Tab -->
-                    <div class="tab-pane fade" id="addToRoutePane" role="tabpanel">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Select Route</label>
-                            <select class="form-select" id="selectRouteDropdown">
-                                <option value="">Loading routes...</option>
-                            </select>
-                        </div>
-                        <div class="alert alert-info small mb-3">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Only routes with status "Planned" are shown.
-                        </div>
-                        <button class="btn btn-success w-100" onclick="addToExistingRoute()">
-                            <i class="fas fa-plus me-2"></i>Add to Selected Route
-                        </button>
-                    </div>
-
-                    <!-- Manage Visits Tab -->
-                    <div class="tab-pane fade" id="manageVisitsPane" role="tabpanel">
-                        <div id="existingVisitsList" class="mb-3">
-                            <p class="text-muted">Loading scheduled visits...</p>
-                        </div>
-                        <button class="btn btn-outline-danger w-100" onclick="deleteAllVisits()" id="deleteAllVisitsBtn" style="display:none;">
-                            <i class="fas fa-trash me-2"></i>Remove from All Routes
-                        </button>
-                    </div>
+                    <div id="existingVisitsList"></div>
                 </div>
             </div>
         </div>
@@ -777,6 +767,255 @@
         .sidebar-toggle {
             display: flex;
         }
+    }
+
+    /* Route Modal Styles */
+    .route-modal {
+        border: none;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+
+    .route-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .route-modal-location {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .route-modal-location > i {
+        font-size: 1.25rem;
+        margin-top: 2px;
+        opacity: 0.9;
+    }
+
+    .route-modal-location h6 {
+        margin: 0 0 4px 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+    }
+
+    .route-modal-location p {
+        margin: 0;
+        font-size: 0.8125rem;
+        opacity: 0.85;
+    }
+
+    .route-modal-close {
+        background: rgba(255,255,255,0.15);
+        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+    }
+
+    .route-modal-close:hover {
+        background: rgba(255,255,255,0.25);
+    }
+
+    .route-modal-body {
+        padding: 20px;
+    }
+
+    .route-quick-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .route-action-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 16px;
+        background: #f8fafc;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .route-action-card i {
+        font-size: 1.5rem;
+        color: #64748b;
+    }
+
+    .route-action-card span {
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: #475569;
+    }
+
+    .route-action-card:hover {
+        border-color: #6366f1;
+        background: #f5f3ff;
+    }
+
+    .route-action-card:hover i {
+        color: #6366f1;
+    }
+
+    .route-action-card.active {
+        border-color: #6366f1;
+        background: #f5f3ff;
+    }
+
+    .route-action-card.active i {
+        color: #6366f1;
+    }
+
+    .route-tab-content {
+        animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .route-form-group {
+        margin-bottom: 16px;
+    }
+
+    .route-form-group label {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 6px;
+    }
+
+    .route-form-group select,
+    .route-form-group input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 0.9375rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .route-form-group select:focus,
+    .route-form-group input:focus {
+        outline: none;
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .route-form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .route-submit-btn {
+        width: 100%;
+        padding: 14px 20px;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .route-submit-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .route-submit-success {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    .route-submit-success:hover {
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+
+    .route-hint {
+        font-size: 0.8125rem;
+        color: #94a3b8;
+        margin-bottom: 16px;
+    }
+
+    .route-hint i {
+        margin-right: 4px;
+    }
+
+    .route-existing {
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .route-existing-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .route-existing-header span {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .route-remove-all {
+        background: none;
+        border: none;
+        color: #ef4444;
+        font-size: 0.75rem;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 6px;
+    }
+
+    .route-remove-all:hover {
+        background: #fef2f2;
+    }
+
+    .route-visit-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        background: #f8fafc;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        font-size: 0.875rem;
+    }
+
+    .route-visit-item-info {
+        color: #475569;
+    }
+
+    .route-visit-item-date {
+        color: #94a3b8;
+        font-size: 0.8125rem;
     }
 </style>
 
@@ -1673,6 +1912,16 @@ function openRouteModal(routeKey, isGooglePlace) {
 }
 
 // Show route selector modal
+function showRouteTab(tab) {
+    // Update action cards
+    document.querySelectorAll('.route-action-card').forEach(card => card.classList.remove('active'));
+    event.target.closest('.route-action-card')?.classList.add('active');
+
+    // Show/hide tab content
+    document.getElementById('scheduleTab').style.display = tab === 'schedule' ? 'block' : 'none';
+    document.getElementById('addTab').style.display = tab === 'add' ? 'block' : 'none';
+}
+
 function showRouteSelectorModal(location, isGooglePlace = false) {
     selectedRouteLocation = {
         name: location.name || location.company_name || 'Unknown',
@@ -1698,8 +1947,12 @@ function showRouteSelectorModal(location, isGooglePlace = false) {
     // Load existing visits for this location
     loadExistingVisits();
 
-    // Reset to first tab
-    document.getElementById('schedule-tab').click();
+    // Reset to schedule tab
+    document.getElementById('scheduleTab').style.display = 'block';
+    document.getElementById('addTab').style.display = 'none';
+    document.querySelectorAll('.route-action-card').forEach((card, i) => {
+        card.classList.toggle('active', i === 0);
+    });
 
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('routeSelectorModal'));
@@ -1735,10 +1988,9 @@ async function loadAvailableRoutes() {
 
 // Load existing visits for this location
 async function loadExistingVisits() {
+    const section = document.getElementById('existingVisitsSection');
     const container = document.getElementById('existingVisitsList');
     const deleteBtn = document.getElementById('deleteAllVisitsBtn');
-
-    container.innerHTML = '<p class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Loading...</p>';
 
     try {
         let url = '/api/trips/for-location?';
@@ -1747,8 +1999,7 @@ async function loadExistingVisits() {
         } else if (selectedRouteLocation.lat && selectedRouteLocation.lng) {
             url += `lat=${selectedRouteLocation.lat}&lng=${selectedRouteLocation.lng}`;
         } else {
-            container.innerHTML = '<p class="text-muted">Cannot search for this location.</p>';
-            deleteBtn.style.display = 'none';
+            section.style.display = 'none';
             return;
         }
 
@@ -1756,37 +2007,27 @@ async function loadExistingVisits() {
         const data = await response.json();
 
         if (data.trips && data.trips.length > 0) {
+            section.style.display = 'block';
             container.innerHTML = data.trips.map(trip => {
-                const date = new Date(trip.date).toLocaleDateString('en-GB', {
+                const date = trip.date ? new Date(trip.date).toLocaleDateString('en-GB', {
                     day: 'numeric', month: 'short', year: 'numeric'
-                });
-                const statusBadge = trip.status === 'planned' ? 'bg-primary' :
-                                    trip.status === 'in_progress' ? 'bg-warning' : 'bg-success';
+                }) : '';
                 return `
-                    <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+                    <div class="route-visit-item">
                         <div>
-                            <strong>${escapeHtml(trip.name)}</strong>
-                            <small class="text-muted d-block">${date}</small>
-                            ${trip.salesperson ? `<small class="text-muted"><i class="fas fa-user me-1"></i>${escapeHtml(trip.salesperson)}</small>` : ''}
-                        </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge ${statusBadge}">${trip.status}</span>
-                            <button class="btn btn-sm btn-outline-danger" onclick="removeFromTrip('${trip.id}', '${trip.stop_id}')" title="Remove from this route">
-                                <i class="fas fa-times"></i>
-                            </button>
+                            <div class="route-visit-item-info">${escapeHtml(trip.name)}</div>
+                            <div class="route-visit-item-date">${date}${trip.salesperson ? ` - ${escapeHtml(trip.salesperson)}` : ''}</div>
                         </div>
                     </div>
                 `;
             }).join('');
-            deleteBtn.style.display = 'block';
+            deleteBtn.style.display = 'inline-block';
         } else {
-            container.innerHTML = '<p class="text-muted fst-italic">No scheduled visits for this location.</p>';
-            deleteBtn.style.display = 'none';
+            section.style.display = 'none';
         }
     } catch (error) {
         console.error('Error loading existing visits:', error);
-        container.innerHTML = '<p class="text-danger">Error loading visits.</p>';
-        deleteBtn.style.display = 'none';
+        section.style.display = 'none';
     }
 }
 
