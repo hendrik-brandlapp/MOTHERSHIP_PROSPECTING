@@ -1086,6 +1086,92 @@
         letter-spacing: 0.05em;
     }
 
+    /* Prospect Detail Panel - Lavender Theme */
+    .sidepanel.prospect-panel {
+        background: linear-gradient(180deg, #faf5ff 0%, #f3e8ff 50%, #ede9fe 100%);
+    }
+
+    .sidepanel.prospect-panel .sidepanel-header {
+        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+        border-bottom: 1px solid #c4b5fd;
+    }
+
+    .sidepanel.prospect-panel .sidepanel-body {
+        background: transparent;
+    }
+
+    .prospect-profile-header {
+        text-align: center;
+        padding: 1.5rem;
+        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+        border-radius: var(--radius-lg);
+        border: 1px solid #c4b5fd;
+        margin-bottom: 1.5rem;
+    }
+
+    .prospect-avatar {
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem;
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    }
+
+    .prospect-avatar i {
+        font-size: 1.75rem;
+        color: white;
+    }
+
+    .prospect-status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .prospect-section {
+        background: rgba(255, 255, 255, 0.8);
+        border: 1px solid #ddd6fe;
+    }
+
+    .enrichment-status-card {
+        background: linear-gradient(135deg, #faf5ff 0%, #f5f3ff 100%);
+        border: 1px solid #c4b5fd;
+        border-radius: var(--radius-lg);
+        padding: 1rem;
+    }
+
+    .enrichment-status-card h6 {
+        color: #7c3aed;
+    }
+
+    .prospect-detail-panel .btn-primary {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        border: none;
+    }
+
+    .prospect-detail-panel .btn-primary:hover {
+        background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+    }
+
+    .prospect-detail-panel .btn-outline-primary {
+        color: #7c3aed;
+        border-color: #7c3aed;
+    }
+
+    .prospect-detail-panel .btn-outline-primary:hover {
+        background: #7c3aed;
+        color: white;
+    }
+
     .company-header {
         padding: 1.25rem 1.25rem 0.75rem;
         display: flex;
@@ -3697,7 +3783,7 @@ function showCompanyDetails(companyId) {
     loadCompanyNotes(company.company_id);
 }
 
-// Show prospect details - redirects to prospects management page
+// Show prospect details in sidepanel with lavender theme
 function showProspectDetails(prospectId) {
     // Find the prospect in allProspects
     const prospect = allProspects.find(p => p.prospect_id === prospectId);
@@ -3706,8 +3792,410 @@ function showProspectDetails(prospectId) {
         return;
     }
 
-    // Redirect to prospects page with the prospect selected
-    window.location.href = `/prospecting?prospect=${prospectId}`;
+    const displayName = prospect.name || 'Unknown Prospect';
+    document.getElementById('companyModalTitle').textContent = displayName;
+
+    // Get enriched data
+    const enrichedData = prospect.enriched_data || {};
+    const email = enrichedData.email || '';
+    const phone = enrichedData.phone || '';
+    const cleanPhone = phone.replace(/\s+/g, '').replace(/[^\d+]/g, '');
+    const website = prospect.website || enrichedData.site || '';
+    const vat = enrichedData.vat || '';
+    const directors = enrichedData.directors || '';
+    const registered = enrichedData.registered || prospect.address?.street || '';
+
+    // Format created date
+    const createdFormatted = prospect.created_at
+        ? new Date(prospect.created_at).toLocaleDateString('nl-BE', {day: 'numeric', month: 'long', year: 'numeric'})
+        : null;
+
+    // Enrichment status
+    const enrichmentStatus = prospect.enrichment_status || 'pending';
+    const hasEnrichedData = enrichedData && Object.keys(enrichedData).length > 0 &&
+        Object.values(enrichedData).some(v => {
+            if (!v) return false;
+            if (typeof v === 'string') return v.trim() && v !== 'empty';
+            if (Array.isArray(v)) return v.length > 0;
+            return true;
+        });
+
+    // Status badge styling
+    const statusColors = {
+        'new_leads': { bg: '#dbeafe', color: '#1d4ed8', label: 'New Lead' },
+        'visited': { bg: '#fef3c7', color: '#d97706', label: 'Visited' },
+        'first_contact': { bg: '#e0e7ff', color: '#4f46e5', label: 'First Contact' },
+        'meeting_planned': { bg: '#fce7f3', color: '#be185d', label: 'Meeting Planned' },
+        'follow_up': { bg: '#fed7aa', color: '#c2410c', label: 'Follow Up' },
+        'customer': { bg: '#d1fae5', color: '#059669', label: 'Customer' },
+        'ex_customer': { bg: '#f3f4f6', color: '#6b7280', label: 'Ex-Customer' },
+        'contact_later': { bg: '#e5e7eb', color: '#4b5563', label: 'Contact Later' },
+        'unqualified': { bg: '#fee2e2', color: '#dc2626', label: 'Unqualified' }
+    };
+    const statusStyle = statusColors[prospect.status] || statusColors['new_leads'];
+
+    const modalBody = document.getElementById('companyModalBody');
+
+    modalBody.innerHTML = `
+        <div class="sidepanel-content prospect-detail-panel">
+            <!-- Prospect Header with Lavender Theme -->
+            <div class="prospect-profile-header">
+                <div class="prospect-avatar">
+                    <i class="fas fa-user-plus"></i>
+                </div>
+                <h2 class="h4 mb-1 fw-bold">${escapeHtml(displayName)}</h2>
+                ${createdFormatted ? `<div class="text-muted small mb-2"><i class="fas fa-calendar-plus me-1"></i>Added ${createdFormatted}</div>` : ''}
+                <div class="d-flex justify-content-center gap-2 mb-3">
+                    <span class="prospect-status-badge" style="background: ${statusStyle.bg}; color: ${statusStyle.color};">
+                        ${statusStyle.label}
+                    </span>
+                </div>
+
+                <!-- Quick Actions Row -->
+                <div class="quick-actions-row">
+                    <a href="tel:${escapeHtml(cleanPhone)}" class="quick-action ${!phone ? 'disabled' : ''}" title="Call">
+                        <i class="fas fa-phone"></i>
+                    </a>
+                    <a href="mailto:${escapeHtml(email)}" class="quick-action ${!email ? 'disabled' : ''}" title="Email">
+                        <i class="fas fa-envelope"></i>
+                    </a>
+                    <a href="https://wa.me/${cleanPhone.replace(/[^\d]/g, '')}" target="_blank" class="quick-action whatsapp ${!phone ? 'disabled' : ''}" title="WhatsApp">
+                        <i class="fab fa-whatsapp"></i>
+                    </a>
+                    ${website ? `<a href="${website.startsWith('http') ? website : 'https://' + website}" target="_blank" class="quick-action" title="Website">
+                        <i class="fas fa-globe"></i>
+                    </a>` : ''}
+                </div>
+            </div>
+
+            <!-- Enrichment Status -->
+            <div class="enrichment-status-card mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-magic me-2"></i>AI Enrichment</h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="runProspectEnrichment('${prospectId}')" id="enrichBtn">
+                        <i class="fas fa-sync-alt me-1"></i>${hasEnrichedData ? 'Re-enrich' : 'Enrich Now'}
+                    </button>
+                </div>
+                <div id="enrichmentStatusText">
+                    ${enrichmentStatus === 'completed' && hasEnrichedData
+                        ? '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Enrichment complete</span>'
+                        : enrichmentStatus === 'in_progress'
+                        ? '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Enrichment in progress...</span>'
+                        : enrichmentStatus === 'failed'
+                        ? '<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>Enrichment failed - try again</span>'
+                        : '<span class="text-muted"><i class="fas fa-info-circle me-1"></i>Click "Enrich Now" to fetch business data</span>'
+                    }
+                </div>
+            </div>
+
+            <!-- Enriched Business Data -->
+            <div class="detail-section prospect-section mb-4">
+                <h6 class="fw-bold mb-3"><i class="fas fa-building me-2"></i>Business Information</h6>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-muted">VAT Number</label>
+                        <div class="d-flex gap-2">
+                            <input type="text" class="form-control form-control-sm" id="prospectVat"
+                                   value="${escapeHtml(vat)}" placeholder="BE0123456789">
+                            ${vat ? `<button class="btn btn-sm btn-outline-primary" onclick="searchCompanyByVatFromProspect('${vat}')" title="Search in Companies">
+                                <i class="fas fa-search"></i>
+                            </button>` : ''}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-muted">Website</label>
+                        <input type="url" class="form-control form-control-sm" id="prospectWebsite"
+                               value="${escapeHtml(website)}" placeholder="https://...">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold text-muted">Registered Address</label>
+                        <input type="text" class="form-control form-control-sm" id="prospectAddress"
+                               value="${escapeHtml(registered)}" placeholder="Street, City">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-muted">Directors/Owners</label>
+                        <input type="text" class="form-control form-control-sm" id="prospectDirectors"
+                               value="${escapeHtml(Array.isArray(directors) ? directors.join(', ') : directors)}" placeholder="Names">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-muted">Rating</label>
+                        <div class="form-control-plaintext small">
+                            ${enrichedData.rating ? `<i class="fas fa-star text-warning"></i> ${enrichedData.rating} (${enrichedData.user_ratings_total || 0} reviews)` : '<span class="text-muted">No rating</span>'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contact Details -->
+            <div class="detail-section prospect-section mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-address-card me-2"></i>Contact Details</h6>
+                    <button class="btn btn-sm btn-primary" onclick="saveProspectDetails('${prospectId}')">
+                        <i class="fas fa-save me-1"></i>Save
+                    </button>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-muted">Email</label>
+                        <input type="email" class="form-control form-control-sm" id="prospectEmail"
+                               value="${escapeHtml(email)}" placeholder="email@example.com">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-muted">Phone</label>
+                        <input type="tel" class="form-control form-control-sm" id="prospectPhone"
+                               value="${escapeHtml(phone)}" placeholder="+32...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status & Assignment -->
+            <div class="detail-section prospect-section mb-4">
+                <h6 class="fw-bold mb-3"><i class="fas fa-clipboard-list me-2"></i>Status & Assignment</h6>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-muted">Status</label>
+                        <select class="form-select form-select-sm" id="prospectStatus">
+                            <option value="new_leads" ${prospect.status === 'new_leads' ? 'selected' : ''}>New Lead</option>
+                            <option value="visited" ${prospect.status === 'visited' ? 'selected' : ''}>Visited</option>
+                            <option value="first_contact" ${prospect.status === 'first_contact' ? 'selected' : ''}>First Contact</option>
+                            <option value="meeting_planned" ${prospect.status === 'meeting_planned' ? 'selected' : ''}>Meeting Planned</option>
+                            <option value="follow_up" ${prospect.status === 'follow_up' ? 'selected' : ''}>Follow Up</option>
+                            <option value="customer" ${prospect.status === 'customer' ? 'selected' : ''}>Customer</option>
+                            <option value="contact_later" ${prospect.status === 'contact_later' ? 'selected' : ''}>Contact Later</option>
+                            <option value="unqualified" ${prospect.status === 'unqualified' ? 'selected' : ''}>Unqualified</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold text-muted">Assigned To</label>
+                        <select class="form-select form-select-sm" id="prospectSalesperson">
+                            <option value="">Unassigned</option>
+                            <option value="Caitlin" ${prospect.assigned_salesperson === 'Caitlin' ? 'selected' : ''}>Caitlin</option>
+                            <option value="Kesha" ${prospect.assigned_salesperson === 'Kesha' ? 'selected' : ''}>Kesha</option>
+                            <option value="Django" ${prospect.assigned_salesperson === 'Django' ? 'selected' : ''}>Django</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="detail-section prospect-section mb-4">
+                <h6 class="fw-bold mb-3"><i class="fas fa-sticky-note me-2"></i>Notes</h6>
+                <textarea class="form-control" id="prospectNotes" rows="4" placeholder="Add notes about this prospect...">${escapeHtml(prospect.notes || '')}</textarea>
+            </div>
+
+            <!-- Actions -->
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-primary flex-fill" onclick="saveProspectDetails('${prospectId}')">
+                    <i class="fas fa-save me-2"></i>Save Changes
+                </button>
+                <button class="btn btn-success" onclick="convertProspectToCustomer('${prospectId}')" title="Convert to Customer">
+                    <i class="fas fa-user-check me-2"></i>Convert
+                </button>
+                <button class="btn btn-outline-danger" onclick="deleteProspect('${prospectId}')" title="Delete Prospect">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Add prospect-specific styling to sidepanel
+    document.getElementById('companyPanel').classList.add('prospect-panel');
+
+    openCompanyPanel();
+}
+
+// Run AI enrichment for a prospect
+async function runProspectEnrichment(prospectId) {
+    const btn = document.getElementById('enrichBtn');
+    const statusText = document.getElementById('enrichmentStatusText');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Enriching...';
+    statusText.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin me-1"></i>Searching for business data...</span>';
+
+    try {
+        // Find prospect to get name and address
+        const prospect = allProspects.find(p => p.prospect_id === prospectId);
+        if (!prospect) throw new Error('Prospect not found');
+
+        // Call companyweb search API
+        const response = await fetch('/api/prospecting/companyweb-search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                company_name: prospect.name,
+                address: prospect.address?.street || ''
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        // Update prospect with enriched data
+        const enrichedData = data.result || {};
+        const updateResponse = await fetch(`/api/prospects/${prospectId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enriched_data: {
+                    vat: enrichedData.vat || '',
+                    email: enrichedData.email || '',
+                    phone: enrichedData.phone || '',
+                    site: enrichedData.site || '',
+                    registered: enrichedData.registered || '',
+                    directors: enrichedData.directors || ''
+                }
+            })
+        });
+
+        if (!updateResponse.ok) {
+            throw new Error('Failed to save enriched data');
+        }
+
+        // Update UI
+        statusText.innerHTML = '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Enrichment complete!</span>';
+        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Re-enrich';
+        btn.disabled = false;
+
+        // Refresh the detail panel
+        setTimeout(() => {
+            loadData(true).then(() => showProspectDetails(prospectId));
+        }, 500);
+
+    } catch (error) {
+        console.error('Enrichment error:', error);
+        statusText.innerHTML = `<span class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>${error.message}</span>`;
+        btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Try Again';
+        btn.disabled = false;
+    }
+}
+
+// Save prospect details
+async function saveProspectDetails(prospectId) {
+    try {
+        const updateData = {
+            status: document.getElementById('prospectStatus').value,
+            assigned_salesperson: document.getElementById('prospectSalesperson').value || null,
+            notes: document.getElementById('prospectNotes').value,
+            website: document.getElementById('prospectWebsite').value,
+            address: document.getElementById('prospectAddress').value,
+            enriched_data: {
+                vat: document.getElementById('prospectVat').value,
+                email: document.getElementById('prospectEmail').value,
+                phone: document.getElementById('prospectPhone').value,
+                directors: document.getElementById('prospectDirectors').value,
+                site: document.getElementById('prospectWebsite').value,
+                registered: document.getElementById('prospectAddress').value
+            }
+        };
+
+        const response = await fetch(`/api/prospects/${prospectId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData)
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to save');
+        }
+
+        showToast('Prospect saved successfully!', 'success');
+
+        // Refresh data
+        await loadData(true);
+
+    } catch (error) {
+        console.error('Save error:', error);
+        showToast('Failed to save: ' + error.message, 'error');
+    }
+}
+
+// Convert prospect to customer
+async function convertProspectToCustomer(prospectId) {
+    if (!confirm('Convert this prospect to a customer? This will update their status to "Customer".')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/prospects/${prospectId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'customer' })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to convert');
+        }
+
+        showToast('Prospect converted to customer!', 'success');
+        closeCompanyPanel();
+        await loadData(true);
+
+    } catch (error) {
+        console.error('Convert error:', error);
+        showToast('Failed to convert: ' + error.message, 'error');
+    }
+}
+
+// Delete prospect
+async function deleteProspect(prospectId) {
+    if (!confirm('Are you sure you want to delete this prospect? This cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/prospects/${prospectId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to delete');
+        }
+
+        showToast('Prospect deleted', 'success');
+        closeCompanyPanel();
+        await loadData(true);
+
+    } catch (error) {
+        console.error('Delete error:', error);
+        showToast('Failed to delete: ' + error.message, 'error');
+    }
+}
+
+// Search company by VAT from prospect panel
+function searchCompanyByVatFromProspect(vat) {
+    closeCompanyPanel();
+    document.getElementById('searchInput').value = vat;
+    filterCompanies();
+}
+
+// Show toast notification
+function showToast(message, type = 'info') {
+    const typeClasses = {
+        'success': 'alert-success',
+        'error': 'alert-danger',
+        'warning': 'alert-warning',
+        'info': 'alert-info'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `alert ${typeClasses[type] || 'alert-info'} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 400px;';
+    toast.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(toast);
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 150);
+    }, 4000);
 }
 
 // Filter invoices by year in sidepanel
@@ -3775,7 +4263,9 @@ function openCompanyPanel() {
 }
 
 function closeCompanyPanel() {
-    document.getElementById('companyPanel').classList.remove('show');
+    const panel = document.getElementById('companyPanel');
+    panel.classList.remove('show');
+    panel.classList.remove('prospect-panel'); // Remove prospect styling when closing
     document.getElementById('companyPanelOverlay').classList.remove('show');
     document.body.style.overflow = '';
 }
