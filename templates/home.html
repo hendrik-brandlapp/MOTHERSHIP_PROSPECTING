@@ -1,56 +1,753 @@
 {% extends "base.html" %}
 
-{% block title %}Home - CRMinal Dashboard{% endblock %}
+{% block title %}Dashboard - CRMinal{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dashboard-header {
+        margin-bottom: 1.5rem;
+    }
+
+    .greeting {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+
+    .greeting-sub {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+    }
+
+    /* Alert Cards */
+    .alert-card {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-lg);
+        margin-bottom: 0.75rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .alert-card:hover {
+        transform: translateX(4px);
+    }
+
+    .alert-card.warning {
+        background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+        border: 1px solid #F59E0B;
+    }
+
+    .alert-card.warning .alert-icon {
+        background: #F59E0B;
+        color: white;
+    }
+
+    .alert-card.info {
+        background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+        border: 1px solid #3B82F6;
+    }
+
+    .alert-card.info .alert-icon {
+        background: #3B82F6;
+        color: white;
+    }
+
+    .alert-card.success {
+        background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+        border: 1px solid #10B981;
+    }
+
+    .alert-card.success .alert-icon {
+        background: #10B981;
+        color: white;
+    }
+
+    .alert-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .alert-content {
+        flex: 1;
+    }
+
+    .alert-message {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0;
+    }
+
+    .alert-action {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+    }
+
+    /* Dashboard Cards */
+    .dash-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .dash-card-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .dash-card-title {
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0;
+    }
+
+    .dash-card-title i {
+        color: var(--accent);
+    }
+
+    .dash-card-body {
+        padding: 1rem 1.25rem;
+    }
+
+    .dash-card-link {
+        font-size: 0.8rem;
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .dash-card-link:hover {
+        text-decoration: underline;
+    }
+
+    /* Task Items */
+    .task-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .task-item:last-child {
+        border-bottom: none;
+    }
+
+    .task-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+    }
+
+    .task-icon.call { background: #DBEAFE; color: #2563EB; }
+    .task-icon.email { background: #FEE2E2; color: #DC2626; }
+    .task-icon.visit { background: #D1FAE5; color: #059669; }
+    .task-icon.meeting { background: #EDE9FE; color: #7C3AED; }
+    .task-icon.follow_up { background: #FEF3C7; color: #D97706; }
+    .task-icon.other { background: #F3F4F6; color: #6B7280; }
+
+    .task-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .task-title {
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 0.125rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .task-meta {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+
+    .task-priority {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .task-priority.high { background: #EF4444; }
+    .task-priority.medium { background: #F59E0B; }
+    .task-priority.low { background: #10B981; }
+
+    /* Trip Items */
+    .trip-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.75rem;
+        background: var(--bg-hover);
+        border-radius: var(--radius-md);
+        margin-bottom: 0.5rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .trip-item:hover {
+        background: var(--bg-active);
+    }
+
+    .trip-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .trip-date {
+        text-align: center;
+        min-width: 50px;
+    }
+
+    .trip-date-day {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--accent);
+        line-height: 1;
+    }
+
+    .trip-date-month {
+        font-size: 0.7rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+    }
+
+    .trip-info {
+        flex: 1;
+    }
+
+    .trip-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.125rem;
+    }
+
+    .trip-stops {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+    }
+
+    /* Pipeline Mini */
+    .pipeline-bar {
+        display: flex;
+        height: 8px;
+        border-radius: var(--radius-full);
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+
+    .pipeline-segment {
+        transition: all 0.3s;
+    }
+
+    .pipeline-segment:hover {
+        opacity: 0.8;
+    }
+
+    .pipeline-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .pipeline-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+
+    .pipeline-legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+    }
+
+    .pipeline-legend-count {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    /* Quick Stats */
+    .quick-stat {
+        text-align: center;
+        padding: 1rem;
+    }
+
+    .quick-stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--accent);
+        line-height: 1;
+        margin-bottom: 0.25rem;
+    }
+
+    .quick-stat-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: var(--text-tertiary);
+    }
+
+    .empty-state i {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+        opacity: 0.5;
+    }
+
+    .empty-state p {
+        margin: 0;
+        font-size: 0.875rem;
+    }
+
+    /* Quick Actions Grid */
+    .quick-action {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1.25rem 1rem;
+        background: var(--bg-hover);
+        border-radius: var(--radius-lg);
+        text-decoration: none;
+        transition: all 0.2s;
+        text-align: center;
+    }
+
+    .quick-action:hover {
+        background: var(--accent-light);
+        transform: translateY(-2px);
+    }
+
+    .quick-action i {
+        font-size: 1.5rem;
+        color: var(--accent);
+        margin-bottom: 0.5rem;
+    }
+
+    .quick-action span {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    /* Loading */
+    .loading-placeholder {
+        background: linear-gradient(90deg, var(--bg-hover) 25%, var(--bg-active) 50%, var(--bg-hover) 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s ease-in-out infinite;
+        border-radius: var(--radius-sm);
+        height: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    @keyframes loading {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-  <div class="row g-4">
-    <div class="col-12 text-center mb-3">
-      <h1 class="display-5 fw-bold" style="letter-spacing: 1px;">
-        <span class="text-primary">CRM</span>inal
-      </h1>
-      <p class="text-muted">Your premium AI-powered CRM workspace</p>
+<div class="container-fluid px-4">
+    <!-- Header -->
+    <div class="dashboard-header">
+        <h1 class="greeting">Good {{ 'morning' if now.hour < 12 else ('afternoon' if now.hour < 18 else 'evening') }}, {{ session.user_name }}!</h1>
+        <p class="greeting-sub">Here's what's happening today, {{ now.strftime('%A, %B %d') }}</p>
     </div>
 
-    <div class="col-md-6">
-      <a class="text-decoration-none" href="{{ url_for('data') }}">
-        <div class="card h-100 shadow-sm" style="border-radius:16px;">
-          <div class="card-body d-flex flex-column align-items-start">
-            <div class="mb-3"><i class="fas fa-database fa-2x text-primary"></i></div>
-            <h4 class="fw-semibold mb-2">Data</h4>
-            <p class="text-muted mb-0">Analyze company data with year filtering and fast insights.</p>
-          </div>
-        </div>
-      </a>
+    <!-- Alerts Section -->
+    <div id="alerts-section" class="mb-4">
+        <!-- Alerts loaded dynamically -->
     </div>
 
-    <div class="col-md-6">
-      <a class="text-decoration-none" href="{{ url_for('products') }}">
-        <div class="card h-100 shadow-sm" style="border-radius:16px;">
-          <div class="card-body d-flex flex-column align-items-start">
-            <div class="mb-3"><i class="fas fa-boxes fa-2x text-warning"></i></div>
-            <h4 class="fw-semibold mb-2">Products</h4>
-            <p class="text-muted mb-0">Browse the catalog and product hierarchy with ease.</p>
-          </div>
-        </div>
-      </a>
-    </div>
+    <!-- Main Dashboard Grid -->
+    <div class="row g-4">
+        <!-- Left Column: Tasks -->
+        <div class="col-lg-8">
+            <!-- Today's Tasks -->
+            <div class="dash-card mb-4">
+                <div class="dash-card-header">
+                    <h5 class="dash-card-title"><i class="fas fa-tasks"></i> Today's Tasks</h5>
+                    <a href="/tasks" class="dash-card-link">View All <i class="fas fa-arrow-right ms-1"></i></a>
+                </div>
+                <div class="dash-card-body" id="tasks-today">
+                    <div class="loading-placeholder" style="width: 80%;"></div>
+                    <div class="loading-placeholder" style="width: 60%;"></div>
+                    <div class="loading-placeholder" style="width: 70%;"></div>
+                </div>
+            </div>
 
-    <div class="col-12 mt-4">
-      <div class="card p-4" style="border-radius:16px;">
-        <div class="d-flex justify-content-between align-items-center">
-          <div>
-            <h5 class="mb-1">Quick Actions</h5>
-            <p class="text-muted mb-0">Jump straight into your most common workflows</p>
-          </div>
-          <div class="d-flex gap-2">
-            <a href="{{ url_for('data') }}" class="btn btn-primary"><i class="fas fa-database me-1"></i>View Data</a>
-            <a href="{{ url_for('products') }}" class="btn btn-outline-primary"><i class="fas fa-th-large me-1"></i>Open Catalog</a>
-          </div>
+            <!-- Overdue Tasks (if any) -->
+            <div class="dash-card mb-4" id="overdue-section" style="display: none;">
+                <div class="dash-card-header" style="background: #FEF2F2;">
+                    <h5 class="dash-card-title" style="color: #DC2626;"><i class="fas fa-exclamation-circle"></i> Overdue Tasks</h5>
+                    <a href="/tasks?filter=overdue" class="dash-card-link" style="color: #DC2626;">Clear Backlog <i class="fas fa-arrow-right ms-1"></i></a>
+                </div>
+                <div class="dash-card-body" id="tasks-overdue">
+                </div>
+            </div>
+
+            <!-- Pipeline Overview -->
+            <div class="dash-card">
+                <div class="dash-card-header">
+                    <h5 class="dash-card-title"><i class="fas fa-chart-pie"></i> Pipeline Overview</h5>
+                    <a href="/data" class="dash-card-link">View Companies <i class="fas fa-arrow-right ms-1"></i></a>
+                </div>
+                <div class="dash-card-body" id="pipeline-overview">
+                    <div class="loading-placeholder" style="width: 100%; height: 8px;"></div>
+                    <div class="d-flex gap-3 mt-3">
+                        <div class="loading-placeholder" style="width: 60px;"></div>
+                        <div class="loading-placeholder" style="width: 80px;"></div>
+                        <div class="loading-placeholder" style="width: 70px;"></div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
+
+        <!-- Right Column: Routes & Quick Actions -->
+        <div class="col-lg-4">
+            <!-- Quick Stats -->
+            <div class="dash-card mb-4">
+                <div class="row g-0">
+                    <div class="col-4 border-end">
+                        <div class="quick-stat">
+                            <div class="quick-stat-value" id="stat-tasks-today">-</div>
+                            <div class="quick-stat-label">Tasks Today</div>
+                        </div>
+                    </div>
+                    <div class="col-4 border-end">
+                        <div class="quick-stat">
+                            <div class="quick-stat-value" id="stat-stops-today">-</div>
+                            <div class="quick-stat-label">Stops Today</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="quick-stat">
+                            <div class="quick-stat-value" id="stat-pipeline">-</div>
+                            <div class="quick-stat-label">Prospects</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Today's Route -->
+            <div class="dash-card mb-4">
+                <div class="dash-card-header">
+                    <h5 class="dash-card-title"><i class="fas fa-route"></i> Today's Route</h5>
+                    <a href="/trips" class="dash-card-link">All Routes <i class="fas fa-arrow-right ms-1"></i></a>
+                </div>
+                <div class="dash-card-body" id="trips-today">
+                    <div class="loading-placeholder" style="width: 100%;"></div>
+                </div>
+            </div>
+
+            <!-- Upcoming Routes -->
+            <div class="dash-card mb-4">
+                <div class="dash-card-header">
+                    <h5 class="dash-card-title"><i class="fas fa-calendar-alt"></i> Upcoming Routes</h5>
+                </div>
+                <div class="dash-card-body" id="trips-upcoming">
+                    <div class="loading-placeholder" style="width: 100%;"></div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="dash-card">
+                <div class="dash-card-header">
+                    <h5 class="dash-card-title"><i class="fas fa-bolt"></i> Quick Actions</h5>
+                </div>
+                <div class="dash-card-body">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <a href="/prospecting" class="quick-action">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <span>Find Prospects</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="/tasks" class="quick-action">
+                                <i class="fas fa-plus-circle"></i>
+                                <span>New Task</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="/trips" class="quick-action">
+                                <i class="fas fa-route"></i>
+                                <span>Plan Route</span>
+                            </a>
+                        </div>
+                        <div class="col-6">
+                            <a href="/automations" class="quick-action">
+                                <i class="fas fa-magic"></i>
+                                <span>Automations</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 {% endblock %}
 
+{% block extra_scripts %}
+<script>
+const STATUS_COLORS = {
+    'new_leads': '#94A3B8',
+    'visited': '#60A5FA',
+    'first_contact': '#34D399',
+    'meeting_planned': '#A78BFA',
+    'follow_up': '#FBBF24',
+    'customer': '#10B981',
+    'ex_customer': '#F87171',
+    'contact_later': '#FB923C',
+    'unqualified': '#9CA3AF'
+};
+
+const STATUS_LABELS = {
+    'new_leads': 'New',
+    'visited': 'Visited',
+    'first_contact': 'First Contact',
+    'meeting_planned': 'Meeting',
+    'follow_up': 'Follow Up',
+    'customer': 'Customer',
+    'ex_customer': 'Ex-Customer',
+    'contact_later': 'Contact Later',
+    'unqualified': 'Unqualified'
+};
+
+const TASK_ICONS = {
+    'call': 'phone',
+    'email': 'envelope',
+    'visit': 'building',
+    'meeting': 'users',
+    'follow_up': 'redo',
+    'other': 'tasks'
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboard();
+});
+
+async function loadDashboard() {
+    try {
+        const response = await fetch('/api/dashboard');
+        const result = await response.json();
+
+        if (result.success) {
+            renderDashboard(result.data);
+        } else {
+            console.error('Failed to load dashboard:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading dashboard:', error);
+    }
+}
+
+function renderDashboard(data) {
+    // Render alerts
+    renderAlerts(data.alerts);
+
+    // Render quick stats
+    document.getElementById('stat-tasks-today').textContent = data.tasks.total_today;
+    document.getElementById('stat-stops-today').textContent = data.trips.total_stops_today;
+    document.getElementById('stat-pipeline').textContent = data.pipeline.total;
+
+    // Render today's tasks
+    renderTasks('tasks-today', data.tasks.today, 'No tasks scheduled for today');
+
+    // Render overdue tasks
+    if (data.tasks.overdue.length > 0) {
+        document.getElementById('overdue-section').style.display = 'block';
+        renderTasks('tasks-overdue', data.tasks.overdue, '');
+    }
+
+    // Render today's trips
+    renderTrips('trips-today', data.trips.today, 'No route planned for today');
+
+    // Render upcoming trips
+    renderTrips('trips-upcoming', data.trips.upcoming, 'No upcoming routes');
+
+    // Render pipeline
+    renderPipeline(data.pipeline);
+}
+
+function renderAlerts(alerts) {
+    const container = document.getElementById('alerts-section');
+
+    if (!alerts || alerts.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = alerts.map(alert => `
+        <a href="${alert.link}" class="alert-card ${alert.type}">
+            <div class="alert-icon">
+                <i class="fas fa-${alert.icon}"></i>
+            </div>
+            <div class="alert-content">
+                <p class="alert-message">${alert.message}</p>
+                <span class="alert-action">Click to view</span>
+            </div>
+            <i class="fas fa-chevron-right text-muted"></i>
+        </a>
+    `).join('');
+}
+
+function renderTasks(containerId, tasks, emptyMessage) {
+    const container = document.getElementById(containerId);
+
+    if (!tasks || tasks.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-check-circle"></i>
+                <p>${emptyMessage}</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = tasks.map(task => {
+        const taskType = task.task_type || 'other';
+        const icon = TASK_ICONS[taskType] || 'tasks';
+        const priorityClass = task.priority >= 3 ? 'high' : (task.priority === 2 ? 'medium' : 'low');
+        const prospectName = task.prospect?.name || 'Unknown';
+
+        return `
+            <div class="task-item">
+                <div class="task-icon ${taskType}">
+                    <i class="fas fa-${icon}"></i>
+                </div>
+                <div class="task-content">
+                    <div class="task-title">${escapeHtml(task.title)}</div>
+                    <div class="task-meta">${escapeHtml(prospectName)}</div>
+                </div>
+                <div class="task-priority ${priorityClass}" title="${priorityClass} priority"></div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderTrips(containerId, trips, emptyMessage) {
+    const container = document.getElementById(containerId);
+
+    if (!trips || trips.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-route"></i>
+                <p>${emptyMessage}</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = trips.map(trip => {
+        const date = new Date(trip.trip_date);
+        const day = date.getDate();
+        const month = date.toLocaleString('default', { month: 'short' });
+
+        return `
+            <a href="/trips" class="trip-item">
+                <div class="trip-date">
+                    <div class="trip-date-day">${day}</div>
+                    <div class="trip-date-month">${month}</div>
+                </div>
+                <div class="trip-info">
+                    <div class="trip-name">${escapeHtml(trip.name)}</div>
+                    <div class="trip-stops">${trip.stop_count} stop${trip.stop_count !== 1 ? 's' : ''}</div>
+                </div>
+                <i class="fas fa-chevron-right text-muted"></i>
+            </a>
+        `;
+    }).join('');
+}
+
+function renderPipeline(pipeline) {
+    const container = document.getElementById('pipeline-overview');
+
+    if (!pipeline || pipeline.total === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-chart-pie"></i>
+                <p>No prospects in pipeline yet</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Create pipeline bar
+    const pipelineOrder = ['new_leads', 'visited', 'first_contact', 'meeting_planned', 'follow_up', 'customer'];
+    let barHtml = '<div class="pipeline-bar">';
+
+    pipelineOrder.forEach(status => {
+        const count = pipeline.by_status[status] || 0;
+        if (count > 0) {
+            const percentage = (count / pipeline.total) * 100;
+            barHtml += `<div class="pipeline-segment" style="width: ${percentage}%; background: ${STATUS_COLORS[status]};" title="${STATUS_LABELS[status]}: ${count}"></div>`;
+        }
+    });
+
+    barHtml += '</div>';
+
+    // Create legend
+    let legendHtml = '<div class="pipeline-legend">';
+    pipelineOrder.forEach(status => {
+        const count = pipeline.by_status[status] || 0;
+        if (count > 0) {
+            legendHtml += `
+                <div class="pipeline-legend-item">
+                    <div class="pipeline-legend-dot" style="background: ${STATUS_COLORS[status]};"></div>
+                    <span>${STATUS_LABELS[status]}</span>
+                    <span class="pipeline-legend-count">${count}</span>
+                </div>
+            `;
+        }
+    });
+    legendHtml += '</div>';
+
+    container.innerHTML = barHtml + legendHtml;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

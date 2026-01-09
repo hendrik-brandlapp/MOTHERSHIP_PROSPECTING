@@ -393,14 +393,14 @@ def index():
     """Home page - check if user is logged in (either as admin or sales rep)"""
     # Check if logged in as sales rep
     if session.get('user_role') == 'sales_rep':
-        return render_template('home.html')
-    
+        return render_template('home.html', now=datetime.now())
+
     # Check if logged in as admin (via DUANO)
     if is_token_valid():
         session['user_role'] = 'admin'
         session['user_name'] = 'Admin'
-        return render_template('home.html')
-    
+        return render_template('home.html', now=datetime.now())
+
     # Not logged in - show login page
     return render_template('login.html')
 
@@ -2497,6 +2497,174 @@ def api_get_pipeline_stats():
     except Exception as e:
         print(f"Error getting pipeline stats: {e}")
         return jsonify({'error': f'Failed to get pipeline stats: {str(e)}'}), 500
+
+
+@app.route('/api/dashboard', methods=['GET'])
+def api_get_dashboard():
+    """Get aggregated dashboard data for the home page"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    if not supabase_client:
+        return jsonify({'error': 'Supabase not configured'}), 500
+
+    try:
+        today = datetime.now().date()
+        today_str = today.isoformat()
+        current_user = session.get('user_name', '')
+
+        dashboard_data = {
+            'tasks': {
+                'today': [],
+                'overdue': [],
+                'upcoming': [],
+                'total_today': 0,
+                'total_overdue': 0,
+                'completed_today': 0
+            },
+            'trips': {
+                'today': [],
+                'upcoming': [],
+                'total_stops_today': 0
+            },
+            'pipeline': {
+                'total': 0,
+                'by_status': {}
+            },
+            'alerts': [],
+            'recent_activity': []
+        }
+
+        # Get tasks for current user
+        try:
+            tasks_result = supabase_client.table('sales_tasks').select('''
+                *,
+                prospects:prospect_id (id, name, status, address)
+            ''').or_(f'assigned_to.eq.{current_user},assigned_to.is.null').execute()
+
+            if tasks_result.data:
+                for task in tasks_result.data:
+                    due_date = task.get('due_date', '')
+                    if due_date:
+                        due = datetime.fromisoformat(due_date.replace('Z', '+00:00')).date() if 'T' in due_date else datetime.strptime(due_date, '%Y-%m-%d').date()
+
+                        task_info = {
+                            'id': task.get('id'),
+                            'title': task.get('title'),
+                            'task_type': task.get('task_type'),
+                            'priority': task.get('priority', 2),
+                            'status': task.get('status'),
+                            'due_date': due_date,
+                            'prospect': task.get('prospects')
+                        }
+
+                        if task.get('status') == 'completed':
+                            if due == today:
+                                dashboard_data['tasks']['completed_today'] += 1
+                        elif due < today:
+                            dashboard_data['tasks']['overdue'].append(task_info)
+                            dashboard_data['tasks']['total_overdue'] += 1
+                        elif due == today:
+                            dashboard_data['tasks']['today'].append(task_info)
+                            dashboard_data['tasks']['total_today'] += 1
+                        elif due <= today + timedelta(days=7):
+                            dashboard_data['tasks']['upcoming'].append(task_info)
+
+                # Sort by priority (high first) then due date
+                for key in ['today', 'overdue', 'upcoming']:
+                    dashboard_data['tasks'][key].sort(key=lambda x: (-x.get('priority', 2), x.get('due_date', '')))
+                    dashboard_data['tasks'][key] = dashboard_data['tasks'][key][:5]  # Limit to 5
+        except Exception as e:
+            print(f"Error fetching tasks for dashboard: {e}")
+
+        # Get trips for current user
+        try:
+            trips_result = supabase_client.table('trips').select('''
+                *,
+                trip_stops (id, prospect_id, stop_order)
+            ''').eq('created_by', current_user).gte('trip_date', today_str).order('trip_date').limit(10).execute()
+
+            if trips_result.data:
+                for trip in trips_result.data:
+                    trip_date = trip.get('trip_date', '')
+                    if trip_date:
+                        trip_d = datetime.strptime(trip_date, '%Y-%m-%d').date() if isinstance(trip_date, str) else trip_date
+
+                        trip_info = {
+                            'id': trip.get('id'),
+                            'name': trip.get('name'),
+                            'trip_date': trip_date,
+                            'status': trip.get('status'),
+                            'stop_count': len(trip.get('trip_stops', []))
+                        }
+
+                        if trip_d == today:
+                            dashboard_data['trips']['today'].append(trip_info)
+                            dashboard_data['trips']['total_stops_today'] += trip_info['stop_count']
+                        else:
+                            dashboard_data['trips']['upcoming'].append(trip_info)
+
+                dashboard_data['trips']['upcoming'] = dashboard_data['trips']['upcoming'][:3]
+        except Exception as e:
+            print(f"Error fetching trips for dashboard: {e}")
+
+        # Get pipeline stats
+        try:
+            prospects_result = supabase_client.table('prospects').select('status').execute()
+            if prospects_result.data:
+                dashboard_data['pipeline']['total'] = len(prospects_result.data)
+                for prospect in prospects_result.data:
+                    status = prospect.get('status', 'new_leads')
+                    if status:
+                        dashboard_data['pipeline']['by_status'][status] = dashboard_data['pipeline']['by_status'].get(status, 0) + 1
+        except Exception as e:
+            print(f"Error fetching pipeline for dashboard: {e}")
+
+        # Generate alerts
+        if dashboard_data['tasks']['total_overdue'] > 0:
+            dashboard_data['alerts'].append({
+                'type': 'warning',
+                'icon': 'exclamation-triangle',
+                'message': f"You have {dashboard_data['tasks']['total_overdue']} overdue task(s)",
+                'link': '/tasks?filter=overdue'
+            })
+
+        if dashboard_data['trips']['today']:
+            stops = dashboard_data['trips']['total_stops_today']
+            dashboard_data['alerts'].append({
+                'type': 'info',
+                'icon': 'route',
+                'message': f"Route planned for today with {stops} stop(s)",
+                'link': '/trips'
+            })
+
+        # Get recent automation executions
+        try:
+            if automation_engine:
+                exec_result = supabase_client.table('automation_executions').select('''
+                    *,
+                    automation_rules:automation_rule_id (name)
+                ''').order('executed_at', desc=True).limit(5).execute()
+
+                if exec_result.data:
+                    for ex in exec_result.data:
+                        dashboard_data['recent_activity'].append({
+                            'type': 'automation',
+                            'message': f"Automation '{ex.get('automation_rules', {}).get('name', 'Unknown')}' executed",
+                            'status': ex.get('status'),
+                            'time': ex.get('executed_at')
+                        })
+        except Exception as e:
+            print(f"Error fetching automation executions: {e}")
+
+        return jsonify({
+            'success': True,
+            'data': dashboard_data
+        })
+
+    except Exception as e:
+        print(f"Error getting dashboard data: {e}")
+        return jsonify({'error': f'Failed to get dashboard data: {str(e)}'}), 500
 
 
 @app.route('/api/prospect-tasks', methods=['GET'])
