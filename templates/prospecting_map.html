@@ -694,13 +694,44 @@ async function loadCustomers(forceRefresh = false) {
 // Populate category filter
 function populateCategoryFilter() {
     const categories = new Set();
+
+    // Debug: log first few customers' category data
+    console.log('📂 Checking categories from customers...');
+    let debugCount = 0;
+
     allCustomers.forEach(c => {
-        if (c.company_categories && Array.isArray(c.company_categories)) {
-            c.company_categories.forEach(cat => {
+        // Debug first 3 customers with categories
+        if (debugCount < 3 && c.company_categories) {
+            console.log(`Customer ${c.name}:`, c.company_categories, typeof c.company_categories);
+            debugCount++;
+        }
+
+        // Try parsing if it's a JSON string
+        let cats = c.company_categories;
+        if (typeof cats === 'string') {
+            try {
+                cats = JSON.parse(cats);
+            } catch (e) {
+                // Not JSON, might be comma-separated string
+                if (cats.includes(',')) {
+                    cats = cats.split(',').map(s => s.trim());
+                } else if (cats.trim()) {
+                    cats = [cats.trim()];
+                } else {
+                    cats = [];
+                }
+            }
+        }
+
+        if (cats && Array.isArray(cats)) {
+            cats.forEach(cat => {
                 // Handle both string categories and object categories with 'name' property
-                const catName = typeof cat === 'object' && cat !== null ? (cat.name || cat) : cat;
-                if (catName && typeof catName === 'string') {
-                    categories.add(catName);
+                let catName = cat;
+                if (typeof cat === 'object' && cat !== null) {
+                    catName = cat.name || cat.category_name || cat.label || JSON.stringify(cat);
+                }
+                if (catName && typeof catName === 'string' && catName.trim()) {
+                    categories.add(catName.trim());
                 }
             });
         }
@@ -714,7 +745,7 @@ function populateCategoryFilter() {
         select.appendChild(option);
     });
 
-    console.log(`📂 Populated ${categories.size} categories`);
+    console.log(`📂 Populated ${categories.size} categories:`, [...categories]);
 }
 
 // Filter customers
@@ -737,10 +768,28 @@ function filterCustomers() {
 
         // Category filter
         if (category) {
-            const cats = company.company_categories || [];
+            let cats = company.company_categories || [];
+            // Parse if it's a JSON string
+            if (typeof cats === 'string') {
+                try {
+                    cats = JSON.parse(cats);
+                } catch (e) {
+                    if (cats.includes(',')) {
+                        cats = cats.split(',').map(s => s.trim());
+                    } else if (cats.trim()) {
+                        cats = [cats.trim()];
+                    } else {
+                        cats = [];
+                    }
+                }
+            }
+            if (!Array.isArray(cats)) cats = [];
             // Handle both string categories and object categories with 'name' property
             const hasCat = cats.some(cat => {
-                const catName = typeof cat === 'object' && cat !== null ? (cat.name || cat) : cat;
+                let catName = cat;
+                if (typeof cat === 'object' && cat !== null) {
+                    catName = cat.name || cat.category_name || cat.label || '';
+                }
                 return catName === category;
             });
             if (!hasCat) return false;
