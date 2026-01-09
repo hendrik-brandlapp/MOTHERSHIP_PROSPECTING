@@ -11086,22 +11086,17 @@ def api_company_trips(company_id):
     try:
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
-        
-        # Find all trip stops for this company (try both int and string match)
-        # company_id in trip_stops might be stored as string or int
+
+        # trip_stops.company_id is VARCHAR, so search as string
+        # Try string version first (most likely)
+        company_id_str = str(company_id)
         stops_result = supabase_client.table('trip_stops').select(
             'trip_id, stop_order'
-        ).eq('company_id', company_id).execute()
-        
-        # If no results, try with integer
-        if not stops_result.data:
-            try:
-                stops_result = supabase_client.table('trip_stops').select(
-                    'trip_id, stop_order'
-                ).eq('company_id', int(company_id)).execute()
-            except:
-                pass
-        
+        ).eq('company_id', company_id_str).execute()
+
+        # Debug logging
+        print(f"Searching for company_id: {company_id_str}, found: {len(stops_result.data or [])} stops")
+
         if not stops_result.data:
             return jsonify({'success': True, 'trips': []})
         
@@ -11482,29 +11477,53 @@ def get_trip(trip_id):
     """Get a single trip with all its stops"""
     if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
-    
+
     try:
         if not supabase_client:
             return jsonify({'error': 'Database not available'}), 500
-        
+
         # Get trip details
         trip_response = supabase_client.table('trips').select('*').eq('id', trip_id).execute()
-        
+
         if not trip_response.data:
             return jsonify({'error': 'Trip not found'}), 404
-        
+
         trip = trip_response.data[0]
-        
+
         # Get trip stops
         stops_response = supabase_client.table('trip_stops').select('*').eq('trip_id', trip_id).order('stop_order').execute()
-        
-        trip['stops'] = stops_response.data
-        
+
+        stops = stops_response.data or []
+
+        # Enrich stops with company public_name
+        for stop in stops:
+            if stop.get('company_id'):
+                try:
+                    # company_id in trip_stops is VARCHAR, companies.company_id is INTEGER
+                    company_id_int = int(stop['company_id'])
+                    company_response = supabase_client.table('companies').select(
+                        'company_id, name, public_name'
+                    ).eq('company_id', company_id_int).execute()
+
+                    if company_response.data:
+                        company = company_response.data[0]
+                        # Use public_name if available, otherwise keep company_name
+                        stop['display_name'] = company.get('public_name') or company.get('name') or stop.get('company_name')
+                        stop['company_id_int'] = company_id_int
+                    else:
+                        stop['display_name'] = stop.get('company_name')
+                except (ValueError, TypeError):
+                    stop['display_name'] = stop.get('company_name')
+            else:
+                stop['display_name'] = stop.get('company_name')
+
+        trip['stops'] = stops
+
         return jsonify({
             'success': True,
             'trip': trip
         })
-        
+
     except Exception as e:
         print(f"Error fetching trip: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -12061,12 +12080,12 @@ def quick_create_trip():
         trip_id = trip_response.data[0]['id']
 
         # Create single stop
+        # company_id in trip_stops is VARCHAR, store as string
         company_id_val = location.get('company_id')
         if company_id_val:
-            try:
-                company_id_val = int(company_id_val)
-            except (ValueError, TypeError):
-                company_id_val = None
+            company_id_val = str(company_id_val)
+        else:
+            company_id_val = None
 
         stop_data = {
             'trip_id': trip_id,
@@ -12119,12 +12138,12 @@ def add_stop_to_trip(trip_id):
         max_order = stops_response.data[0]['stop_order'] if stops_response.data else 0
 
         # Create new stop
+        # company_id in trip_stops is VARCHAR, store as string
         company_id_val = location.get('company_id')
         if company_id_val:
-            try:
-                company_id_val = int(company_id_val)
-            except (ValueError, TypeError):
-                company_id_val = None
+            company_id_val = str(company_id_val)
+        else:
+            company_id_val = None
 
         stop_data = {
             'trip_id': trip_id,

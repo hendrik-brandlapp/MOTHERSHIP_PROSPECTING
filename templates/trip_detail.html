@@ -693,23 +693,28 @@ function renderStops() {
 
     // Stops
     if (trip.stops && trip.stops.length > 0) {
-        html += trip.stops.map((stop, idx) => `
+        html += trip.stops.map((stop, idx) => {
+            const displayName = stop.display_name || stop.company_name || 'Unknown';
+            const companyIdForLink = stop.company_id_int || stop.company_id;
+            const hasCompanyLink = companyIdForLink && !isNaN(parseInt(companyIdForLink));
+
+            return `
             <div class="stop-card" data-stop-id="${stop.id}" data-company-id="${stop.company_id || ''}">
                 <div class="stop-card-header">
                     <div class="stop-number">${stop.stop_order}</div>
                     <div class="stop-info">
                         <div class="stop-name">
-                            ${stop.company_id ? `<a href="/data?company=${stop.company_id}">${escapeHtml(stop.company_name)}</a>` : escapeHtml(stop.company_name)}
+                            ${hasCompanyLink ? `<a href="/data?company=${companyIdForLink}">${escapeHtml(displayName)}</a>` : escapeHtml(displayName)}
                         </div>
                         <div class="stop-address">${escapeHtml(stop.address || 'No address')}</div>
                     </div>
                     <div class="stop-actions-header">
-                        ${stop.company_id ? `
-                            <button class="stop-action-btn" onclick="window.location='/data?company=${stop.company_id}'" title="View company">
+                        ${hasCompanyLink ? `
+                            <button class="stop-action-btn" onclick="window.location='/data?company=${companyIdForLink}'" title="View company">
                                 <i class="fas fa-external-link-alt"></i>
                             </button>
                         ` : ''}
-                        <button class="stop-action-btn delete" onclick="confirmDeleteStop('${stop.id}', '${escapeHtml(stop.company_name).replace(/'/g, "\\'")}')" title="Remove">
+                        <button class="stop-action-btn delete" onclick="confirmDeleteStop('${stop.id}', '${escapeHtml(displayName).replace(/'/g, "\\'")}')" title="Remove">
                             <i class="fas fa-times"></i>
                         </button>
                     </div>
@@ -743,8 +748,8 @@ function renderStops() {
                         </div>
                     </div>
                 </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     }
 
     // End
