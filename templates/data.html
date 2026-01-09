@@ -2816,10 +2816,10 @@ function populateCategories() {
 
     const sortedCategories = Array.from(categorySet).sort();
 
-    // Initialize all categories as included by default
+    // Initialize only Horeca as included, everything else excluded by default
     categoryStates = {};
     sortedCategories.forEach(cat => {
-        categoryStates[cat] = 'included';
+        categoryStates[cat] = cat.toLowerCase() === 'horeca' ? 'included' : 'excluded';
     });
 
     renderCategoryTags();
