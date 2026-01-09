@@ -1,0 +1,1085 @@
+{% extends "base.html" %}
+
+{% block title %}Route Details - CRMinal{% endblock %}
+
+{% block extra_head %}
+<style>
+    .trip-detail-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: var(--space-lg);
+    }
+
+    /* Header Section */
+    .trip-detail-header {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: var(--space-xl);
+        margin-bottom: var(--space-lg);
+    }
+
+    .trip-detail-header-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: var(--space-lg);
+    }
+
+    .trip-detail-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 0.5rem 0;
+    }
+
+    .trip-detail-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-lg);
+        color: var(--text-secondary);
+        font-size: 0.9375rem;
+    }
+
+    .trip-detail-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .trip-detail-meta-item i {
+        color: var(--text-muted);
+    }
+
+    .trip-status-badge {
+        padding: 0.375rem 1rem;
+        border-radius: var(--radius-full);
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .trip-status-badge.planned {
+        background: var(--info-bg);
+        color: var(--info);
+    }
+
+    .trip-status-badge.in_progress {
+        background: var(--warning-bg);
+        color: var(--warning);
+    }
+
+    .trip-status-badge.completed {
+        background: var(--success-bg);
+        color: var(--success);
+    }
+
+    .trip-header-actions {
+        display: flex;
+        gap: var(--space-sm);
+    }
+
+    /* Info Cards */
+    .trip-info-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: var(--space-md);
+    }
+
+    .trip-info-card {
+        background: var(--bg-primary);
+        border-radius: var(--radius-md);
+        padding: var(--space-md);
+        text-align: center;
+    }
+
+    .trip-info-card-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        font-family: 'Inter Tight', sans-serif;
+    }
+
+    .trip-info-card-label {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+
+    /* Main Content */
+    .trip-detail-content {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: var(--space-lg);
+    }
+
+    @media (max-width: 1200px) {
+        .trip-detail-content {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Map Section */
+    .trip-map-section {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .trip-map-header {
+        padding: var(--space-md) var(--space-lg);
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .trip-map-header h5 {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    #tripMap {
+        height: 500px;
+        width: 100%;
+    }
+
+    .btn-google-maps {
+        background: #4285F4;
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: background 0.2s;
+    }
+
+    .btn-google-maps:hover {
+        background: #3367D6;
+    }
+
+    /* Stops Section */
+    .trip-stops-section {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 300px);
+    }
+
+    .trip-stops-header {
+        padding: var(--space-md) var(--space-lg);
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    .trip-stops-header h5 {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .trip-stops-list {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    /* Stop Item */
+    .stop-item {
+        padding: var(--space-md) var(--space-lg);
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        gap: var(--space-md);
+        transition: background 0.2s;
+    }
+
+    .stop-item:hover {
+        background: var(--bg-hover);
+    }
+
+    .stop-item.start-stop {
+        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+        border-left: 4px solid #28a745;
+    }
+
+    .stop-item.end-stop {
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+        border-left: 4px solid #dc3545;
+    }
+
+    .stop-number {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+
+    .stop-number.start {
+        background: #28a745;
+    }
+
+    .stop-number.end {
+        background: #dc3545;
+    }
+
+    .stop-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .stop-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+
+    .stop-name a {
+        color: var(--accent);
+        text-decoration: none;
+    }
+
+    .stop-name a:hover {
+        text-decoration: underline;
+    }
+
+    .stop-address {
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+    }
+
+    .stop-notes {
+        background: var(--bg-primary);
+        border-radius: var(--radius-sm);
+        padding: var(--space-sm);
+        font-size: 0.8125rem;
+        color: var(--text-secondary);
+        margin-top: 0.5rem;
+    }
+
+    .stop-notes-title {
+        font-weight: 600;
+        color: var(--text-primary);
+        font-size: 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .stop-images {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .stop-image-thumb {
+        width: 60px;
+        height: 60px;
+        border-radius: var(--radius-sm);
+        object-fit: cover;
+        cursor: pointer;
+        border: 1px solid var(--border-subtle);
+    }
+
+    .stop-image-thumb:hover {
+        border-color: var(--accent);
+        transform: scale(1.05);
+    }
+
+    .stop-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .stop-action-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-sm);
+        border: none;
+        background: var(--bg-primary);
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .stop-action-btn:hover {
+        background: var(--bg-active);
+        color: var(--text-primary);
+    }
+
+    .stop-action-btn.delete:hover {
+        background: var(--danger-bg);
+        color: var(--danger);
+    }
+
+    /* Image Modal */
+    .image-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    }
+
+    .image-modal-content {
+        max-width: 90%;
+        max-height: 90%;
+    }
+
+    .image-modal-content img {
+        max-width: 100%;
+        max-height: 90vh;
+        border-radius: var(--radius-md);
+    }
+
+    .image-modal-close {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: white;
+        border: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Confirmation Modal */
+    .confirm-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    }
+
+    .confirm-modal-content {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        max-width: 400px;
+        width: 90%;
+    }
+
+    .confirm-modal-content h5 {
+        margin: 0 0 12px 0;
+        font-weight: 600;
+    }
+
+    .confirm-modal-content p {
+        margin: 0 0 20px 0;
+        color: var(--text-secondary);
+    }
+
+    .confirm-modal-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('trips_page') }}">My Routes</a></li>
+                    <li class="breadcrumb-item active" id="breadcrumbTripName">Route Details</li>
+                </ol>
+            </nav>
+        </div>
+        <a href="{{ url_for('trips_page') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Routes
+        </a>
+    </div>
+</div>
+
+<div class="trip-detail-container" id="tripDetailContainer">
+    <div class="routes-empty-state">
+        <i class="fas fa-spinner fa-spin"></i>
+        <h5>Loading route...</h5>
+    </div>
+</div>
+
+<!-- Confirmation Modal -->
+<div id="confirmModal" class="confirm-modal-overlay" style="display: none;">
+    <div class="confirm-modal-content">
+        <h5 id="confirmModalTitle">Confirm Action</h5>
+        <p id="confirmModalMessage">Are you sure?</p>
+        <div class="confirm-modal-buttons">
+            <button class="btn btn-secondary" onclick="closeConfirmModal(false)">Cancel</button>
+            <button class="btn btn-danger" id="confirmModalOk" onclick="closeConfirmModal(true)">OK</button>
+        </div>
+    </div>
+</div>
+
+<!-- Image Modal -->
+<div id="imageModal" class="image-modal-overlay" style="display: none;" onclick="closeImageModal()">
+    <button class="image-modal-close" onclick="closeImageModal()"><i class="fas fa-times"></i></button>
+    <div class="image-modal-content">
+        <img id="imageModalImg" src="" alt="Full size image">
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry"></script>
+<script>
+let trip = null;
+let map = null;
+let markers = [];
+let directionsService = null;
+let directionsRenderer = null;
+const tripId = '{{ trip_id }}';
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadTripDetails();
+});
+
+async function loadTripDetails() {
+    try {
+        const response = await fetch(`/api/trips/${tripId}`);
+        const data = await response.json();
+
+        if (data.success) {
+            trip = data.trip;
+            // Load notes for each stop
+            await loadStopNotes();
+            renderTripDetails();
+        } else {
+            showError('Failed to load route details');
+        }
+    } catch (error) {
+        console.error('Error loading trip:', error);
+        showError('Error loading route details');
+    }
+}
+
+async function loadStopNotes() {
+    if (!trip.stops) return;
+
+    // Load company notes for each stop that has a company_id
+    await Promise.all(trip.stops.map(async (stop) => {
+        if (stop.company_id) {
+            try {
+                const response = await fetch(`/api/company-note-blocks/${stop.company_id}`);
+                const data = await response.json();
+                if (data.success) {
+                    stop.notes = data.notes || [];
+                }
+            } catch (e) {
+                stop.notes = [];
+            }
+        } else {
+            stop.notes = [];
+        }
+    }));
+}
+
+function renderTripDetails() {
+    const container = document.getElementById('tripDetailContainer');
+    document.getElementById('breadcrumbTripName').textContent = trip.name;
+
+    const isReturnToStart = !trip.end_location || trip.end_location === trip.start_location;
+
+    container.innerHTML = `
+        <!-- Header -->
+        <div class="trip-detail-header">
+            <div class="trip-detail-header-top">
+                <div>
+                    <h1 class="trip-detail-title">${escapeHtml(trip.name)}</h1>
+                    <div class="trip-detail-meta">
+                        <div class="trip-detail-meta-item">
+                            <i class="fas fa-calendar"></i>
+                            <span>${formatDate(trip.trip_date)}</span>
+                        </div>
+                        ${trip.start_time ? `
+                            <div class="trip-detail-meta-item">
+                                <i class="fas fa-clock"></i>
+                                <span>${trip.start_time}</span>
+                            </div>
+                        ` : ''}
+                        ${trip.created_by ? `
+                            <div class="trip-detail-meta-item">
+                                <i class="fas fa-user"></i>
+                                <span>${escapeHtml(trip.created_by)}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                <div class="trip-header-actions">
+                    <span class="trip-status-badge ${trip.status}">${formatStatus(trip.status)}</span>
+                    <button class="btn btn-outline-primary btn-sm" onclick="confirmReoptimize()">
+                        <i class="fas fa-sync-alt me-1"></i>Re-optimize
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="confirmDeleteTrip()">
+                        <i class="fas fa-trash me-1"></i>Delete
+                    </button>
+                </div>
+            </div>
+            <div class="trip-info-cards">
+                <div class="trip-info-card">
+                    <div class="trip-info-card-value">${trip.stops?.length || 0}</div>
+                    <div class="trip-info-card-label">Stops</div>
+                </div>
+                <div class="trip-info-card">
+                    <div class="trip-info-card-value">${trip.total_distance_km || 'N/A'}</div>
+                    <div class="trip-info-card-label">Distance (km)</div>
+                </div>
+                <div class="trip-info-card">
+                    <div class="trip-info-card-value">${trip.estimated_duration_minutes ? Math.round(trip.estimated_duration_minutes / 60 * 10) / 10 + 'h' : 'N/A'}</div>
+                    <div class="trip-info-card-label">Est. Duration</div>
+                </div>
+                <div class="trip-info-card">
+                    <div class="trip-info-card-value">${isReturnToStart ? 'Yes' : 'No'}</div>
+                    <div class="trip-info-card-label">Return to Start</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="trip-detail-content">
+            <!-- Map Section -->
+            <div class="trip-map-section">
+                <div class="trip-map-header">
+                    <h5><i class="fas fa-map me-2"></i>Route Map</h5>
+                    <button class="btn-google-maps" onclick="openInGoogleMaps()">
+                        <i class="fab fa-google"></i>
+                        Open in Google Maps
+                    </button>
+                </div>
+                <div id="tripMap"></div>
+            </div>
+
+            <!-- Stops Section -->
+            <div class="trip-stops-section">
+                <div class="trip-stops-header">
+                    <h5><i class="fas fa-list-ol me-2"></i>Stops (${trip.stops?.length || 0})</h5>
+                </div>
+                <div class="trip-stops-list" id="tripStopsList">
+                    ${renderStopsList()}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Initialize map
+    setTimeout(initializeMap, 100);
+}
+
+function renderStopsList() {
+    let html = '';
+
+    // Start location
+    if (trip.start_location) {
+        html += `
+            <div class="stop-item start-stop">
+                <div class="stop-number start"><i class="fas fa-play" style="font-size: 0.8rem;"></i></div>
+                <div class="stop-content">
+                    <div class="stop-name"><i class="fas fa-flag-checkered me-1"></i>Start</div>
+                    <div class="stop-address">${escapeHtml(trip.start_location)}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Stops
+    if (trip.stops && trip.stops.length > 0) {
+        html += trip.stops.map((stop, index) => `
+            <div class="stop-item">
+                <div class="stop-number">${stop.stop_order}</div>
+                <div class="stop-content">
+                    <div class="stop-name">
+                        ${stop.company_id ? `<a href="/data?company=${stop.company_id}">${escapeHtml(stop.company_name)}</a>` : escapeHtml(stop.company_name)}
+                    </div>
+                    <div class="stop-address">${escapeHtml(stop.address || 'No address')}</div>
+                    ${stop.notes && stop.notes.length > 0 ? renderStopNotes(stop.notes) : ''}
+                </div>
+                <div class="stop-actions">
+                    ${stop.company_id ? `
+                        <button class="stop-action-btn" onclick="window.location='/data?company=${stop.company_id}'" title="View company">
+                            <i class="fas fa-external-link-alt"></i>
+                        </button>
+                    ` : ''}
+                    <button class="stop-action-btn delete" onclick="confirmDeleteStop('${stop.id}', '${escapeHtml(stop.company_name).replace(/'/g, "\\'")}')" title="Remove stop">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        html += '<div class="p-3 text-center text-muted"><p>No stops in this route</p></div>';
+    }
+
+    // End location
+    const endLocation = trip.end_location || trip.start_location;
+    const isReturnToStart = !trip.end_location || trip.end_location === trip.start_location;
+
+    html += `
+        <div class="stop-item end-stop">
+            <div class="stop-number end"><i class="fas fa-flag" style="font-size: 0.8rem;"></i></div>
+            <div class="stop-content">
+                <div class="stop-name"><i class="fas fa-home me-1"></i>${isReturnToStart ? 'Return to Start' : 'End'}</div>
+                <div class="stop-address">${escapeHtml(endLocation || 'Not set')}</div>
+            </div>
+        </div>
+    `;
+
+    return html;
+}
+
+function renderStopNotes(notes) {
+    // Show only first 2 notes
+    const displayNotes = notes.slice(0, 2);
+    const hasMore = notes.length > 2;
+
+    let html = '<div class="stop-notes">';
+    html += '<div class="stop-notes-title"><i class="fas fa-sticky-note me-1"></i>Notes</div>';
+
+    displayNotes.forEach(note => {
+        if (note.note_text) {
+            html += `<p class="mb-1" style="font-size: 0.8rem;">${escapeHtml(note.note_text.substring(0, 100))}${note.note_text.length > 100 ? '...' : ''}</p>`;
+        }
+        if (note.attachments && note.attachments.length > 0) {
+            html += '<div class="stop-images">';
+            note.attachments.slice(0, 3).forEach(att => {
+                html += `<img src="${att.url}" class="stop-image-thumb" onclick="event.stopPropagation(); showImageModal('${att.url}')" alt="${escapeHtml(att.file_name)}">`;
+            });
+            html += '</div>';
+        }
+    });
+
+    if (hasMore) {
+        html += `<small class="text-muted">+${notes.length - 2} more notes</small>`;
+    }
+
+    html += '</div>';
+    return html;
+}
+
+function initializeMap() {
+    if (!trip || !trip.start_lat || !trip.start_lng) return;
+
+    const mapElement = document.getElementById('tripMap');
+    if (!mapElement) return;
+
+    const startLat = parseFloat(trip.start_lat);
+    const startLng = parseFloat(trip.start_lng);
+
+    map = new google.maps.Map(mapElement, {
+        center: { lat: startLat, lng: startLng },
+        zoom: 12,
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: true,
+        styles: [
+            {
+                featureType: 'poi',
+                elementType: 'labels',
+                stylers: [{ visibility: 'off' }]
+            }
+        ]
+    });
+
+    // Clear existing markers
+    markers.forEach(m => m.setMap(null));
+    markers = [];
+
+    // Add start marker
+    const startMarker = new google.maps.Marker({
+        position: { lat: startLat, lng: startLng },
+        map: map,
+        title: 'Start: ' + trip.start_location,
+        label: { text: 'S', color: 'white', fontWeight: 'bold' },
+        icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 12,
+            fillColor: '#10B981',
+            fillOpacity: 1,
+            strokeColor: 'white',
+            strokeWeight: 2
+        }
+    });
+    markers.push(startMarker);
+
+    // Add end marker if different from start
+    const endLat = trip.end_lat ? parseFloat(trip.end_lat) : startLat;
+    const endLng = trip.end_lng ? parseFloat(trip.end_lng) : startLng;
+    const isReturnToStart = !trip.end_lat || (endLat === startLat && endLng === startLng);
+
+    if (!isReturnToStart) {
+        const endMarker = new google.maps.Marker({
+            position: { lat: endLat, lng: endLng },
+            map: map,
+            title: 'End: ' + (trip.end_location || 'End'),
+            label: { text: 'E', color: 'white', fontWeight: 'bold' },
+            icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 12,
+                fillColor: '#EF4444',
+                fillOpacity: 1,
+                strokeColor: 'white',
+                strokeWeight: 2
+            }
+        });
+        markers.push(endMarker);
+    }
+
+    // Add stop markers
+    if (trip.stops) {
+        trip.stops.forEach((stop) => {
+            const marker = new google.maps.Marker({
+                position: {
+                    lat: parseFloat(stop.latitude),
+                    lng: parseFloat(stop.longitude)
+                },
+                map: map,
+                title: stop.company_name,
+                label: {
+                    text: stop.stop_order.toString(),
+                    color: 'white',
+                    fontWeight: 'bold'
+                },
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 10,
+                    fillColor: '#5B5FEF',
+                    fillOpacity: 1,
+                    strokeColor: 'white',
+                    strokeWeight: 2
+                }
+            });
+
+            const infoWindow = new google.maps.InfoWindow({
+                content: `
+                    <div style="padding: 8px;">
+                        <strong>${escapeHtml(stop.company_name)}</strong><br>
+                        <small>${escapeHtml(stop.address || '')}</small>
+                    </div>
+                `
+            });
+
+            marker.addListener('click', () => {
+                infoWindow.open(map, marker);
+            });
+
+            markers.push(marker);
+        });
+    }
+
+    // Draw route
+    drawRoute(startLat, startLng, endLat, endLng, isReturnToStart);
+}
+
+function drawRoute(startLat, startLng, endLat, endLng, isReturnToStart) {
+    if (!map || !trip.stops || trip.stops.length === 0) return;
+
+    if (!directionsService) {
+        directionsService = new google.maps.DirectionsService();
+    }
+
+    if (directionsRenderer) {
+        directionsRenderer.setMap(null);
+    }
+
+    directionsRenderer = new google.maps.DirectionsRenderer({
+        map: map,
+        suppressMarkers: true,
+        polylineOptions: {
+            strokeColor: '#5B5FEF',
+            strokeWeight: 4,
+            strokeOpacity: 0.7
+        }
+    });
+
+    const waypoints = trip.stops.map(stop => ({
+        location: {
+            lat: parseFloat(stop.latitude),
+            lng: parseFloat(stop.longitude)
+        },
+        stopover: true
+    }));
+
+    const maxWaypoints = Math.min(waypoints.length, 23);
+    const waypointsToUse = waypoints.slice(0, maxWaypoints);
+
+    const destination = isReturnToStart
+        ? { lat: startLat, lng: startLng }
+        : { lat: endLat, lng: endLng };
+
+    directionsService.route({
+        origin: { lat: startLat, lng: startLng },
+        destination: destination,
+        waypoints: waypointsToUse,
+        travelMode: google.maps.TravelMode.DRIVING,
+        optimizeWaypoints: false
+    }, (result, status) => {
+        if (status === 'OK') {
+            directionsRenderer.setDirections(result);
+        } else {
+            console.error('Directions request failed:', status);
+        }
+    });
+}
+
+function openInGoogleMaps() {
+    if (!trip || !trip.start_lat) return;
+
+    // Build Google Maps directions URL
+    let url = 'https://www.google.com/maps/dir/';
+
+    // Start
+    url += `${trip.start_lat},${trip.start_lng}/`;
+
+    // Stops
+    if (trip.stops) {
+        trip.stops.forEach(stop => {
+            url += `${stop.latitude},${stop.longitude}/`;
+        });
+    }
+
+    // End (or return to start)
+    if (trip.end_lat && trip.end_lng) {
+        url += `${trip.end_lat},${trip.end_lng}`;
+    } else {
+        url += `${trip.start_lat},${trip.start_lng}`;
+    }
+
+    window.open(url, '_blank');
+}
+
+// Confirmation modal
+let pendingConfirmCallback = null;
+
+function showConfirmModal(title, message, confirmText = 'OK') {
+    return new Promise((resolve) => {
+        document.getElementById('confirmModalTitle').textContent = title;
+        document.getElementById('confirmModalMessage').textContent = message;
+        document.getElementById('confirmModalOk').textContent = confirmText;
+        pendingConfirmCallback = resolve;
+        document.getElementById('confirmModal').style.display = 'flex';
+    });
+}
+
+function closeConfirmModal(result) {
+    document.getElementById('confirmModal').style.display = 'none';
+    if (pendingConfirmCallback) {
+        pendingConfirmCallback(result);
+        pendingConfirmCallback = null;
+    }
+}
+
+async function confirmDeleteStop(stopId, stopName) {
+    const confirmed = await showConfirmModal(
+        'Remove Stop',
+        `Remove "${stopName}" from this route?`,
+        'Remove'
+    );
+
+    if (confirmed) {
+        try {
+            const response = await fetch(`/api/trips/${tripId}/stops/${stopId}`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('Stop removed', 'success');
+                loadTripDetails();
+            } else {
+                showNotification(data.error || 'Failed to remove stop', 'error');
+            }
+        } catch (error) {
+            showNotification('Error removing stop', 'error');
+        }
+    }
+}
+
+async function confirmReoptimize() {
+    const confirmed = await showConfirmModal(
+        'Re-optimize Route',
+        'Re-calculate the optimal route order?',
+        'Optimize'
+    );
+
+    if (confirmed) {
+        try {
+            showNotification('Optimizing...', 'info');
+            const response = await fetch(`/api/trips/${tripId}/optimize`, {
+                method: 'POST'
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('Route optimized!', 'success');
+                loadTripDetails();
+            } else {
+                showNotification(data.error || 'Failed to optimize', 'error');
+            }
+        } catch (error) {
+            showNotification('Error optimizing route', 'error');
+        }
+    }
+}
+
+async function confirmDeleteTrip() {
+    const confirmed = await showConfirmModal(
+        'Delete Route',
+        `Delete "${trip.name}"? This cannot be undone.`,
+        'Delete'
+    );
+
+    if (confirmed) {
+        try {
+            const response = await fetch(`/api/trips/${tripId}`, {
+                method: 'DELETE'
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('Route deleted', 'success');
+                window.location.href = '/trips';
+            } else {
+                showNotification(data.error || 'Failed to delete', 'error');
+            }
+        } catch (error) {
+            showNotification('Error deleting route', 'error');
+        }
+    }
+}
+
+// Image modal
+function showImageModal(url) {
+    document.getElementById('imageModalImg').src = url;
+    document.getElementById('imageModal').style.display = 'flex';
+}
+
+function closeImageModal() {
+    document.getElementById('imageModal').style.display = 'none';
+}
+
+function showError(message) {
+    document.getElementById('tripDetailContainer').innerHTML = `
+        <div class="routes-empty-state">
+            <i class="fas fa-exclamation-circle"></i>
+            <h5>${escapeHtml(message)}</h5>
+            <a href="/trips" class="btn btn-primary mt-3">Back to Routes</a>
+        </div>
+    `;
+}
+
+// Utility functions
+function formatDate(dateString) {
+    if (!dateString) return 'No date';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+}
+
+function formatStatus(status) {
+    const statusMap = {
+        'planned': 'Planned',
+        'in_progress': 'In Progress',
+        'completed': 'Completed'
+    };
+    return statusMap[status] || status;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showNotification(message, type = 'info') {
+    const colors = {
+        success: '#10B981',
+        error: '#EF4444',
+        warning: '#F59E0B',
+        info: '#3B82F6'
+    };
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: white;
+        padding: 16px 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border-left: 4px solid ${colors[type]};
+        z-index: 9999;
+        min-width: 250px;
+        animation: slideIn 0.3s ease;
+    `;
+
+    toast.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="color: ${colors[type]}; font-size: 20px;">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+            </div>
+            <div style="flex: 1; color: #1F2937; font-weight: 500;">${message}</div>
+        </div>
+    `;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+</script>
+
+<style>
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+</style>
+{% endblock %}

@@ -11426,8 +11426,17 @@ def trips_page():
     """Render trips management page"""
     if not is_logged_in():
         return redirect(url_for('index'))
-    
+
     return render_template('trips.html', google_maps_api_key=GOOGLE_MAPS_API_KEY)
+
+
+@app.route('/trips/<trip_id>')
+def trip_detail_page(trip_id):
+    """Render trip detail page"""
+    if not is_logged_in():
+        return redirect(url_for('index'))
+
+    return render_template('trip_detail.html', trip_id=trip_id, google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
 
 @app.route('/api/trips', methods=['GET'])

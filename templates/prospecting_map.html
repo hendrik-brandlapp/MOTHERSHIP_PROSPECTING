@@ -795,6 +795,8 @@ let filteredCustomers = [];
 let googleResults = [];
 let currentTab = 'filter';
 let selectedPlaceForProspect = null;
+let routeLocationData = {}; // Store location data for route buttons
+let routeLocationIndex = 0; // Counter for unique keys
 
 // Cache settings - shared with Companies page
 const CACHE_KEY = 'companies_shared_cache';
@@ -1189,14 +1191,15 @@ function showCustomerInfoWindow(company, marker) {
     ).join(' ') : '';
     const displayName = company.public_name || company.name;
 
-    // Prepare location data for route scheduling
-    const locationData = JSON.stringify({
+    // Store location data for route scheduling (avoids JSON escaping issues)
+    const routeKey = `company_${company.company_id}`;
+    routeLocationData[routeKey] = {
         name: displayName,
         address: company.address?.line1 || company.address?.city || '',
         lat: company.latitude,
         lng: company.longitude,
         company_id: company.company_id
-    }).replace(/'/g, "\\'");
+    };
 
     const content = `
         <div class="info-window">
@@ -1208,7 +1211,7 @@ function showCustomerInfoWindow(company, marker) {
                 <button class="btn-add" onclick="window.location='/data?company=${company.company_id}'">
                     <i class="fas fa-eye"></i> View
                 </button>
-                <button class="btn-add btn-route" onclick="showRouteSelectorModal(JSON.parse('${locationData}'), false)">
+                <button class="btn-add btn-route" onclick="openRouteModal('${routeKey}', false)">
                     <i class="fas fa-route"></i> Route
                 </button>
             </div>
@@ -1443,14 +1446,15 @@ function clearGoogleMarkers() {
 
 // Show Google place info window
 function showGooglePlaceInfoWindow(place, marker, index) {
-    // Prepare location data for route scheduling
-    const locationData = JSON.stringify({
+    // Store location data for route scheduling (avoids JSON escaping issues)
+    const routeKey = `google_${index}`;
+    routeLocationData[routeKey] = {
         name: place.name,
         address: place.formatted_address || place.vicinity || '',
         lat: place.geometry?.location?.lat,
         lng: place.geometry?.location?.lng,
         place_id: place.place_id
-    }).replace(/'/g, "\\'");
+    };
 
     const content = `
         <div class="info-window">
@@ -1461,7 +1465,7 @@ function showGooglePlaceInfoWindow(place, marker, index) {
                 <button class="btn-add" onclick="showAddProspectModal(${index})">
                     <i class="fas fa-plus"></i> Prospect
                 </button>
-                <button class="btn-add btn-route" onclick="showRouteSelectorModal(JSON.parse('${locationData}'), true)">
+                <button class="btn-add btn-route" onclick="openRouteModal('${routeKey}', true)">
                     <i class="fas fa-route"></i> Route
                 </button>
             </div>
@@ -1656,6 +1660,17 @@ function showToast(message, type = 'info') {
 // =====================================================
 
 let selectedRouteLocation = null;
+
+// Open route modal using stored location data (avoids JSON escaping issues in onclick)
+function openRouteModal(routeKey, isGooglePlace) {
+    const location = routeLocationData[routeKey];
+    if (!location) {
+        console.error('Route location not found:', routeKey);
+        showToast('Error: Location data not found', 'error');
+        return;
+    }
+    showRouteSelectorModal(location, isGooglePlace);
+}
 
 // Show route selector modal
 function showRouteSelectorModal(location, isGooglePlace = false) {

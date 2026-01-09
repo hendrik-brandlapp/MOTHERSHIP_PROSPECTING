@@ -1,392 +1,283 @@
 {% extends "base.html" %}
 
-{% block title %}Trips - CRMinal{% endblock %}
+{% block title %}My Routes - CRMinal{% endblock %}
 
 {% block extra_head %}
 <style>
-    /* Trips Page Layout */
-    .trips-container {
-        display: flex;
-        gap: var(--space-lg);
-        height: calc(100vh - 180px);
+    /* Routes Overview Layout */
+    .routes-container {
+        padding: var(--space-lg);
+        max-width: 1400px;
+        margin: 0 auto;
     }
 
-    .trips-list-section {
-        width: 400px;
-        flex-shrink: 0;
+    /* Filter Bar */
+    .routes-filter-bar {
+        display: flex;
+        gap: var(--space-md);
+        margin-bottom: var(--space-lg);
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .filter-group {
         display: flex;
         flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .filter-group label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .filter-group select,
+    .filter-group input {
+        min-width: 150px;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
         background: var(--bg-surface);
+        font-size: 0.875rem;
+    }
+
+    .filter-group input[type="date"] {
+        min-width: 140px;
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: var(--space-sm);
+        margin-left: auto;
+    }
+
+    .btn-clear-filters {
+        padding: 0.5rem 1rem;
+        background: transparent;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+    }
+
+    .btn-clear-filters:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+
+    /* Routes Grid */
+    .routes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: var(--space-lg);
+    }
+
+    /* Route Card */
+    .route-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
         border-radius: var(--radius-lg);
-        border: 1px solid var(--border-subtle);
+        padding: var(--space-lg);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
         overflow: hidden;
     }
 
-    .trips-list-header {
-        padding: var(--space-lg);
-        border-bottom: 1px solid var(--border-subtle);
-    }
-
-    .trips-list-body {
-        flex: 1;
-        overflow-y: auto;
-        padding: var(--space-md);
-    }
-
-    .trip-card {
-        background: var(--bg-surface);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-        padding: var(--space-md);
-        margin-bottom: var(--space-sm);
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-
-    .trip-card:hover {
+    .route-card:hover {
         border-color: var(--accent);
-        box-shadow: var(--shadow-sm);
+        box-shadow: var(--shadow-md);
         transform: translateY(-2px);
     }
 
-    .trip-card.active {
-        border-color: var(--accent);
-        background: var(--accent-subtle);
-    }
-
-    .trip-card-header {
+    .route-card-header {
         display: flex;
         justify-content: space-between;
-        align-items: start;
-        margin-bottom: var(--space-sm);
+        align-items: flex-start;
+        margin-bottom: var(--space-md);
     }
 
-    .trip-name {
+    .route-card-title {
+        font-size: 1.125rem;
         font-weight: 600;
         color: var(--text-primary);
-        margin-bottom: 0.25rem;
+        margin: 0 0 0.25rem 0;
     }
 
-    .trip-date {
+    .route-card-date {
         font-size: 0.875rem;
         color: var(--text-secondary);
         display: flex;
         align-items: center;
-        gap: 0.25rem;
+        gap: 0.375rem;
     }
 
-    .trip-status-badge {
-        padding: 0.25rem 0.625rem;
+    .route-status-badge {
+        padding: 0.25rem 0.75rem;
         border-radius: var(--radius-full);
         font-size: 0.75rem;
         font-weight: 600;
+        text-transform: uppercase;
     }
 
-    .trip-status-badge.planned {
+    .route-status-badge.planned {
         background: var(--info-bg);
         color: var(--info);
     }
 
-    .trip-status-badge.in_progress {
+    .route-status-badge.in_progress {
         background: var(--warning-bg);
         color: var(--warning);
     }
 
-    .trip-status-badge.completed {
+    .route-status-badge.completed {
         background: var(--success-bg);
         color: var(--success);
     }
 
-    .trip-meta {
-        display: flex;
-        gap: var(--space-md);
-        font-size: 0.875rem;
-        color: var(--text-secondary);
-        margin-top: var(--space-sm);
+    .route-card-body {
+        border-top: 1px solid var(--border-subtle);
+        padding-top: var(--space-md);
     }
 
-    .trip-meta-item {
+    .route-meta-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    .route-meta-row i {
+        width: 20px;
+        color: var(--text-muted);
+    }
+
+    .route-meta-row strong {
+        color: var(--text-primary);
+    }
+
+    .route-stops-preview {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: var(--space-md);
+    }
+
+    .stop-preview-chip {
+        background: var(--bg-primary);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-full);
+        padding: 0.25rem 0.625rem;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
         display: flex;
         align-items: center;
         gap: 0.25rem;
     }
 
-    /* Trip Details Section */
-    .trip-details-section {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        background: var(--bg-surface);
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--border-subtle);
-        overflow: hidden;
-    }
-
-    .trip-details-header {
-        padding: var(--space-lg);
-        border-bottom: 1px solid var(--border-subtle);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .trip-details-body {
-        flex: 1;
-        display: flex;
-        overflow: hidden;
-    }
-
-    .trip-map-container {
-        flex: 1;
-        position: relative;
-    }
-
-    #tripMap {
-        width: 100%;
-        height: 100%;
-    }
-
-    .trip-stops-sidebar {
-        width: 350px;
-        border-left: 1px solid var(--border-subtle);
-        overflow-y: auto;
-        background: var(--bg-primary);
-    }
-
-    .trip-stops-header {
-        padding: var(--space-md);
-        background: var(--bg-surface);
-        border-bottom: 1px solid var(--border-subtle);
-        position: sticky;
-        top: 0;
-        z-index: 10;
-    }
-
-    .trip-stop-item {
-        padding: var(--space-md);
-        border-bottom: 1px solid var(--border-subtle);
-        display: flex;
-        gap: var(--space-sm);
-        transition: all 0.2s ease;
-        background: var(--bg-surface);
-    }
-
-    .trip-stop-item:hover {
-        background: var(--bg-hover);
-    }
-    
-    .trip-stop-item.sortable-ghost {
-        opacity: 0.4;
-        background: var(--accent-subtle);
-    }
-    
-    .trip-stop-item.sortable-drag {
-        background: var(--bg-surface);
-        box-shadow: var(--shadow-lg);
-        border-radius: var(--radius-md);
-    }
-    
-    .stop-drag-handle {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 24px;
-        color: var(--text-muted);
-        cursor: grab;
-        flex-shrink: 0;
-    }
-    
-    .stop-drag-handle:active {
-        cursor: grabbing;
-    }
-    
-    .stop-drag-handle:hover {
-        color: var(--text-secondary);
-    }
-
-    .stop-number {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
+    .stop-preview-chip .stop-num {
         background: var(--accent);
         color: white;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
+        font-size: 0.625rem;
         font-weight: 600;
-        font-size: 0.875rem;
-        flex-shrink: 0;
     }
 
-    .stop-content {
-        flex: 1;
-        min-width: 0;
-    }
-
-    .stop-name {
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 0.25rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .stop-name-link {
-        font-weight: 600;
+    .more-stops-chip {
+        background: var(--accent-subtle);
         color: var(--accent);
-        margin-bottom: 0.25rem;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        text-decoration: none;
-        display: block;
-        cursor: pointer;
+        border-color: var(--accent);
     }
 
-    .stop-name-link:hover {
-        color: var(--accent-dark, #3730A3);
-        text-decoration: underline;
-    }
-
-    .stop-address {
-        font-size: 0.8125rem;
-        color: var(--text-secondary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .stop-actions {
-        display: flex;
-        gap: 0.25rem;
-        flex-shrink: 0;
-    }
-
-    .stop-action-btn {
-        width: 28px;
-        height: 28px;
-        border-radius: var(--radius-sm);
-        border: none;
-        background: transparent;
-        color: var(--text-secondary);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-
-    .stop-action-btn:hover {
-        background: var(--bg-active);
-        color: var(--text-primary);
-    }
-
-    .stop-action-btn.delete:hover {
-        background: var(--danger-bg);
-        color: var(--danger);
-    }
-
-    .empty-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        padding: var(--space-2xl);
+    /* Empty State */
+    .routes-empty-state {
         text-align: center;
+        padding: var(--space-2xl);
         color: var(--text-secondary);
     }
 
-    .empty-state i {
+    .routes-empty-state i {
         font-size: 4rem;
         margin-bottom: var(--space-lg);
         opacity: 0.3;
     }
 
-    .trip-info-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: var(--space-md);
+    .routes-empty-state h5 {
+        margin-bottom: var(--space-sm);
+        color: var(--text-primary);
+    }
+
+    /* Quick Stats */
+    .routes-stats {
+        display: flex;
+        gap: var(--space-lg);
+        margin-bottom: var(--space-lg);
+        flex-wrap: wrap;
+    }
+
+    .stat-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
         padding: var(--space-lg);
-        background: var(--bg-primary);
-        border-bottom: 1px solid var(--border-subtle);
+        flex: 1;
+        min-width: 200px;
     }
 
-    .trip-info-item {
-        text-align: center;
-    }
-
-    .trip-info-value {
-        font-size: 1.5rem;
+    .stat-card-value {
+        font-size: 2rem;
         font-weight: 700;
         color: var(--text-primary);
         font-family: 'Inter Tight', sans-serif;
     }
 
-    .trip-info-label {
+    .stat-card-label {
         font-size: 0.875rem;
         color: var(--text-secondary);
         margin-top: 0.25rem;
     }
 
-    /* Filter bar */
-    .filter-bar {
-        display: flex;
-        gap: var(--space-sm);
-        margin-bottom: var(--space-md);
-    }
-
-    .filter-bar select,
-    .filter-bar input {
-        flex: 1;
-    }
-
-    /* Confirmation Modal */
-    .confirm-modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
+    .stat-card-icon {
+        float: right;
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-md);
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 10000;
+        font-size: 1.25rem;
     }
 
-    .confirm-modal-content {
-        background: white;
-        padding: 24px;
-        border-radius: 12px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
-        max-width: 400px;
-        width: 90%;
+    .stat-card-icon.routes {
+        background: var(--accent-subtle);
+        color: var(--accent);
     }
 
-    .confirm-modal-content h5 {
-        margin: 0 0 12px 0;
-        font-weight: 600;
-        color: var(--text-primary);
+    .stat-card-icon.stops {
+        background: var(--info-bg);
+        color: var(--info);
     }
 
-    .confirm-modal-content p {
-        margin: 0 0 20px 0;
-        color: var(--text-secondary);
-        line-height: 1.5;
+    .stat-card-icon.upcoming {
+        background: var(--warning-bg);
+        color: var(--warning);
     }
 
-    .confirm-modal-buttons {
-        display: flex;
-        gap: 12px;
-        justify-content: flex-end;
-    }
-
-    .confirm-modal-buttons .btn {
-        padding: 8px 20px;
-        border-radius: 8px;
-        font-weight: 500;
+    .stat-card-icon.completed {
+        background: var(--success-bg);
+        color: var(--success);
     }
 </style>
 {% endblock %}
@@ -395,801 +286,297 @@
 <div class="page-header">
     <div class="d-flex justify-content-between align-items-center">
         <div>
-            <h1 class="page-title">Trips</h1>
-            <p class="page-subtitle">Manage and visualize your optimized routes</p>
+            <h1 class="page-title">My Routes</h1>
+            <p class="page-subtitle">View and manage your planned visits</p>
         </div>
-        <div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('prospecting_map') }}" class="btn btn-outline-primary">
+                <i class="fas fa-map-marked-alt me-2"></i>Prospecting Map
+            </a>
             <a href="{{ url_for('planning') }}" class="btn btn-primary">
-                <i class="fas fa-plus me-2"></i>Create New Trip
+                <i class="fas fa-plus me-2"></i>Create New Route
             </a>
         </div>
     </div>
 </div>
 
-<div class="trips-container">
-    <!-- Trips List -->
-    <div class="trips-list-section">
-        <div class="trips-list-header">
-            <h5 class="mb-3">Your Trips</h5>
-            <div class="filter-bar">
-                <select class="form-select form-select-sm" id="statusFilter" onchange="filterTrips()">
-                    <option value="">All Statuses</option>
-                    <option value="planned">Planned</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                </select>
-            </div>
+<div class="routes-container">
+    <!-- Quick Stats -->
+    <div class="routes-stats" id="routeStats">
+        <div class="stat-card">
+            <div class="stat-card-icon routes"><i class="fas fa-route"></i></div>
+            <div class="stat-card-value" id="totalRoutes">-</div>
+            <div class="stat-card-label">Total Routes</div>
         </div>
-        <div class="trips-list-body" id="tripsList">
-            <div class="empty-state">
-                <i class="fas fa-map-marked-alt"></i>
-                <h5>No trips yet</h5>
-                <p>Create your first trip from the Planning page</p>
-            </div>
+        <div class="stat-card">
+            <div class="stat-card-icon stops"><i class="fas fa-map-marker-alt"></i></div>
+            <div class="stat-card-value" id="totalStops">-</div>
+            <div class="stat-card-label">Total Stops</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-icon upcoming"><i class="fas fa-calendar-alt"></i></div>
+            <div class="stat-card-value" id="upcomingRoutes">-</div>
+            <div class="stat-card-label">Upcoming</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-card-icon completed"><i class="fas fa-check-circle"></i></div>
+            <div class="stat-card-value" id="completedRoutes">-</div>
+            <div class="stat-card-label">Completed</div>
         </div>
     </div>
 
-    <!-- Trip Details -->
-    <div class="trip-details-section" id="tripDetailsSection">
-        <div class="empty-state">
-            <i class="fas fa-route"></i>
-            <h5>Select a trip</h5>
-            <p>Choose a trip from the list to view details and route</p>
+    <!-- Filter Bar -->
+    <div class="routes-filter-bar">
+        <div class="filter-group">
+            <label>Status</label>
+            <select id="statusFilter" onchange="filterRoutes()">
+                <option value="">All Statuses</option>
+                <option value="planned">Planned</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Salesperson</label>
+            <select id="salespersonFilter" onchange="filterRoutes()">
+                <option value="">All Salespeople</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>From Date</label>
+            <input type="date" id="dateFromFilter" onchange="filterRoutes()">
+        </div>
+        <div class="filter-group">
+            <label>To Date</label>
+            <input type="date" id="dateToFilter" onchange="filterRoutes()">
+        </div>
+        <div class="filter-group">
+            <label>Region</label>
+            <select id="regionFilter" onchange="filterRoutes()">
+                <option value="">All Regions</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button class="btn-clear-filters" onclick="clearFilters()">
+                <i class="fas fa-times me-1"></i>Clear Filters
+            </button>
         </div>
     </div>
-</div>
 
-<!-- Confirmation Modal -->
-<div id="confirmModal" class="confirm-modal-overlay" style="display: none;">
-    <div class="confirm-modal-content">
-        <h5 id="confirmModalTitle">Confirm Action</h5>
-        <p id="confirmModalMessage">Are you sure?</p>
-        <div class="confirm-modal-buttons">
-            <button id="confirmModalCancel" class="btn btn-secondary" onclick="closeConfirmModal(false)">Cancel</button>
-            <button id="confirmModalOk" class="btn btn-primary" onclick="closeConfirmModal(true)">OK</button>
+    <!-- Routes Grid -->
+    <div class="routes-grid" id="routesGrid">
+        <div class="routes-empty-state">
+            <i class="fas fa-spinner fa-spin"></i>
+            <h5>Loading routes...</h5>
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- Google Maps API -->
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=geometry"></script>
-<!-- SortableJS for drag and drop -->
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-
 <script>
-let trips = [];
-let selectedTrip = null;
-let map = null;
-let directionsService = null;
-let directionsRenderer = null;
-let markers = [];
+let allRoutes = [];
+let filteredRoutes = [];
 
-// Load trips on page load
+// Load routes on page load
 document.addEventListener('DOMContentLoaded', function() {
-    loadTrips();
+    loadRoutes();
 });
 
-async function loadTrips() {
+async function loadRoutes() {
     try {
         const response = await fetch('/api/trips');
         const data = await response.json();
-        
+
         if (data.success) {
-            trips = data.trips;
-            renderTripsList();
-            
-            // Check for trip ID in URL query params
-            const urlParams = new URLSearchParams(window.location.search);
-            const tripId = urlParams.get('trip');
-            if (tripId) {
-                // Select the trip from URL
-                selectTrip(tripId);
-            }
+            allRoutes = data.trips || [];
+
+            // Load stops for each trip
+            await Promise.all(allRoutes.map(async (route) => {
+                try {
+                    const detailResponse = await fetch(`/api/trips/${route.id}`);
+                    const detailData = await detailResponse.json();
+                    if (detailData.success) {
+                        route.stops = detailData.trip.stops || [];
+                    }
+                } catch (e) {
+                    route.stops = [];
+                }
+            }));
+
+            populateFilters();
+            updateStats();
+            filterRoutes();
         } else {
-            showNotification('Failed to load trips', 'error');
+            showEmptyState('Failed to load routes');
         }
     } catch (error) {
-        console.error('Error loading trips:', error);
-        showNotification('Error loading trips', 'error');
+        console.error('Error loading routes:', error);
+        showEmptyState('Error loading routes');
     }
 }
 
-function renderTripsList() {
-    const tripsList = document.getElementById('tripsList');
-    
-    if (trips.length === 0) {
-        tripsList.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-map-marked-alt"></i>
-                <h5>No trips yet</h5>
-                <p>Create your first trip from the Planning page</p>
+function populateFilters() {
+    // Populate salespeople dropdown
+    const salespeople = [...new Set(allRoutes.map(r => r.created_by).filter(Boolean))];
+    const salespersonSelect = document.getElementById('salespersonFilter');
+    salespeople.forEach(sp => {
+        const option = document.createElement('option');
+        option.value = sp;
+        option.textContent = sp;
+        salespersonSelect.appendChild(option);
+    });
+
+    // Populate regions dropdown (extract from start_location)
+    const regions = [...new Set(allRoutes.map(r => {
+        if (r.start_location) {
+            const parts = r.start_location.split(',');
+            if (parts.length >= 2) {
+                return parts[parts.length - 2].trim();
+            }
+        }
+        return null;
+    }).filter(Boolean))];
+
+    const regionSelect = document.getElementById('regionFilter');
+    regions.sort().forEach(region => {
+        const option = document.createElement('option');
+        option.value = region;
+        option.textContent = region;
+        regionSelect.appendChild(option);
+    });
+}
+
+function updateStats() {
+    const today = new Date().toISOString().split('T')[0];
+
+    document.getElementById('totalRoutes').textContent = allRoutes.length;
+    document.getElementById('totalStops').textContent = allRoutes.reduce((sum, r) => sum + (r.stops?.length || 0), 0);
+    document.getElementById('upcomingRoutes').textContent = allRoutes.filter(r => r.trip_date >= today && r.status !== 'completed').length;
+    document.getElementById('completedRoutes').textContent = allRoutes.filter(r => r.status === 'completed').length;
+}
+
+function filterRoutes() {
+    const status = document.getElementById('statusFilter').value;
+    const salesperson = document.getElementById('salespersonFilter').value;
+    const dateFrom = document.getElementById('dateFromFilter').value;
+    const dateTo = document.getElementById('dateToFilter').value;
+    const region = document.getElementById('regionFilter').value;
+
+    filteredRoutes = allRoutes.filter(route => {
+        if (status && route.status !== status) return false;
+        if (salesperson && route.created_by !== salesperson) return false;
+        if (dateFrom && route.trip_date < dateFrom) return false;
+        if (dateTo && route.trip_date > dateTo) return false;
+        if (region && route.start_location && !route.start_location.includes(region)) return false;
+        return true;
+    });
+
+    // Sort by date descending
+    filteredRoutes.sort((a, b) => {
+        if (a.trip_date === b.trip_date) return 0;
+        return a.trip_date > b.trip_date ? -1 : 1;
+    });
+
+    renderRoutes();
+}
+
+function clearFilters() {
+    document.getElementById('statusFilter').value = '';
+    document.getElementById('salespersonFilter').value = '';
+    document.getElementById('dateFromFilter').value = '';
+    document.getElementById('dateToFilter').value = '';
+    document.getElementById('regionFilter').value = '';
+    filterRoutes();
+}
+
+function renderRoutes() {
+    const grid = document.getElementById('routesGrid');
+
+    if (filteredRoutes.length === 0) {
+        grid.innerHTML = `
+            <div class="routes-empty-state" style="grid-column: 1 / -1;">
+                <i class="fas fa-route"></i>
+                <h5>No routes found</h5>
+                <p>Create a new route from the Prospecting Map or adjust your filters</p>
             </div>
         `;
         return;
     }
-    
-    const statusFilter = document.getElementById('statusFilter').value;
-    const filteredTrips = statusFilter ? trips.filter(t => t.status === statusFilter) : trips;
-    
-    if (filteredTrips.length === 0) {
-        tripsList.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-filter"></i>
-                <h5>No matching trips</h5>
-                <p>Try adjusting your filters</p>
-            </div>
-        `;
-        return;
-    }
-    
-    tripsList.innerHTML = filteredTrips.map(trip => `
-        <div class="trip-card ${selectedTrip && selectedTrip.id === trip.id ? 'active' : ''}" onclick="selectTrip('${trip.id}')">
-            <div class="trip-card-header">
+
+    grid.innerHTML = filteredRoutes.map(route => `
+        <div class="route-card" onclick="viewRoute('${route.id}')">
+            <div class="route-card-header">
                 <div>
-                    <div class="trip-name">${escapeHtml(trip.name)}</div>
-                    <div class="trip-date">
+                    <h5 class="route-card-title">${escapeHtml(route.name)}</h5>
+                    <div class="route-card-date">
                         <i class="fas fa-calendar"></i>
-                        ${formatDate(trip.trip_date)} at ${trip.start_time}
+                        ${formatDate(route.trip_date)}
+                        ${route.start_time ? `<span class="ms-2"><i class="fas fa-clock"></i> ${route.start_time}</span>` : ''}
                     </div>
                 </div>
-                <span class="trip-status-badge ${trip.status}">${formatStatus(trip.status)}</span>
+                <span class="route-status-badge ${route.status}">${formatStatus(route.status)}</span>
             </div>
-            <div class="trip-meta">
-                <div class="trip-meta-item">
+            <div class="route-card-body">
+                ${route.created_by ? `
+                    <div class="route-meta-row">
+                        <i class="fas fa-user"></i>
+                        <span>${escapeHtml(route.created_by)}</span>
+                    </div>
+                ` : ''}
+                <div class="route-meta-row">
                     <i class="fas fa-map-marker-alt"></i>
-                    <span id="stopCount-${trip.id}">Loading...</span>
+                    <strong>${route.stops?.length || 0}</strong> stops
+                    ${route.total_distance_km ? `<span class="ms-3"><i class="fas fa-road"></i> ${route.total_distance_km} km</span>` : ''}
                 </div>
-                <div class="trip-meta-item">
-                    <i class="fas fa-road"></i>
-                    ${trip.total_distance_km ? trip.total_distance_km + ' km' : 'N/A'}
-                </div>
+                ${route.start_location ? `
+                    <div class="route-meta-row">
+                        <i class="fas fa-play-circle"></i>
+                        <span class="text-truncate">${escapeHtml(route.start_location.substring(0, 40))}${route.start_location.length > 40 ? '...' : ''}</span>
+                    </div>
+                ` : ''}
+                ${route.stops && route.stops.length > 0 ? `
+                    <div class="route-stops-preview">
+                        ${route.stops.slice(0, 3).map((stop, i) => `
+                            <div class="stop-preview-chip">
+                                <span class="stop-num">${i + 1}</span>
+                                ${escapeHtml((stop.company_name || 'Stop').substring(0, 15))}${(stop.company_name || '').length > 15 ? '...' : ''}
+                            </div>
+                        `).join('')}
+                        ${route.stops.length > 3 ? `
+                            <div class="stop-preview-chip more-stops-chip">
+                                +${route.stops.length - 3} more
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
             </div>
         </div>
     `).join('');
-    
-    // Load stop counts for each trip
-    filteredTrips.forEach(trip => {
-        loadTripStopCount(trip.id);
-    });
 }
 
-async function loadTripStopCount(tripId) {
-    try {
-        const response = await fetch(`/api/trips/${tripId}`);
-        const data = await response.json();
-        
-        if (data.success && data.trip.stops) {
-            const element = document.getElementById(`stopCount-${tripId}`);
-            if (element) {
-                element.textContent = `${data.trip.stops.length} stops`;
-            }
-        }
-    } catch (error) {
-        console.error('Error loading trip stop count:', error);
-    }
+function viewRoute(routeId) {
+    window.location.href = `/trips/${routeId}`;
 }
 
-function filterTrips() {
-    renderTripsList();
-}
-
-async function selectTrip(tripId) {
-    try {
-        const response = await fetch(`/api/trips/${tripId}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            selectedTrip = data.trip;
-            renderTripsList(); // Re-render to update active state
-            renderTripDetails();
-        } else {
-            showNotification('Failed to load trip details', 'error');
-        }
-    } catch (error) {
-        console.error('Error loading trip details:', error);
-        showNotification('Error loading trip details', 'error');
-    }
-}
-
-function renderTripDetails() {
-    if (!selectedTrip) return;
-    
-    const detailsSection = document.getElementById('tripDetailsSection');
-    
-    // Determine if end location is different from start
-    const hasEndLocation = selectedTrip.end_location && selectedTrip.end_location !== selectedTrip.start_location;
-    
-    detailsSection.innerHTML = `
-        <div class="trip-details-header">
-            <div>
-                <h4>${escapeHtml(selectedTrip.name)}</h4>
-                <small class="text-muted">
-                    <i class="fas fa-calendar me-1"></i>${formatDate(selectedTrip.trip_date)}
-                    <i class="fas fa-clock ms-2 me-1"></i>${selectedTrip.start_time}
-                </small>
-                <div class="mt-1">
-                    <small class="text-muted">
-                        <i class="fas fa-play-circle text-success me-1"></i>Start: ${escapeHtml(selectedTrip.start_location || 'Not set')}
-                        ${hasEndLocation ? `<span class="mx-2">→</span><i class="fas fa-stop-circle text-danger me-1"></i>End: ${escapeHtml(selectedTrip.end_location)}` : '<span class="mx-2">↺</span><span class="text-info">Return to start</span>'}
-                    </small>
-                </div>
-            </div>
-            <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-outline-primary" onclick="confirmReoptimize('${selectedTrip.id}')">
-                    <i class="fas fa-sync-alt me-1"></i>Re-optimize
-                </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="confirmDeleteTrip('${selectedTrip.id}', '${escapeHtml(selectedTrip.name).replace(/'/g, "\\'")}')">
-                    <i class="fas fa-trash me-1"></i>Delete
-                </button>
-            </div>
-        </div>
-        
-        <div class="trip-info-grid">
-            <div class="trip-info-item">
-                <div class="trip-info-value">${selectedTrip.stops ? selectedTrip.stops.length : 0}</div>
-                <div class="trip-info-label">Stops</div>
-            </div>
-            <div class="trip-info-item">
-                <div class="trip-info-value">${selectedTrip.total_distance_km || 'N/A'}</div>
-                <div class="trip-info-label">Total Distance (km)</div>
-            </div>
-            <div class="trip-info-item">
-                <div class="trip-info-value">${selectedTrip.estimated_duration_minutes ? Math.round(selectedTrip.estimated_duration_minutes / 60 * 10) / 10 + 'h' : 'N/A'}</div>
-                <div class="trip-info-label">Est. Duration</div>
-            </div>
-            <div class="trip-info-item">
-                <div class="trip-info-value">
-                    <span class="trip-status-badge ${selectedTrip.status}">${formatStatus(selectedTrip.status)}</span>
-                </div>
-                <div class="trip-info-label">Status</div>
-            </div>
-        </div>
-        
-        <div class="trip-details-body">
-            <div class="trip-map-container">
-                <div id="tripMap"></div>
-            </div>
-            <div class="trip-stops-sidebar">
-                <div class="trip-stops-header">
-                    <h6 class="mb-0">
-                        <i class="fas fa-list me-2"></i>Route Stops
-                    </h6>
-                </div>
-                <div id="tripStopsList">
-                    ${renderStopsList()}
-                </div>
-            </div>
+function showEmptyState(message) {
+    document.getElementById('routesGrid').innerHTML = `
+        <div class="routes-empty-state" style="grid-column: 1 / -1;">
+            <i class="fas fa-exclamation-circle"></i>
+            <h5>${escapeHtml(message)}</h5>
         </div>
     `;
-    
-    // Initialize the map
-    initializeTripMap();
-    
-    // Initialize drag and drop for stops
-    setTimeout(() => initSortable(), 100);
-}
-
-function renderStopsList() {
-    let html = '';
-    
-    // Start location
-    if (selectedTrip && selectedTrip.start_location) {
-        html += `
-            <div class="trip-stop-item start-location" style="background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%); border-left: 4px solid #28a745;">
-                <div class="stop-number" style="background: #28a745;">
-                    <i class="fas fa-play" style="font-size: 0.7rem;"></i>
-                </div>
-                <div class="stop-content">
-                    <div class="stop-name" style="color: #155724; font-weight: 600;">
-                        <i class="fas fa-flag-checkered me-1"></i>Start
-                    </div>
-                    <div class="stop-address">${escapeHtml(selectedTrip.start_location)}</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Stops
-    if (!selectedTrip || !selectedTrip.stops || selectedTrip.stops.length === 0) {
-        html += '<div class="empty-state p-3 text-center text-muted"><p>No stops in this trip</p></div>';
-    } else {
-        html += selectedTrip.stops.map((stop, index) => `
-            <div class="trip-stop-item" data-stop-id="${stop.id}" data-stop-order="${stop.stop_order}">
-                <div class="stop-drag-handle" title="Drag to reorder">
-                    <i class="fas fa-grip-vertical"></i>
-                </div>
-                <div class="stop-number">${stop.stop_order}</div>
-                <div class="stop-content">
-                    <a href="/data?company=${stop.company_id}&name=${encodeURIComponent(stop.company_name)}" class="stop-name-link" title="View company details">
-                        ${escapeHtml(stop.company_name)}
-                    </a>
-                    <div class="stop-address">${escapeHtml(stop.address || 'No address')}</div>
-                </div>
-                <div class="stop-actions">
-                    <button class="stop-action-btn delete" onclick="event.stopPropagation(); confirmDeleteStop('${selectedTrip.id}', '${stop.id}', '${escapeHtml(stop.company_name).replace(/'/g, "\\'")}')" title="Remove stop">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </div>
-        `).join('');
-    }
-    
-    // End location
-    if (selectedTrip) {
-        const endLocation = selectedTrip.end_location || selectedTrip.start_location;
-        const isReturnToStart = !selectedTrip.end_location || selectedTrip.end_location === selectedTrip.start_location;
-        
-        html += `
-            <div class="trip-stop-item end-location" style="background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%); border-left: 4px solid #dc3545;">
-                <div class="stop-number" style="background: #dc3545;">
-                    <i class="fas fa-flag" style="font-size: 0.7rem;"></i>
-                </div>
-                <div class="stop-content">
-                    <div class="stop-name" style="color: #721c24; font-weight: 600;">
-                        <i class="fas fa-home me-1"></i>${isReturnToStart ? 'Return to Start' : 'End'}
-                    </div>
-                    <div class="stop-address">${escapeHtml(endLocation || 'Not set')}</div>
-                </div>
-            </div>
-        `;
-    }
-    
-    return html;
-}
-
-let sortableInstance = null;
-
-function initSortable() {
-    const stopsList = document.getElementById('tripStopsList');
-    if (!stopsList || !selectedTrip) return;
-    
-    // Destroy existing instance
-    if (sortableInstance) {
-        sortableInstance.destroy();
-    }
-    
-    sortableInstance = new Sortable(stopsList, {
-        animation: 150,
-        handle: '.stop-drag-handle',
-        ghostClass: 'sortable-ghost',
-        dragClass: 'sortable-drag',
-        onEnd: async function(evt) {
-            if (evt.oldIndex === evt.newIndex) return;
-            
-            // Get the new order
-            const items = stopsList.querySelectorAll('.trip-stop-item');
-            const newOrder = Array.from(items).map((item, index) => ({
-                id: item.dataset.stopId,
-                order: index + 1
-            }));
-            
-            // Update the stop numbers visually
-            items.forEach((item, index) => {
-                const numberEl = item.querySelector('.stop-number');
-                if (numberEl) {
-                    numberEl.textContent = index + 1;
-                }
-            });
-            
-            // Save new order to server
-            try {
-                const response = await fetch(`/api/trips/${selectedTrip.id}/reorder`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ stops: newOrder })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showNotification('Stop order updated', 'success');
-                    // Reload trip to get updated route
-                    await selectTrip(selectedTrip.id);
-                } else {
-                    showNotification('Failed to update order', 'error');
-                    // Reload to restore original order
-                    await selectTrip(selectedTrip.id);
-                }
-            } catch (error) {
-                console.error('Error reordering stops:', error);
-                showNotification('Error updating order', 'error');
-                await selectTrip(selectedTrip.id);
-            }
-        }
-    });
-}
-
-function initializeTripMap() {
-    if (!selectedTrip || !selectedTrip.stops) return;
-    
-    const mapElement = document.getElementById('tripMap');
-    if (!mapElement) return;
-    
-    // Initialize Google Maps
-    const startLat = parseFloat(selectedTrip.start_lat);
-    const startLng = parseFloat(selectedTrip.start_lng);
-    
-    map = new google.maps.Map(mapElement, {
-        center: { lat: startLat, lng: startLng },
-        zoom: 12,
-        mapTypeControl: true,
-        streetViewControl: false,
-        fullscreenControl: true,
-        styles: [
-            {
-                featureType: 'poi',
-                elementType: 'labels',
-                stylers: [{ visibility: 'off' }]
-            }
-        ]
-    });
-    
-    // Clear existing markers
-    markers.forEach(marker => marker.setMap(null));
-    markers = [];
-    
-    // Add start location marker
-    const startMarker = new google.maps.Marker({
-        position: { lat: startLat, lng: startLng },
-        map: map,
-        title: selectedTrip.start_location,
-        label: {
-            text: 'S',
-            color: 'white',
-            fontWeight: 'bold'
-        },
-        icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor: '#10B981',
-            fillOpacity: 1,
-            strokeColor: 'white',
-            strokeWeight: 2
-        }
-    });
-    markers.push(startMarker);
-    
-    // Add end location marker (if different from start)
-    const endLat = selectedTrip.end_lat ? parseFloat(selectedTrip.end_lat) : startLat;
-    const endLng = selectedTrip.end_lng ? parseFloat(selectedTrip.end_lng) : startLng;
-    const isReturnToStart = !selectedTrip.end_lat || (endLat === startLat && endLng === startLng);
-    
-    if (!isReturnToStart) {
-        // Show separate end marker only if different from start
-        const endMarker = new google.maps.Marker({
-            position: { lat: endLat, lng: endLng },
-            map: map,
-            title: selectedTrip.end_location || 'End',
-            label: {
-                text: 'E',
-                color: 'white',
-                fontWeight: 'bold'
-            },
-            icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 12,
-                fillColor: '#EF4444',
-                fillOpacity: 1,
-                strokeColor: 'white',
-                strokeWeight: 2
-            }
-        });
-        markers.push(endMarker);
-    }
-    
-    // Add stop markers
-    selectedTrip.stops.forEach((stop, index) => {
-        const marker = new google.maps.Marker({
-            position: {
-                lat: parseFloat(stop.latitude),
-                lng: parseFloat(stop.longitude)
-            },
-            map: map,
-            title: stop.company_name,
-            label: {
-                text: stop.stop_order.toString(),
-                color: 'white',
-                fontWeight: 'bold'
-            },
-            icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 10,
-                fillColor: '#5B5FEF',
-                fillOpacity: 1,
-                strokeColor: 'white',
-                strokeWeight: 2
-            }
-        });
-        
-        // Add info window
-        const infoWindow = new google.maps.InfoWindow({
-            content: `
-                <div style="padding: 8px;">
-                    <strong>${escapeHtml(stop.company_name)}</strong><br>
-                    <small>${escapeHtml(stop.address || '')}</small>
-                </div>
-            `
-        });
-        
-        marker.addListener('click', () => {
-            infoWindow.open(map, marker);
-        });
-        
-        markers.push(marker);
-    });
-    
-    // Draw route using DirectionsService
-    drawRoute();
-}
-
-function drawRoute() {
-    if (!map || !selectedTrip || !selectedTrip.stops || selectedTrip.stops.length === 0) return;
-    
-    // Initialize directions service
-    if (!directionsService) {
-        directionsService = new google.maps.DirectionsService();
-    }
-    
-    if (directionsRenderer) {
-        directionsRenderer.setMap(null);
-    }
-    
-    directionsRenderer = new google.maps.DirectionsRenderer({
-        map: map,
-        suppressMarkers: true, // We're using custom markers
-        polylineOptions: {
-            strokeColor: '#5B5FEF',
-            strokeWeight: 4,
-            strokeOpacity: 0.7
-        }
-    });
-    
-    // Build waypoints
-    const waypoints = selectedTrip.stops.map(stop => ({
-        location: {
-            lat: parseFloat(stop.latitude),
-            lng: parseFloat(stop.longitude)
-        },
-        stopover: true
-    }));
-    
-    // If we have waypoints, request directions
-    if (waypoints.length > 0) {
-        const startLocation = {
-            lat: parseFloat(selectedTrip.start_lat),
-            lng: parseFloat(selectedTrip.start_lng)
-        };
-        
-        // Determine end location - use end_lat/end_lng if available, otherwise return to start
-        let endLocation;
-        if (selectedTrip.end_lat && selectedTrip.end_lng) {
-            endLocation = {
-                lat: parseFloat(selectedTrip.end_lat),
-                lng: parseFloat(selectedTrip.end_lng)
-            };
-        } else {
-            // Return to start
-            endLocation = startLocation;
-        }
-        
-        // Google Maps Directions API allows max 25 waypoints (23 + origin + destination)
-        // If more waypoints, we need to split the request or use alternative approach
-        const maxWaypoints = Math.min(waypoints.length, 23);
-        const waypointsToUse = waypoints.slice(0, maxWaypoints);
-        
-        directionsService.route({
-            origin: startLocation,
-            destination: endLocation, // Return to start or end location
-            waypoints: waypointsToUse, // All stops as waypoints
-            travelMode: google.maps.TravelMode.DRIVING,
-            optimizeWaypoints: false // Already optimized by our TSP algorithm
-        }, (result, status) => {
-            if (status === 'OK') {
-                directionsRenderer.setDirections(result);
-            } else {
-                console.error('Directions request failed:', status);
-                // Fall back to drawing straight lines
-                drawStraightLines();
-            }
-        });
-    }
-}
-
-function drawStraightLines() {
-    // Fallback: draw straight lines between points
-    if (!selectedTrip || !selectedTrip.stops) return;
-    
-    const pathCoordinates = [
-        { lat: parseFloat(selectedTrip.start_lat), lng: parseFloat(selectedTrip.start_lng) }
-    ];
-    
-    selectedTrip.stops.forEach(stop => {
-        pathCoordinates.push({
-            lat: parseFloat(stop.latitude),
-            lng: parseFloat(stop.longitude)
-        });
-    });
-    
-    const path = new google.maps.Polyline({
-        path: pathCoordinates,
-        geodesic: true,
-        strokeColor: '#5B5FEF',
-        strokeOpacity: 0.7,
-        strokeWeight: 3,
-        map: map
-    });
-}
-
-// Confirmation modal system
-let pendingConfirmCallback = null;
-
-function showConfirmModal(title, message, confirmText = 'OK', cancelText = 'Cancel') {
-    return new Promise((resolve) => {
-        const modal = document.getElementById('confirmModal');
-        document.getElementById('confirmModalTitle').textContent = title;
-        document.getElementById('confirmModalMessage').textContent = message;
-        document.getElementById('confirmModalOk').textContent = confirmText;
-        document.getElementById('confirmModalCancel').textContent = cancelText;
-        
-        pendingConfirmCallback = resolve;
-        modal.style.display = 'flex';
-    });
-}
-
-function closeConfirmModal(result) {
-    const modal = document.getElementById('confirmModal');
-    modal.style.display = 'none';
-    if (pendingConfirmCallback) {
-        pendingConfirmCallback(result);
-        pendingConfirmCallback = null;
-    }
-}
-
-async function confirmDeleteStop(tripId, stopId, companyName) {
-    const confirmed = await showConfirmModal(
-        'Remove Stop',
-        `Are you sure you want to remove "${companyName}" from this trip?`,
-        'Remove',
-        'Cancel'
-    );
-    
-    if (confirmed) {
-        await deleteStop(tripId, stopId);
-    }
-}
-
-async function deleteStop(tripId, stopId) {
-    try {
-        const response = await fetch(`/api/trips/${tripId}/stops/${stopId}`, {
-            method: 'DELETE'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification('Stop removed successfully', 'success');
-            
-            // Reload trip details and re-optimize the route
-            await selectTrip(tripId);
-            
-            // Auto re-optimize if there are still stops
-            if (selectedTrip && selectedTrip.stops && selectedTrip.stops.length > 1) {
-                showNotification('Re-optimizing route...', 'info');
-                await reoptimizeTripSilent(tripId);
-            }
-        } else {
-            showNotification(data.error || 'Failed to remove stop', 'error');
-        }
-    } catch (error) {
-        console.error('Error deleting stop:', error);
-        showNotification('Error removing stop', 'error');
-    }
-}
-
-async function reoptimizeTripSilent(tripId) {
-    try {
-        const response = await fetch(`/api/trips/${tripId}/optimize`, {
-            method: 'POST'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification('Route re-optimized!', 'success');
-            await selectTrip(tripId);
-        }
-    } catch (error) {
-        console.error('Error re-optimizing:', error);
-    }
-}
-
-async function confirmDeleteTrip(tripId, tripName) {
-    const confirmed = await showConfirmModal(
-        'Delete Trip',
-        `Are you sure you want to delete "${tripName}"? This action cannot be undone.`,
-        'Delete',
-        'Cancel'
-    );
-    
-    if (confirmed) {
-        await deleteTrip(tripId);
-    }
-}
-
-async function deleteTrip(tripId) {
-    try {
-        const response = await fetch(`/api/trips/${tripId}`, {
-            method: 'DELETE'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification('Trip deleted successfully', 'success');
-            selectedTrip = null;
-            await loadTrips();
-            
-            // Show empty state
-            document.getElementById('tripDetailsSection').innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-route"></i>
-                    <h5>Select a trip</h5>
-                    <p>Choose a trip from the list to view details and route</p>
-                </div>
-            `;
-        } else {
-            showNotification(data.error || 'Failed to delete trip', 'error');
-        }
-    } catch (error) {
-        console.error('Error deleting trip:', error);
-        showNotification('Error deleting trip', 'error');
-    }
-}
-
-async function confirmReoptimize(tripId) {
-    const confirmed = await showConfirmModal(
-        'Re-optimize Route',
-        'Re-optimize this trip? The route will be recalculated to minimize distance.',
-        'Optimize',
-        'Cancel'
-    );
-    
-    if (confirmed) {
-        await reoptimizeTrip(tripId);
-    }
-}
-
-async function reoptimizeTrip(tripId) {
-    try {
-        showNotification('Optimizing route...', 'info');
-        const response = await fetch(`/api/trips/${tripId}/optimize`, {
-            method: 'POST'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showNotification('Trip re-optimized successfully!', 'success');
-            // Reload trip details
-            await selectTrip(tripId);
-        } else {
-            showNotification(data.error || 'Failed to re-optimize trip', 'error');
-        }
-    } catch (error) {
-        console.error('Error re-optimizing trip:', error);
-        showNotification('Error re-optimizing trip', 'error');
-    }
 }
 
 // Utility functions
 function formatDate(dateString) {
+    if (!dateString) return 'No date';
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
     });
 }
 
@@ -1203,75 +590,10 @@ function formatStatus(status) {
 }
 
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
-
-function showNotification(message, type = 'info') {
-    const colors = {
-        success: '#10B981',
-        error: '#EF4444',
-        warning: '#F59E0B',
-        info: '#3B82F6'
-    };
-    
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: white;
-        padding: 16px 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        border-left: 4px solid ${colors[type]};
-        z-index: 9999;
-        min-width: 300px;
-        animation: slideIn 0.3s ease;
-    `;
-    
-    toast.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="color: ${colors[type]}; font-size: 20px;">
-                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-            </div>
-            <div style="flex: 1; color: #1F2937; font-weight: 500;">${message}</div>
-        </div>
-    `;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
 </script>
-
-<style>
-@keyframes slideIn {
-    from {
-        transform: translateX(400px);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes slideOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    to {
-        transform: translateX(400px);
-        opacity: 0;
-    }
-}
-</style>
 {% endblock %}
-
