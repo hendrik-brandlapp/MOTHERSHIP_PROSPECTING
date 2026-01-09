@@ -11,6 +11,7 @@ import os
 import time
 from datetime import datetime, timedelta
 import json
+import math
 from dotenv import load_dotenv
 
 try:
@@ -1643,20 +1644,37 @@ def api_places_search():
         if not query:
             return jsonify({'error': 'Search query is required'}), 400
 
-        # Calculate center from bounds
+        # Calculate center and radius from bounds
         if bounds:
-            lat = (bounds.get('north', 50.85) + bounds.get('south', 50.85)) / 2
-            lng = (bounds.get('east', 4.35) + bounds.get('west', 4.35)) / 2
+            north = bounds.get('north', 50.85)
+            south = bounds.get('south', 50.85)
+            east = bounds.get('east', 4.35)
+            west = bounds.get('west', 4.35)
+
+            lat = (north + south) / 2
+            lng = (east + west) / 2
             location = f"{lat},{lng}"
+
+            # Calculate radius based on bounds (distance from center to edge)
+            # Using Haversine approximation: 1 degree lat ≈ 111km, 1 degree lng ≈ 111km * cos(lat)
+            lat_diff = (north - south) / 2
+            lng_diff = (east - west) / 2
+            lat_dist = lat_diff * 111000  # meters
+            lng_dist = lng_diff * 111000 * math.cos(math.radians(lat))  # meters
+
+            # Use the larger dimension to cover visible area (max 50km)
+            radius = min(max(lat_dist, lng_dist), 50000)
+            radius = max(radius, 500)  # Minimum 500m radius
         else:
             location = "50.8503,4.3517"  # Belgium default
+            radius = 15000
 
         # Use Google Places Text Search API
         url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
         params = {
             'query': query,
             'location': location,
-            'radius': 15000,  # 15km radius
+            'radius': int(radius),
             'key': GOOGLE_MAPS_API_KEY
         }
 
