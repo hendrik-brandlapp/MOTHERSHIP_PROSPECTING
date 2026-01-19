@@ -46,6 +46,11 @@
                             title="Refresh All Company Addresses from Duano">
                         <i class="fas fa-map-marker-alt"></i>
                     </button>
+                    <button class="btn btn-modern btn-outline-secondary" onclick="refreshInvoiceAddresses()"
+                            data-bs-toggle="tooltip" data-bs-placement="bottom"
+                            title="Refresh Invoice Delivery Addresses from Duano">
+                        <i class="fas fa-truck"></i>
+                    </button>
                     {% endif %}
                     <button class="btn btn-modern-primary" onclick="forceRefreshData()" 
                             data-bs-toggle="tooltip" data-bs-placement="bottom" 
@@ -2861,6 +2866,102 @@ async function refreshCompanyAddresses() {
         if (totalUpdated > 0) {
             clearCache();
             setTimeout(() => loadData(true), 2000);
+        }
+
+    } catch (error) {
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+async function refreshInvoiceAddresses() {
+    try {
+        document.getElementById('sync-status').style.display = 'block';
+        document.getElementById('sync-results').style.display = 'none';
+
+        let totalUpdated = 0;
+        let totalErrors = 0;
+        let totalSkipped = 0;
+        const batchSize = 50;
+        const years = ['2024', '2025', '2026'];
+        let totalAddressesFetched = 0;
+
+        for (const year of years) {
+            let batchStart = 0;
+            let isComplete = false;
+
+            while (!isComplete) {
+                document.getElementById('sync-message').textContent =
+                    `Refreshing invoice addresses for ${year}... (processed ${batchStart} invoices)`;
+
+                const response = await fetch(`/api/refresh-invoice-addresses?year=${year}&start=${batchStart}&batch_size=${batchSize}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || `Failed to refresh ${year} addresses`);
+                }
+
+                totalUpdated += result.updated || 0;
+                totalErrors += result.errors || 0;
+                totalSkipped += result.skipped || 0;
+                totalAddressesFetched += result.addresses_fetched || 0;
+                isComplete = result.complete;
+
+                if (result.next_batch_start) {
+                    batchStart = result.next_batch_start;
+                } else {
+                    isComplete = true;
+                }
+
+                // Small delay between batches
+                if (!isComplete) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+        }
+
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+
+        const alertClass = totalErrors > 0 ? 'alert-warning' : 'alert-success';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert ${alertClass}">
+                <h5><i class="fas fa-truck me-2"></i>Invoice Address Refresh Complete!</h5>
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <strong>Addresses Fetched:</strong> ${totalAddressesFetched}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Invoices Updated:</strong> <span class="text-success">${totalUpdated}</span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Skipped:</strong> <span class="text-muted">${totalSkipped}</span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Errors:</strong> <span class="text-danger">${totalErrors}</span>
+                    </div>
+                </div>
+                <p class="mt-3 mb-0">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Delivery addresses have been added to invoices for 2024, 2025, and 2026. Refresh to see updated data.
+                </p>
+            </div>
+        `;
+
+        if (totalUpdated > 0) {
+            clearCache();
         }
 
     } catch (error) {

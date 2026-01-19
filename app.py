@@ -8486,16 +8486,40 @@ def api_company_invoices(company_id):
                     invoice_data = {}
 
             # Get delivery address from invoice data
+            # Priority: delivery_address (enriched) > address.full_details > address
             delivery_address = None
-            address_data = invoice_data.get('address') or invoice_data.get('delivery_address') or invoice_data.get('shipping_address')
-            if address_data:
-                if isinstance(address_data, dict):
+
+            # First try the enriched delivery_address we added
+            if invoice_data.get('delivery_address') and isinstance(invoice_data.get('delivery_address'), dict):
+                addr = invoice_data['delivery_address']
+                delivery_address = {
+                    'name': addr.get('name', ''),
+                    'street': addr.get('address_line1') or addr.get('street', ''),
+                    'city': addr.get('city', ''),
+                    'post_code': addr.get('post_code', ''),
+                    'country': addr.get('country', {}).get('name') if isinstance(addr.get('country'), dict) else addr.get('country', '')
+                }
+            # Then try address with full_details
+            elif invoice_data.get('address') and isinstance(invoice_data.get('address'), dict):
+                addr = invoice_data['address']
+                # Check for full_details first (enriched data)
+                if addr.get('full_details') and isinstance(addr.get('full_details'), dict):
+                    details = addr['full_details']
                     delivery_address = {
-                        'name': address_data.get('name', ''),
-                        'street': address_data.get('address_line1') or address_data.get('street', ''),
-                        'city': address_data.get('city', ''),
-                        'post_code': address_data.get('post_code', ''),
-                        'country': address_data.get('country', {}).get('name') if isinstance(address_data.get('country'), dict) else address_data.get('country', '')
+                        'name': details.get('name', addr.get('name', '')),
+                        'street': details.get('address_line1') or details.get('street', ''),
+                        'city': details.get('city', ''),
+                        'post_code': details.get('post_code', ''),
+                        'country': details.get('country', {}).get('name') if isinstance(details.get('country'), dict) else details.get('country', '')
+                    }
+                else:
+                    # Use basic address info
+                    delivery_address = {
+                        'name': addr.get('name', ''),
+                        'street': addr.get('address_line1') or addr.get('street', ''),
+                        'city': addr.get('city', ''),
+                        'post_code': addr.get('post_code', ''),
+                        'country': addr.get('country', {}).get('name') if isinstance(addr.get('country'), dict) else addr.get('country', '')
                     }
 
             processed_invoices.append({
@@ -10694,6 +10718,163 @@ def api_refresh_company_addresses():
 
     except Exception as e:
         print(f"❌ Error refreshing company addresses: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/refresh-invoice-addresses', methods=['POST'])
+def api_refresh_invoice_addresses():
+    """Refresh delivery addresses for invoices from Duano API.
+    Fetches full address details for each invoice's address.id.
+    Admin only - requires DUANO authentication.
+    """
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get parameters
+        year = request.args.get('year', '2025')
+        batch_start = int(request.args.get('start', 0))
+        batch_size = int(request.args.get('batch_size', 50))
+
+        if year not in ['2024', '2025', '2026']:
+            return jsonify({'error': 'Invalid year. Use 2024, 2025, or 2026'}), 400
+
+        table_name = f'sales_{year}'
+        print(f"🔍 Fetching invoices from {table_name} (offset {batch_start}, limit {batch_size})...")
+
+        # Get invoices from database
+        result = supabase_client.table(table_name).select(
+            'id, invoice_id, invoice_number, invoice_data'
+        ).range(batch_start, batch_start + batch_size - 1).execute()
+
+        invoices = result.data
+        print(f"📊 Found {len(invoices)} invoices in this batch")
+
+        if not invoices:
+            return jsonify({
+                'success': True,
+                'message': 'No more invoices to process',
+                'updated': 0,
+                'errors': 0,
+                'complete': True
+            })
+
+        # Build address lookup - collect unique address IDs first
+        address_ids = set()
+        for invoice in invoices:
+            inv_data = invoice.get('invoice_data', {})
+            if isinstance(inv_data, str):
+                try:
+                    import json
+                    inv_data = json.loads(inv_data)
+                except:
+                    continue
+
+            # Check for address.id in invoice data
+            address = inv_data.get('address')
+            if address and isinstance(address, dict) and address.get('id'):
+                address_ids.add(address['id'])
+
+        print(f"📍 Found {len(address_ids)} unique address IDs to fetch")
+
+        # Fetch address details from Duano API
+        address_lookup = {}
+        for i, address_id in enumerate(address_ids):
+            try:
+                # Rate limiting
+                if i > 0 and i % 20 == 0:
+                    time.sleep(0.3)
+
+                addr_response, addr_error = make_api_request(f'/api/public/v1/core/addresses/{address_id}')
+
+                if addr_response and not addr_error:
+                    addr_data = addr_response.get('result', {})
+                    if addr_data:
+                        address_lookup[address_id] = addr_data
+                        print(f"  ✅ Fetched address {address_id}: {addr_data.get('name', addr_data.get('city', 'Unknown'))}")
+
+            except Exception as e:
+                print(f"  ❌ Error fetching address {address_id}: {e}")
+
+        print(f"📍 Successfully fetched {len(address_lookup)} address details")
+
+        # Update invoices with address details
+        updated_count = 0
+        error_count = 0
+        skipped_count = 0
+
+        for invoice in invoices:
+            try:
+                inv_data = invoice.get('invoice_data', {})
+                if isinstance(inv_data, str):
+                    try:
+                        import json
+                        inv_data = json.loads(inv_data)
+                    except:
+                        skipped_count += 1
+                        continue
+
+                address = inv_data.get('address')
+                if not address or not isinstance(address, dict) or not address.get('id'):
+                    skipped_count += 1
+                    continue
+
+                address_id = address['id']
+                if address_id not in address_lookup:
+                    skipped_count += 1
+                    continue
+
+                # Enrich the address with full details
+                full_address = address_lookup[address_id]
+                inv_data['address']['full_details'] = full_address
+                inv_data['delivery_address'] = {
+                    'id': address_id,
+                    'name': full_address.get('name', ''),
+                    'address_line1': full_address.get('address_line1', ''),
+                    'address_line2': full_address.get('address_line2', ''),
+                    'city': full_address.get('city', ''),
+                    'post_code': full_address.get('post_code', ''),
+                    'country': full_address.get('country', {}),
+                    'address_type': full_address.get('address_type', {})
+                }
+
+                # Update the invoice in database
+                supabase_client.table(table_name).update({
+                    'invoice_data': inv_data
+                }).eq('id', invoice['id']).execute()
+
+                updated_count += 1
+
+            except Exception as e:
+                print(f"❌ Error updating invoice {invoice.get('invoice_id')}: {e}")
+                error_count += 1
+
+        # Check if there are more invoices to process
+        next_batch_start = batch_start + batch_size
+        total_check = supabase_client.table(table_name).select('id', count='exact').execute()
+        total_invoices = total_check.count if hasattr(total_check, 'count') else len(total_check.data)
+        is_complete = next_batch_start >= total_invoices
+
+        return jsonify({
+            'success': True,
+            'message': f'Updated {updated_count} invoices with delivery addresses',
+            'year': year,
+            'batch_start': batch_start,
+            'batch_size': len(invoices),
+            'addresses_fetched': len(address_lookup),
+            'updated': updated_count,
+            'skipped': skipped_count,
+            'errors': error_count,
+            'next_batch_start': next_batch_start if not is_complete else None,
+            'complete': is_complete,
+            'total_invoices': total_invoices
+        })
+
+    except Exception as e:
+        print(f"❌ Error refreshing invoice addresses: {e}")
         return jsonify({'error': str(e)}), 500
 
 
