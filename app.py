@@ -12678,6 +12678,141 @@ def geocode_all_companies():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/geocode-delivery-addresses', methods=['POST'])
+def geocode_delivery_addresses():
+    """Geocode all delivery addresses in the addresses JSONB column.
+    This adds lat/lng to each address object for map features.
+    """
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+
+        # Import geocoding function
+        try:
+            from geocode_companies import geocode_address_mapbox
+        except ImportError as e:
+            return jsonify({'error': f'Geocoding module not available: {str(e)}'}), 500
+
+        # Get batch parameters
+        batch_start = int(request.args.get('start', 0))
+        batch_size = int(request.args.get('batch_size', 10))
+        skip_geocoded = request.args.get('skip_geocoded', 'true').lower() == 'true'
+
+        print(f"🗺️ Geocoding delivery addresses (offset {batch_start}, limit {batch_size})...")
+
+        # Fetch companies with addresses
+        result = supabase_client.table('companies').select(
+            'id, company_id, name, addresses'
+        ).not_.is_('addresses', 'null').range(batch_start, batch_start + batch_size - 1).execute()
+
+        companies = result.data
+        print(f"📊 Found {len(companies)} companies with addresses in this batch")
+
+        if not companies:
+            return jsonify({
+                'success': True,
+                'message': 'No more companies to process',
+                'geocoded': 0,
+                'skipped': 0,
+                'errors': 0,
+                'complete': True
+            })
+
+        geocoded_count = 0
+        skipped_count = 0
+        error_count = 0
+        addresses_processed = 0
+
+        for company in companies:
+            addresses = company.get('addresses', [])
+            if not addresses or not isinstance(addresses, list):
+                continue
+
+            updated = False
+            for addr in addresses:
+                if not isinstance(addr, dict):
+                    continue
+
+                # Skip if already geocoded
+                if skip_geocoded and addr.get('latitude') and addr.get('longitude'):
+                    skipped_count += 1
+                    continue
+
+                # Build address string
+                parts = [
+                    addr.get('address_line1') or addr.get('street'),
+                    addr.get('city'),
+                    addr.get('post_code'),
+                    addr.get('country', {}).get('name') if isinstance(addr.get('country'), dict) else addr.get('country')
+                ]
+                address_str = ', '.join([str(p) for p in parts if p])
+
+                if not address_str or len(address_str) < 10:
+                    skipped_count += 1
+                    continue
+
+                # Rate limiting
+                time.sleep(0.15)  # ~6 requests per second
+
+                # Geocode
+                try:
+                    result = geocode_address_mapbox(address_str, 'BE')
+                    if result:
+                        lat, lng, quality = result
+                        addr['latitude'] = lat
+                        addr['longitude'] = lng
+                        addr['geocoding_quality'] = quality
+                        addr['geocoded_at'] = datetime.now().isoformat()
+                        geocoded_count += 1
+                        updated = True
+                        print(f"  ✅ {addr.get('name', 'Address')}: {lat}, {lng}")
+                    else:
+                        error_count += 1
+                        print(f"  ❌ Failed to geocode: {address_str[:50]}")
+                except Exception as e:
+                    error_count += 1
+                    print(f"  ❌ Error geocoding: {e}")
+
+                addresses_processed += 1
+
+            # Update company with geocoded addresses
+            if updated:
+                try:
+                    supabase_client.table('companies').update({
+                        'addresses': addresses
+                    }).eq('id', company['id']).execute()
+                except Exception as e:
+                    print(f"  ❌ Error saving addresses for {company['name']}: {e}")
+
+        # Check if complete
+        total_check = supabase_client.table('companies').select('id', count='exact').not_.is_('addresses', 'null').execute()
+        total_companies = total_check.count if hasattr(total_check, 'count') else 0
+        next_batch = batch_start + batch_size
+        is_complete = next_batch >= total_companies
+
+        return jsonify({
+            'success': True,
+            'message': f'Geocoded {geocoded_count} addresses',
+            'batch_start': batch_start,
+            'geocoded': geocoded_count,
+            'skipped': skipped_count,
+            'errors': error_count,
+            'addresses_processed': addresses_processed,
+            'next_batch_start': next_batch if not is_complete else None,
+            'complete': is_complete,
+            'total_companies_with_addresses': total_companies
+        })
+
+    except Exception as e:
+        print(f"❌ Error geocoding delivery addresses: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/trips/<trip_id>', methods=['PUT'])
 def update_trip(trip_id):
     """Update trip details"""
