@@ -10423,6 +10423,108 @@ def api_sync_missing_companies():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/update-empty-categories', methods=['POST'])
+def api_update_empty_categories():
+    """Update companies that have empty categories in the database.
+    Fetches current categories from Duano API.
+    Admin only - requires DUANO authentication.
+    """
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        print("🔍 Finding companies with empty categories...")
+
+        # Find companies with empty or null company_categories
+        result = supabase_client.table('companies').select(
+            'company_id, name, company_categories'
+        ).execute()
+
+        companies_to_update = []
+        for company in result.data:
+            cats = company.get('company_categories')
+            # Check for empty, null, or empty array
+            if not cats or cats == [] or cats == 'null':
+                companies_to_update.append(company)
+
+        print(f"🎯 Companies with empty categories: {len(companies_to_update)}")
+
+        if not companies_to_update:
+            return jsonify({
+                'success': True,
+                'message': 'No companies with empty categories found!',
+                'updated': 0,
+                'errors': 0
+            })
+
+        # Update categories from Duano API
+        print(f"🚀 Updating {len(companies_to_update)} companies from DOUANO API...")
+
+        updated_count = 0
+        error_count = 0
+        failed_companies = []
+
+        for i, company in enumerate(companies_to_update):
+            company_id = company['company_id']
+
+            try:
+                # Minimal rate limiting
+                if i > 0 and i % 25 == 0:
+                    time.sleep(0.5)
+
+                # Fetch from DOUANO API
+                company_response, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+
+                if error or not company_response:
+                    print(f"❌ Failed to fetch company {company_id}: {error}")
+                    error_count += 1
+                    failed_companies.append({'id': company_id, 'name': company['name'], 'error': str(error)[:100]})
+                    continue
+
+                company_data = company_response.get('result', {})
+                if not company_data:
+                    error_count += 1
+                    failed_companies.append({'id': company_id, 'name': company['name'], 'error': 'No data'})
+                    continue
+
+                # Get categories from API response
+                new_categories = company_data.get('company_categories', [])
+
+                # Update the database
+                update_data = {
+                    'company_categories': new_categories,
+                    'raw_company_data': company_data,
+                    'updated_at': datetime.now().isoformat()
+                }
+
+                supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
+
+                cat_names = [c.get('name', c) for c in new_categories] if new_categories else []
+                print(f"✅ Updated {company['name']}: {cat_names}")
+                updated_count += 1
+
+            except Exception as e:
+                print(f"❌ Error updating company {company_id}: {e}")
+                error_count += 1
+                failed_companies.append({'id': company_id, 'name': company['name'], 'error': str(e)[:100]})
+
+        return jsonify({
+            'success': True,
+            'message': f'Updated {updated_count} companies with categories',
+            'total_empty': len(companies_to_update),
+            'updated': updated_count,
+            'errors': error_count,
+            'failed_companies': failed_companies[:20]
+        })
+
+    except Exception as e:
+        print(f"❌ Error updating empty categories: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/populate-companies', methods=['POST'])
 def api_populate_companies():
     """Populate companies table from invoice data across all years.
