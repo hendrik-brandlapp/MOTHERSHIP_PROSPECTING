@@ -23,6 +23,12 @@
 
         <!-- Filter Panel -->
         <div class="tab-content" id="filter-panel">
+            <!-- Focus Banner (shown when company selected) -->
+            <div class="focus-banner" id="focusBanner" style="display:none">
+                <span><i class="fas fa-crosshairs me-2"></i>Viewing: <strong id="focusedCompanyName">Company</strong></span>
+                <button onclick="clearCompanyFocus()"><i class="fas fa-times me-1"></i>Show All</button>
+            </div>
+
             <!-- Stats Bar -->
             <div class="stats-bar">
                 <span class="stats-text">
@@ -579,6 +585,37 @@
         border-left: 3px solid var(--primary-color);
     }
 
+    .result-item.focused {
+        background: linear-gradient(to right, var(--primary-soft), white);
+        border-left: 4px solid var(--primary-color);
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+    }
+
+    .focus-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .focus-banner button {
+        background: rgba(255,255,255,0.2);
+        border: none;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        cursor: pointer;
+    }
+
+    .focus-banner button:hover {
+        background: rgba(255,255,255,0.3);
+    }
+
     .result-item-header {
         display: flex;
         justify-content: space-between;
@@ -1051,6 +1088,7 @@ let selectedPlaceForProspect = null;
 let routeLocationData = {}; // Store location data for route buttons
 let routeLocationIndex = 0; // Counter for unique keys
 let showDeliveryAddresses = true; // Toggle for delivery address markers
+let focusedCompanyId = null; // Currently focused company (null = show all)
 
 // Cache settings - shared with Companies page
 const CACHE_KEY = 'companies_shared_cache';
@@ -1343,6 +1381,12 @@ function filterCustomers() {
 
 // Clear all filters
 function clearAllFilters() {
+    // Clear focus if any
+    if (focusedCompanyId) {
+        focusedCompanyId = null;
+        document.getElementById('focusBanner').style.display = 'none';
+    }
+
     document.getElementById('customerSearch').value = '';
     selectedCategory = '';
     document.getElementById('categoryTriggerText').textContent = 'All categories';
@@ -1396,7 +1440,12 @@ function updateCustomerMarkers() {
     const bounds = new google.maps.LatLngBounds();
     let validCount = 0;
 
-    filteredCustomers.forEach(company => {
+    // Determine which companies to show
+    const companiesToShow = focusedCompanyId
+        ? filteredCustomers.filter(c => c.company_id === focusedCompanyId)
+        : filteredCustomers;
+
+    companiesToShow.forEach(company => {
         const lat = parseFloat(company.latitude);
         const lng = parseFloat(company.longitude);
 
@@ -1407,20 +1456,22 @@ function updateCustomerMarkers() {
         bounds.extend(position);
 
         const hasAlerts = company.alerts && company.alerts.length > 0;
+        const isFocused = focusedCompanyId === company.company_id;
 
-        // Create marker
+        // Create marker - larger when focused
         const displayName = company.public_name || company.name;
         const marker = new google.maps.Marker({
             position,
             icon: {
                 path: google.maps.SymbolPath.CIRCLE,
-                scale: 10,
+                scale: isFocused ? 14 : 10,
                 fillColor: hasAlerts ? '#dc3545' : '#10b981',
                 fillOpacity: 1,
-                strokeColor: 'white',
-                strokeWeight: 2
+                strokeColor: isFocused ? '#000' : 'white',
+                strokeWeight: isFocused ? 3 : 2
             },
-            title: displayName
+            title: displayName,
+            zIndex: isFocused ? 1000 : 1
         });
 
         marker.addListener('click', () => {
@@ -1443,19 +1494,25 @@ function updateCustomerMarkers() {
                 const addrPosition = { lat: addrLat, lng: addrLng };
                 bounds.extend(addrPosition);
 
+                // Delivery markers - larger square markers with truck icon simulation
                 const addrMarker = new google.maps.Marker({
                     position: addrPosition,
                     map: map,
                     icon: {
-                        path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-                        scale: 6,
+                        path: 'M-8,-8 L8,-8 L8,8 L-8,8 Z', // Square shape
+                        scale: 1,
                         fillColor: '#6366f1',
-                        fillOpacity: 0.9,
-                        strokeColor: 'white',
-                        strokeWeight: 1.5,
-                        rotation: 0
+                        fillOpacity: 1,
+                        strokeColor: '#fff',
+                        strokeWeight: 2,
+                        anchor: new google.maps.Point(0, 0)
                     },
-                    title: `${displayName} - Delivery`
+                    label: {
+                        text: '📦',
+                        fontSize: '14px'
+                    },
+                    title: `${displayName} - Delivery`,
+                    zIndex: isFocused ? 999 : 2
                 });
 
                 addrMarker.addListener('click', () => {
@@ -1616,8 +1673,9 @@ function updateCustomerList() {
         const locationText = getCompanyLocation(company);
         const deliveryCount = (company.addresses && Array.isArray(company.addresses)) ? company.addresses.filter(a => a.latitude && a.longitude).length : 0;
 
+        const isFocused = focusedCompanyId === company.company_id;
         return `
-            <div class="result-item" onclick="focusCustomer(${company.company_id})">
+            <div class="result-item ${isFocused ? 'focused' : ''}" data-company-id="${company.company_id}" onclick="focusCustomer(${company.company_id})">
                 <div class="result-item-header">
                     <h6 class="result-item-name">${escapeHtml(displayName)}</h6>
                     <span class="result-item-badge ${badgeClass}">${badgeText}</span>
@@ -1645,16 +1703,78 @@ function focusCustomer(companyId) {
     const company = filteredCustomers.find(c => c.company_id === companyId);
     if (!company || !company.latitude || !company.longitude) return;
 
-    map.setCenter({ lat: parseFloat(company.latitude), lng: parseFloat(company.longitude) });
-    map.setZoom(15);
+    // Set focused company
+    focusedCompanyId = companyId;
+
+    // Show focus banner
+    const displayName = company.public_name || company.name;
+    document.getElementById('focusBanner').style.display = 'flex';
+    document.getElementById('focusedCompanyName').textContent = displayName;
+
+    // Rebuild markers to show only this company
+    updateCustomerMarkers();
+    updateDeliveryStats();
+
+    // Fit bounds to show all locations for this company
+    const bounds = new google.maps.LatLngBounds();
+    bounds.extend({ lat: parseFloat(company.latitude), lng: parseFloat(company.longitude) });
+
+    // Include delivery addresses in bounds
+    if (company.addresses && Array.isArray(company.addresses)) {
+        company.addresses.forEach(addr => {
+            if (addr.latitude && addr.longitude) {
+                bounds.extend({ lat: parseFloat(addr.latitude), lng: parseFloat(addr.longitude) });
+            }
+        });
+    }
+
+    map.fitBounds(bounds, { padding: 100 });
+    if (map.getZoom() > 16) map.setZoom(16);
 
     // Find and click the marker
-    const displayName = company.public_name || company.name;
-    const marker = customerMarkers.find(m =>
-        m.getTitle() === displayName
-    );
+    const marker = customerMarkers.find(m => m.getTitle() === displayName);
     if (marker) {
         showCustomerInfoWindow(company, marker);
+    }
+
+    // Update sidebar to highlight selected
+    updateCustomerListHighlight(companyId);
+}
+
+// Clear focus and show all companies
+function clearCompanyFocus() {
+    focusedCompanyId = null;
+
+    // Hide focus banner
+    document.getElementById('focusBanner').style.display = 'none';
+
+    updateCustomerMarkers();
+    updateCustomerListHighlight(null);
+    updateDeliveryStats();
+
+    // Fit to all markers
+    const bounds = new google.maps.LatLngBounds();
+    filteredCustomers.forEach(company => {
+        if (company.latitude && company.longitude) {
+            bounds.extend({ lat: parseFloat(company.latitude), lng: parseFloat(company.longitude) });
+        }
+    });
+    if (!bounds.isEmpty()) {
+        map.fitBounds(bounds, { padding: 50 });
+        if (map.getZoom() > 14) map.setZoom(14);
+    }
+}
+
+// Update sidebar highlight
+function updateCustomerListHighlight(companyId) {
+    document.querySelectorAll('.result-item').forEach(item => {
+        item.classList.remove('focused');
+    });
+    if (companyId) {
+        const focusedItem = document.querySelector(`.result-item[data-company-id="${companyId}"]`);
+        if (focusedItem) {
+            focusedItem.classList.add('focused');
+        }
     }
 }
 
