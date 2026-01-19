@@ -10338,12 +10338,9 @@ def api_sync_missing_companies():
             try:
                 print(f"Fetching company {company_id}... ({i+1}/{len(missing_company_ids)})")
 
-                # Rate limiting
-                if i > 0 and i % 10 == 0:
-                    print(f"Rate limiting: waiting 2 seconds after {i} requests...")
-                    time.sleep(2)
-                elif i > 0:
-                    time.sleep(0.2)
+                # Minimal rate limiting (API is fast)
+                if i > 0 and i % 25 == 0:
+                    time.sleep(0.5)
 
                 # Fetch from DOUANO API with retry logic
                 max_retries = 3
