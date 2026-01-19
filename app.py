@@ -11753,6 +11753,7 @@ def list_company_notes(company_id):
     List all notes for a company with their attached images
     """
     try:
+        print(f"📝 Loading notes for company_id: {company_id}")
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
 
@@ -11760,6 +11761,7 @@ def list_company_notes(company_id):
         notes_result = supabase_client.table('company_notes').select(
             'id, note_text, created_by, created_at, updated_at'
         ).eq('company_id', int(company_id)).order('created_at', desc=True).execute()
+        print(f"📝 Found {len(notes_result.data or [])} notes for company {company_id}")
 
         notes = []
         for note in (notes_result.data or []):

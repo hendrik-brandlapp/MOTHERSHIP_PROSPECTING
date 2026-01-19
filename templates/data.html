@@ -5389,12 +5389,17 @@ async function saveFlavourPrices(companyId) {
 
 // Load notes for a company
 async function loadCompanyNotes(companyId) {
+    console.log(`📝 Loading notes for company ${companyId}`);
     const container = document.getElementById(`company-notes-${companyId}`);
-    if (!container) return;
+    if (!container) {
+        console.warn(`📝 Notes container not found: company-notes-${companyId}`);
+        return;
+    }
 
     try {
         const response = await fetch(`/api/company-note-blocks/${companyId}`);
         const data = await response.json();
+        console.log(`📝 Notes API response for company ${companyId}:`, data);
 
         if (data.success && data.notes) {
             if (data.notes.length === 0) {
@@ -5406,13 +5411,15 @@ async function loadCompanyNotes(companyId) {
                     </div>
                 `;
             } else {
+                console.log(`📝 Rendering ${data.notes.length} notes`);
                 container.innerHTML = data.notes.map(note => renderNoteBlock(note, companyId)).join('');
             }
         } else {
+            console.warn(`📝 Notes API returned error:`, data);
             container.innerHTML = `<div class="text-muted text-center py-3">Could not load notes</div>`;
         }
     } catch (error) {
-        console.error('Error loading notes:', error);
+        console.error('📝 Error loading notes:', error);
         container.innerHTML = `<div class="text-muted text-center py-3">Error loading notes</div>`;
     }
 }
