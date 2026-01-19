@@ -27,10 +27,23 @@
             <div class="stats-bar">
                 <span class="stats-text">
                     <strong id="filtered-count">0</strong> of <strong id="total-count">0</strong> customers
+                    <span id="delivery-count-badge" style="color:#6366f1;margin-left:6px;display:none">
+                        <i class="fas fa-truck"></i> <strong id="delivery-count">0</strong>
+                    </span>
                 </span>
                 <button class="btn-clear-filters" onclick="clearAllFilters()">
                     <i class="fas fa-times"></i> Clear
                 </button>
+            </div>
+
+            <!-- Delivery Toggle -->
+            <div class="filter-group" style="padding:0.5rem 1rem;display:flex;align-items:center;justify-content:space-between">
+                <label class="filter-label" style="margin:0;display:flex;align-items:center;gap:6px">
+                    <i class="fas fa-truck" style="color:#6366f1"></i> Show Delivery Locations
+                </label>
+                <div class="form-check form-switch" style="margin:0">
+                    <input class="form-check-input" type="checkbox" id="deliveryToggle" checked onchange="toggleDeliveryMarkers()">
+                </div>
             </div>
 
             <!-- Search -->
@@ -1027,6 +1040,7 @@
 let map;
 let infoWindow;
 let customerMarkers = [];
+let deliveryMarkers = []; // Markers for delivery addresses
 let googleMarkers = [];
 let clusterer;
 let allCustomers = [];
@@ -1036,6 +1050,7 @@ let currentTab = 'filter';
 let selectedPlaceForProspect = null;
 let routeLocationData = {}; // Store location data for route buttons
 let routeLocationIndex = 0; // Counter for unique keys
+let showDeliveryAddresses = true; // Toggle for delivery address markers
 
 // Cache settings - shared with Companies page
 const CACHE_KEY = 'companies_shared_cache';
@@ -1102,6 +1117,7 @@ async function loadCustomers(forceRefresh = false) {
             populateCategoryFilter();
             updateCustomerMarkers();
             updateCustomerList();
+            updateDeliveryStats();
             return;
         }
 
@@ -1132,6 +1148,7 @@ async function loadCustomers(forceRefresh = false) {
         // Display on map and list
         updateCustomerMarkers();
         updateCustomerList();
+        updateDeliveryStats();
 
     } catch (error) {
         console.error('Error loading customers:', error);
@@ -1321,6 +1338,7 @@ function filterCustomers() {
     document.getElementById('filtered-count').textContent = filteredCustomers.length;
     updateCustomerMarkers();
     updateCustomerList();
+    updateDeliveryStats();
 }
 
 // Clear all filters
@@ -1334,11 +1352,42 @@ function clearAllFilters() {
     filterCustomers();
 }
 
+// Toggle delivery address markers
+function toggleDeliveryMarkers() {
+    showDeliveryAddresses = document.getElementById('deliveryToggle').checked;
+    updateCustomerMarkers();
+    updateDeliveryStats();
+}
+
+// Update delivery stats display
+function updateDeliveryStats() {
+    let deliveryCount = 0;
+    filteredCustomers.forEach(company => {
+        if (company.addresses && Array.isArray(company.addresses)) {
+            deliveryCount += company.addresses.filter(a => a.latitude && a.longitude).length;
+        }
+    });
+
+    const badge = document.getElementById('delivery-count-badge');
+    const countEl = document.getElementById('delivery-count');
+
+    if (deliveryCount > 0 && showDeliveryAddresses) {
+        badge.style.display = 'inline';
+        countEl.textContent = deliveryCount;
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
 // Update customer markers on map
 function updateCustomerMarkers() {
     // Clear existing
     customerMarkers.forEach(m => m.setMap(null));
     customerMarkers = [];
+
+    // Clear delivery markers
+    deliveryMarkers.forEach(m => m.setMap(null));
+    deliveryMarkers = [];
 
     if (clusterer) {
         clusterer.clearMarkers();
@@ -1379,6 +1428,43 @@ function updateCustomerMarkers() {
         });
 
         customerMarkers.push(marker);
+
+        // Add delivery address markers if enabled
+        if (showDeliveryAddresses && company.addresses && Array.isArray(company.addresses)) {
+            company.addresses.forEach((addr, addrIndex) => {
+                const addrLat = parseFloat(addr.latitude);
+                const addrLng = parseFloat(addr.longitude);
+
+                if (!addrLat || !addrLng || isNaN(addrLat) || isNaN(addrLng)) return;
+
+                // Skip if same location as main company marker
+                if (Math.abs(addrLat - lat) < 0.0001 && Math.abs(addrLng - lng) < 0.0001) return;
+
+                const addrPosition = { lat: addrLat, lng: addrLng };
+                bounds.extend(addrPosition);
+
+                const addrMarker = new google.maps.Marker({
+                    position: addrPosition,
+                    map: map,
+                    icon: {
+                        path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+                        scale: 6,
+                        fillColor: '#6366f1',
+                        fillOpacity: 0.9,
+                        strokeColor: 'white',
+                        strokeWeight: 1.5,
+                        rotation: 0
+                    },
+                    title: `${displayName} - Delivery`
+                });
+
+                addrMarker.addListener('click', () => {
+                    showDeliveryInfoWindow(company, addr, addrMarker, addrIndex);
+                });
+
+                deliveryMarkers.push(addrMarker);
+            });
+        }
     });
 
     // Add clustering using the markerClusterer library
@@ -1422,6 +1508,46 @@ function updateCustomerMarkers() {
     }
 }
 
+// Show delivery address info window
+function showDeliveryInfoWindow(company, address, marker, addrIndex) {
+    const displayName = company.public_name || company.name;
+    const addressLine = [
+        address.street_1,
+        address.postal_code,
+        address.city
+    ].filter(Boolean).join(', ') || 'No address details';
+
+    // Store location data for route scheduling
+    const routeKey = `delivery_${company.company_id}_${addrIndex}`;
+    routeLocationData[routeKey] = {
+        name: `${displayName} - Delivery`,
+        address: addressLine,
+        lat: address.latitude,
+        lng: address.longitude,
+        company_id: company.company_id
+    };
+
+    const content = `
+        <div class="info-window">
+            <h6><i class="fas fa-truck" style="color:#6366f1;margin-right:6px"></i>${escapeHtml(displayName)}</h6>
+            <p style="font-size:0.75rem;color:#6366f1;margin:0 0 0.5rem 0;font-weight:500">DELIVERY LOCATION</p>
+            <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(addressLine)}</p>
+            ${address.name ? `<p><i class="fas fa-tag"></i> ${escapeHtml(address.name)}</p>` : ''}
+            <div class="info-window-actions">
+                <button class="btn-add" onclick="window.location='/data?company=${company.company_id}'">
+                    <i class="fas fa-eye"></i> View
+                </button>
+                <button class="btn-add btn-route" onclick="openRouteModal('${routeKey}', false)">
+                    <i class="fas fa-route"></i> Route
+                </button>
+            </div>
+        </div>
+    `;
+
+    infoWindow.setContent(content);
+    infoWindow.open(map, marker);
+}
+
 // Show customer info window
 function showCustomerInfoWindow(company, marker) {
     const hasAlerts = company.alerts && company.alerts.length > 0;
@@ -1440,10 +1566,14 @@ function showCustomerInfoWindow(company, marker) {
         company_id: company.company_id
     };
 
+    const locationText = getCompanyLocation(company);
+    const deliveryCount = (company.addresses && Array.isArray(company.addresses)) ? company.addresses.filter(a => a.latitude && a.longitude).length : 0;
+
     const content = `
         <div class="info-window">
             <h6>${escapeHtml(displayName)}</h6>
-            <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(company.address?.city || 'Unknown')}</p>
+            <p><i class="fas fa-map-marker-alt"></i> ${escapeHtml(locationText)}</p>
+            ${deliveryCount > 0 ? `<p><i class="fas fa-truck" style="color:#6366f1"></i> ${deliveryCount} delivery location${deliveryCount > 1 ? 's' : ''}</p>` : ''}
             ${company.assigned_salesperson ? `<p><i class="fas fa-user"></i> ${escapeHtml(company.assigned_salesperson)}</p>` : ''}
             ${alertBadges ? `<div style="margin-top:0.5rem">${alertBadges}</div>` : ''}
             <div class="info-window-actions">
@@ -1483,6 +1613,8 @@ function updateCustomerList() {
         const badgeClass = hasAlerts ? 'badge-alert' : 'badge-healthy';
         const badgeText = hasAlerts ? 'Alert' : 'Healthy';
         const displayName = company.public_name || company.name;
+        const locationText = getCompanyLocation(company);
+        const deliveryCount = (company.addresses && Array.isArray(company.addresses)) ? company.addresses.filter(a => a.latitude && a.longitude).length : 0;
 
         return `
             <div class="result-item" onclick="focusCustomer(${company.company_id})">
@@ -1490,7 +1622,7 @@ function updateCustomerList() {
                     <h6 class="result-item-name">${escapeHtml(displayName)}</h6>
                     <span class="result-item-badge ${badgeClass}">${badgeText}</span>
                 </div>
-                <p class="result-item-address">${escapeHtml(company.address?.city || 'Unknown location')}</p>
+                <p class="result-item-address">${escapeHtml(locationText)}${deliveryCount > 0 ? ` <span style="color:#6366f1;font-size:0.7rem"><i class="fas fa-truck"></i> +${deliveryCount}</span>` : ''}</p>
                 <div class="result-item-meta">
                     ${company.total_revenue ? `<span><i class="fas fa-euro-sign"></i> ${formatCurrency(company.total_revenue)}</span>` : ''}
                     ${company.assigned_salesperson ? `<span><i class="fas fa-user"></i> ${escapeHtml(company.assigned_salesperson)}</span>` : ''}
@@ -1879,6 +2011,34 @@ function getAlertLabel(type) {
         'ONE_TIME_CUSTOMER': 'One-Timer'
     };
     return labels[type] || type;
+}
+
+// Get the best available location text for a company
+function getCompanyLocation(company) {
+    // Try address.city first (main company address)
+    if (company.address?.city) {
+        return company.address.city;
+    }
+
+    // Try addresses array (delivery locations)
+    if (company.addresses && Array.isArray(company.addresses) && company.addresses.length > 0) {
+        const firstAddr = company.addresses[0];
+        if (firstAddr.city) return firstAddr.city;
+        if (firstAddr.postal_code) return firstAddr.postal_code;
+    }
+
+    // Try raw_company_data.invoice_address
+    if (company.raw_company_data?.invoice_address?.city) {
+        return company.raw_company_data.invoice_address.city;
+    }
+
+    // Try to build from address parts
+    if (company.address) {
+        if (company.address.postal_code) return company.address.postal_code;
+        if (company.address.line1) return company.address.line1;
+    }
+
+    return 'No location';
 }
 
 function showToast(message, type = 'info') {
