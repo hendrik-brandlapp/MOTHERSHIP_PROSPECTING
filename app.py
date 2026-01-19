@@ -10615,7 +10615,7 @@ def api_refresh_company_addresses():
                 if i > 0 and i % 25 == 0:
                     time.sleep(0.5)
 
-                # Fetch from DOUANO API
+                # Fetch company data from DOUANO API
                 company_response, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
 
                 if error or not company_response:
@@ -10630,8 +10630,25 @@ def api_refresh_company_addresses():
                     failed_companies.append({'id': company_id, 'name': company['name'], 'error': 'No data'})
                     continue
 
-                # Get addresses from API response
-                new_addresses = company_data.get('addresses', [])
+                # Fetch addresses from dedicated addresses endpoint (filter_by_company)
+                addresses_response, addr_error = make_api_request(
+                    '/api/public/v1/core/addresses',
+                    params={'filter_by_company': company_id, 'per_page': 100}
+                )
+
+                # Get addresses from dedicated endpoint first, fall back to company response
+                new_addresses = []
+                if addresses_response and not addr_error:
+                    addr_data = addresses_response.get('result', {})
+                    if isinstance(addr_data, dict) and 'data' in addr_data:
+                        new_addresses = addr_data.get('data', [])
+                    elif isinstance(addr_data, list):
+                        new_addresses = addr_data
+                    print(f"  📍 Fetched {len(new_addresses)} addresses from addresses endpoint for {company['name']}")
+
+                # If no addresses from dedicated endpoint, try company response
+                if not new_addresses:
+                    new_addresses = company_data.get('addresses', [])
 
                 # Update the database with addresses and full raw data
                 update_data = {
