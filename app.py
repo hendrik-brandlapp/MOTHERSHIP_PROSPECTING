@@ -10601,9 +10601,9 @@ def api_refresh_company_addresses():
             return jsonify({'error': 'Supabase not configured'}), 500
 
         # Get batch parameters (for handling large datasets)
-        # Smaller batch size to avoid worker timeout (each company = 2 API calls)
+        # Small batch size to respect Duano API rate limits (each company = 2 API calls)
         batch_start = int(request.args.get('start', 0))
-        batch_size = int(request.args.get('batch_size', 25))
+        batch_size = int(request.args.get('batch_size', 10))
 
         print(f"🔍 Fetching companies from database (offset {batch_start}, limit {batch_size})...")
 
@@ -10636,12 +10636,20 @@ def api_refresh_company_addresses():
             company_id = company['company_id']
 
             try:
-                # Rate limiting
-                if i > 0 and i % 25 == 0:
-                    time.sleep(0.5)
+                # Rate limiting - add delay between EACH request to avoid 429
+                if i > 0:
+                    time.sleep(0.5)  # 500ms between each company
 
-                # Fetch company data from DOUANO API
-                company_response, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+                # Fetch company data from DOUANO API with retry for 429
+                company_response, error = None, None
+                for retry in range(3):
+                    company_response, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+                    if error and '429' in str(error):
+                        wait_time = (retry + 1) * 2  # 2s, 4s, 6s
+                        print(f"  ⏳ Rate limited, waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                    break
 
                 if error or not company_response:
                     print(f"❌ Failed to fetch company {company_id}: {error}")
@@ -10655,11 +10663,22 @@ def api_refresh_company_addresses():
                     failed_companies.append({'id': company_id, 'name': company['name'], 'error': 'No data'})
                     continue
 
-                # Fetch addresses from dedicated addresses endpoint (filter_by_company)
-                addresses_response, addr_error = make_api_request(
-                    '/api/public/v1/core/addresses',
-                    params={'filter_by_company': company_id, 'per_page': 100}
-                )
+                # Small delay before addresses request
+                time.sleep(0.3)
+
+                # Fetch addresses from dedicated addresses endpoint with retry for 429
+                addresses_response, addr_error = None, None
+                for retry in range(3):
+                    addresses_response, addr_error = make_api_request(
+                        '/api/public/v1/core/addresses',
+                        params={'filter_by_company': company_id, 'per_page': 100}
+                    )
+                    if addr_error and '429' in str(addr_error):
+                        wait_time = (retry + 1) * 2
+                        print(f"  ⏳ Rate limited on addresses, waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                    break
 
                 # Get addresses from dedicated endpoint first, fall back to company response
                 new_addresses = []

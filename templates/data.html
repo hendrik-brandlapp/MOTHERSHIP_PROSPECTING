@@ -2800,13 +2800,13 @@ async function refreshCompanyAddresses() {
         let totalUpdated = 0;
         let totalErrors = 0;
         let batchStart = 0;
-        const batchSize = 25;  // Smaller batches to avoid worker timeout
+        const batchSize = 10;  // Small batches to respect Duano rate limits
         let isComplete = false;
         let totalCompanies = 0;
 
         while (!isComplete) {
             document.getElementById('sync-message').textContent =
-                `Refreshing company addresses from DOUANO... (Batch ${Math.floor(batchStart / batchSize) + 1}, processed ${batchStart} companies)`;
+                `Refreshing company addresses from DOUANO... (processed ${batchStart} of ${totalCompanies || '?'} companies)`;
 
             const response = await fetch(`/api/refresh-company-addresses?start=${batchStart}&batch_size=${batchSize}`, {
                 method: 'POST',
@@ -2832,9 +2832,9 @@ async function refreshCompanyAddresses() {
                 isComplete = true;
             }
 
-            // Small delay between batches
+            // Longer delay between batches to respect rate limits
             if (!isComplete) {
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 2000));  // 2 seconds between batches
             }
         }
 
