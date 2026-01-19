@@ -8221,17 +8221,30 @@ def api_companies_from_db():
                 company_metrics[cid]['count_2026'] += 1
         
         # Step 3: Try to enrich with company details from companies table (optional)
+        # Fetch ALL companies with pagination (Supabase default limit is 1000)
         company_details = {}
         try:
-            comp_result = supabase_client.table('companies').select(
-                'company_id, email, phone_number, website, latitude, longitude, '
-                'city, country_name, address_line1, post_code, company_tag, '
-                'company_categories, raw_company_data, public_name, customer_since, '
-                'assigned_salesperson, contact_person_name, geocoded_address, flavour_prices'
-            ).execute()
-            if comp_result.data:
+            offset = 0
+            batch_size = 1000
+            while True:
+                comp_result = supabase_client.table('companies').select(
+                    'company_id, email, phone_number, website, latitude, longitude, '
+                    'city, country_name, address_line1, post_code, company_tag, '
+                    'company_categories, raw_company_data, public_name, customer_since, '
+                    'assigned_salesperson, contact_person_name, geocoded_address, flavour_prices'
+                ).range(offset, offset + batch_size - 1).execute()
+
+                if not comp_result.data:
+                    break
+
                 for c in comp_result.data:
                     company_details[c['company_id']] = c
+
+                if len(comp_result.data) < batch_size:
+                    break
+                offset += batch_size
+
+            print(f"📊 Loaded {len(company_details)} companies for enrichment")
         except Exception as e:
             print(f"Could not fetch company details (optional): {e}")
         
