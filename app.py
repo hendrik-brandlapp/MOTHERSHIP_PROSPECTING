@@ -8228,7 +8228,7 @@ def api_companies_from_db():
             batch_size = 1000
             while True:
                 comp_result = supabase_client.table('companies').select(
-                    'company_id, email, phone_number, website, latitude, longitude, '
+                    'id, company_id, email, phone_number, website, latitude, longitude, '
                     'city, country_name, address_line1, post_code, company_tag, '
                     'company_categories, raw_company_data, public_name, customer_since, '
                     'assigned_salesperson, contact_person_name, geocoded_address, flavour_prices, '
@@ -8239,13 +8239,17 @@ def api_companies_from_db():
                     break
 
                 for c in comp_result.data:
+                    # Key by both id and company_id for flexible lookup
+                    # (sales tables may use either depending on how data was imported)
                     company_details[c['company_id']] = c
+                    if c.get('id') and c['id'] != c['company_id']:
+                        company_details[c['id']] = c
 
                 if len(comp_result.data) < batch_size:
                     break
                 offset += batch_size
 
-            print(f"📊 Loaded {len(company_details)} companies for enrichment")
+            print(f"📊 Loaded {len(company_details)} companies for enrichment (indexed by id and company_id)")
         except Exception as e:
             print(f"Could not fetch company details (optional): {e}")
         
@@ -8283,9 +8287,13 @@ def api_companies_from_db():
             
             avg_invoice = revenue / invoice_count if invoice_count > 0 else 0
             
+            # Use the Duano company_id from companies table if available, otherwise use invoice company_id
+            duano_company_id = details.get('company_id') or cid
+
             company_data = {
                 'id': cid,
-                'company_id': cid,
+                'company_id': duano_company_id,  # Use Duano company_id for consistency with notes
+                'invoice_company_id': cid,  # Original ID from invoices (for lookups)
                 'name': metrics['name'],
                 'public_name': details.get('public_name'),
                 'customer_since': details.get('customer_since'),
