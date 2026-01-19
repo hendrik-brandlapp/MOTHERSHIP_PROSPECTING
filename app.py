@@ -10563,6 +10563,123 @@ def api_update_empty_categories():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/refresh-company-addresses', methods=['POST'])
+def api_refresh_company_addresses():
+    """Refresh addresses for all companies from Duano API.
+    This fetches the full addresses array for each company.
+    Admin only - requires DUANO authentication.
+    """
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        # Get batch parameters (for handling large datasets)
+        batch_start = int(request.args.get('start', 0))
+        batch_size = int(request.args.get('batch_size', 100))
+
+        print(f"🔍 Fetching companies from database (offset {batch_start}, limit {batch_size})...")
+
+        # Get companies from database
+        result = supabase_client.table('companies').select(
+            'company_id, name, addresses'
+        ).range(batch_start, batch_start + batch_size - 1).execute()
+
+        companies = result.data
+        print(f"📊 Found {len(companies)} companies in this batch")
+
+        if not companies:
+            return jsonify({
+                'success': True,
+                'message': 'No more companies to process',
+                'updated': 0,
+                'errors': 0,
+                'complete': True
+            })
+
+        # Update addresses from Duano API
+        print(f"🚀 Refreshing addresses for {len(companies)} companies from DOUANO API...")
+
+        updated_count = 0
+        error_count = 0
+        skipped_count = 0
+        failed_companies = []
+
+        for i, company in enumerate(companies):
+            company_id = company['company_id']
+
+            try:
+                # Rate limiting
+                if i > 0 and i % 25 == 0:
+                    time.sleep(0.5)
+
+                # Fetch from DOUANO API
+                company_response, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+
+                if error or not company_response:
+                    print(f"❌ Failed to fetch company {company_id}: {error}")
+                    error_count += 1
+                    failed_companies.append({'id': company_id, 'name': company['name'], 'error': str(error)[:100]})
+                    continue
+
+                company_data = company_response.get('result', {})
+                if not company_data:
+                    error_count += 1
+                    failed_companies.append({'id': company_id, 'name': company['name'], 'error': 'No data'})
+                    continue
+
+                # Get addresses from API response
+                new_addresses = company_data.get('addresses', [])
+
+                # Update the database with addresses and full raw data
+                update_data = {
+                    'addresses': new_addresses,
+                    'raw_company_data': company_data,
+                    'updated_at': datetime.now().isoformat()
+                }
+
+                # Also update other fields that might have been missed
+                if company_data.get('company_categories'):
+                    update_data['company_categories'] = company_data.get('company_categories')
+
+                supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
+
+                addr_count = len(new_addresses) if new_addresses else 0
+                print(f"✅ Updated {company['name']}: {addr_count} addresses")
+                updated_count += 1
+
+            except Exception as e:
+                print(f"❌ Error updating company {company_id}: {e}")
+                error_count += 1
+                failed_companies.append({'id': company_id, 'name': company['name'], 'error': str(e)[:100]})
+
+        # Check if there are more companies to process
+        next_batch_start = batch_start + batch_size
+        total_check = supabase_client.table('companies').select('company_id', count='exact').execute()
+        total_companies = total_check.count if hasattr(total_check, 'count') else len(total_check.data)
+        is_complete = next_batch_start >= total_companies
+
+        return jsonify({
+            'success': True,
+            'message': f'Updated {updated_count} companies with addresses',
+            'batch_start': batch_start,
+            'batch_size': len(companies),
+            'updated': updated_count,
+            'errors': error_count,
+            'skipped': skipped_count,
+            'failed_companies': failed_companies[:10],
+            'next_batch_start': next_batch_start if not is_complete else None,
+            'complete': is_complete,
+            'total_companies': total_companies
+        })
+
+    except Exception as e:
+        print(f"❌ Error refreshing company addresses: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/populate-companies', methods=['POST'])
 def api_populate_companies():
     """Populate companies table from invoice data across all years.
