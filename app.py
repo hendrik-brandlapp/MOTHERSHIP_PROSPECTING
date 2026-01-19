@@ -10601,8 +10601,9 @@ def api_refresh_company_addresses():
             return jsonify({'error': 'Supabase not configured'}), 500
 
         # Get batch parameters (for handling large datasets)
+        # Smaller batch size to avoid worker timeout (each company = 2 API calls)
         batch_start = int(request.args.get('start', 0))
-        batch_size = int(request.args.get('batch_size', 100))
+        batch_size = int(request.args.get('batch_size', 25))
 
         print(f"🔍 Fetching companies from database (offset {batch_start}, limit {batch_size})...")
 

@@ -2800,7 +2800,7 @@ async function refreshCompanyAddresses() {
         let totalUpdated = 0;
         let totalErrors = 0;
         let batchStart = 0;
-        const batchSize = 100;
+        const batchSize = 25;  // Smaller batches to avoid worker timeout
         let isComplete = false;
         let totalCompanies = 0;
 
