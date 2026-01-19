@@ -10632,10 +10632,20 @@ def api_refresh_company_addresses():
         skipped_count = 0
         failed_companies = []
 
+        # Check if we should skip already-updated companies
+        skip_existing = request.args.get('skip_existing', 'true').lower() == 'true'
+
         for i, company in enumerate(companies):
             company_id = company['company_id']
 
             try:
+                # Skip companies that already have addresses
+                existing_addresses = company.get('addresses')
+                if skip_existing and existing_addresses and len(existing_addresses) > 0:
+                    print(f"  ⏭️ Skipping {company['name']} - already has {len(existing_addresses)} addresses")
+                    skipped_count += 1
+                    continue
+
                 # Rate limiting - add delay between EACH request to avoid 429
                 if i > 0:
                     time.sleep(0.5)  # 500ms between each company
