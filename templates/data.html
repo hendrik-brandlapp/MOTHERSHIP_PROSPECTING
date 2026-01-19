@@ -26,10 +26,15 @@
                             title="Recalculate Metrics">
                         <i class="fas fa-calculator"></i>
                     </button>
-                    <button class="btn btn-modern btn-outline-secondary" onclick="populateCompaniesDatabase()" 
-                            data-bs-toggle="tooltip" data-bs-placement="bottom" 
+                    <button class="btn btn-modern btn-outline-secondary" onclick="populateCompaniesDatabase()"
+                            data-bs-toggle="tooltip" data-bs-placement="bottom"
                             title="Build Companies Database">
                         <i class="fas fa-database"></i>
+                    </button>
+                    <button class="btn btn-modern btn-outline-warning" onclick="syncMissingCompanies()"
+                            data-bs-toggle="tooltip" data-bs-placement="bottom"
+                            title="Sync Missing Companies (fix missing categories)">
+                        <i class="fas fa-user-plus"></i>
                     </button>
                     {% endif %}
                     <button class="btn btn-modern-primary" onclick="forceRefreshData()" 
@@ -2594,6 +2599,89 @@ async function populateCompaniesDatabase() {
             `;
         }
         
+    } catch (error) {
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+async function syncMissingCompanies() {
+    try {
+        document.getElementById('sync-status').style.display = 'block';
+        document.getElementById('sync-results').style.display = 'none';
+        document.getElementById('sync-message').textContent = 'Finding and syncing missing companies from DOUANO...';
+
+        const response = await fetch('/api/sync-missing-companies', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+
+        if (result.success) {
+            const alertClass = result.errors > 0 ? 'alert-warning' : 'alert-success';
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert ${alertClass}">
+                    <h5><i class="fas fa-check-circle me-2"></i>Missing Companies Sync Complete!</h5>
+                    <div class="row mt-3">
+                        <div class="col-md-3">
+                            <strong>Total in Invoices:</strong> ${result.total_in_invoices}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Already in DB:</strong> ${result.total_in_database}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Missing:</strong> <span class="text-warning">${result.missing_count}</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Synced:</strong> <span class="text-success">${result.synced}</span>
+                        </div>
+                    </div>
+                    ${result.errors > 0 ? `
+                    <div class="mt-2">
+                        <strong>Errors:</strong> <span class="text-danger">${result.errors}</span>
+                        ${result.failed_companies && result.failed_companies.length > 0 ? `
+                        <details class="mt-2">
+                            <summary>Show failed companies</summary>
+                            <ul class="mb-0 mt-2">
+                                ${result.failed_companies.map(c => `<li>ID ${c.id}: ${c.error}</li>`).join('')}
+                            </ul>
+                        </details>
+                        ` : ''}
+                    </div>
+                    ` : ''}
+                    <p class="mt-3 mb-0">
+                        <i class="fas fa-info-circle me-2"></i>
+                        ${result.synced > 0 ? 'Companies have been synced with their categories from DOUANO. Refresh to see updated data.' : result.message}
+                    </p>
+                </div>
+            `;
+
+            // Clear cache and refresh data if companies were synced
+            if (result.synced > 0) {
+                clearCache();
+                setTimeout(() => loadData(true), 2000);
+            }
+        } else {
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-triangle me-2"></i>Sync Failed</h5>
+                    <p class="mb-0">${result.error || result.message || 'Unknown error'}</p>
+                </div>
+            `;
+        }
+
     } catch (error) {
         document.getElementById('sync-status').style.display = 'none';
         document.getElementById('sync-results').style.display = 'block';

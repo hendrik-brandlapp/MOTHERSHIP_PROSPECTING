@@ -9980,12 +9980,13 @@ def api_populate_companies_enhanced():
             
             return company_ids
         
-        # Get company IDs from both years
+        # Get company IDs from all years (2024, 2025, 2026)
         company_ids_2024 = get_company_ids_from_year('2024')
         company_ids_2025 = get_company_ids_from_year('2025')
-        all_company_ids = company_ids_2024.union(company_ids_2025)
-        
-        print(f"Found {len(all_company_ids)} unique companies across both years")
+        company_ids_2026 = get_company_ids_from_year('2026')
+        all_company_ids = company_ids_2024.union(company_ids_2025).union(company_ids_2026)
+
+        print(f"Found {len(all_company_ids)} unique companies across all years (2024: {len(company_ids_2024)}, 2025: {len(company_ids_2025)}, 2026: {len(company_ids_2026)})")
         print(f"🚀 Processing all companies with smart rate limiting...")
         
         # Fetch complete company data from DOUANO API
@@ -10249,6 +10250,179 @@ def api_populate_companies_enhanced():
         
     except Exception as e:
         print(f"❌ Error in enhanced companies population: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/sync-missing-companies', methods=['POST'])
+def api_sync_missing_companies():
+    """Sync only companies that are in invoices but missing from the companies table.
+    This is faster than a full sync because it only processes missing companies.
+    Admin only - requires DUANO authentication.
+    """
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        print("🔍 Finding companies missing from companies table...")
+
+        # Step 1: Get all unique company IDs from invoices (all years)
+        def get_company_ids_from_year(year):
+            company_ids = set()
+            batch_size = 1000
+            offset = 0
+
+            while True:
+                try:
+                    batch_result = supabase_client.table(f'sales_{year}').select('company_id, company_name').range(offset, offset + batch_size - 1).execute()
+
+                    if not batch_result.data:
+                        break
+
+                    for record in batch_result.data:
+                        if record.get('company_id'):
+                            company_ids.add(record.get('company_id'))
+
+                    if len(batch_result.data) < batch_size:
+                        break
+
+                    offset += batch_size
+
+                    if offset > 50000:
+                        break
+                except Exception as e:
+                    print(f"Error fetching {year} company IDs at offset {offset}: {e}")
+                    break
+
+            return company_ids
+
+        # Get company IDs from all years
+        invoice_company_ids = set()
+        for year in ['2024', '2025', '2026']:
+            year_ids = get_company_ids_from_year(year)
+            print(f"  {year}: {len(year_ids)} unique companies")
+            invoice_company_ids.update(year_ids)
+
+        print(f"Total unique companies in invoices: {len(invoice_company_ids)}")
+
+        # Step 2: Get company IDs already in companies table
+        existing_result = supabase_client.table('companies').select('company_id').execute()
+        existing_company_ids = set(c['company_id'] for c in existing_result.data)
+        print(f"Companies already in database: {len(existing_company_ids)}")
+
+        # Step 3: Find missing companies
+        missing_company_ids = invoice_company_ids - existing_company_ids
+        print(f"🎯 Missing companies to sync: {len(missing_company_ids)}")
+
+        if not missing_company_ids:
+            return jsonify({
+                'success': True,
+                'message': 'No missing companies found - all companies are already synced!',
+                'total_in_invoices': len(invoice_company_ids),
+                'total_in_database': len(existing_company_ids),
+                'missing_count': 0,
+                'synced': 0,
+                'errors': 0
+            })
+
+        # Step 4: Fetch missing companies from DOUANO API
+        print(f"🚀 Fetching {len(missing_company_ids)} missing companies from DOUANO API...")
+
+        synced_count = 0
+        error_count = 0
+        failed_companies = []
+
+        for i, company_id in enumerate(missing_company_ids):
+            try:
+                print(f"Fetching company {company_id}... ({i+1}/{len(missing_company_ids)})")
+
+                # Rate limiting
+                if i > 0 and i % 10 == 0:
+                    print(f"Rate limiting: waiting 2 seconds after {i} requests...")
+                    time.sleep(2)
+                elif i > 0:
+                    time.sleep(0.2)
+
+                # Fetch from DOUANO API with retry logic
+                max_retries = 3
+                company_response = None
+                error = None
+
+                for retry in range(max_retries):
+                    company_response, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+
+                    if error and "429" in str(error):
+                        wait_time = min(5 * (retry + 1), 30)
+                        print(f"Rate limited, waiting {wait_time}s before retry {retry+1}/{max_retries}...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        break
+
+                if error or not company_response:
+                    print(f"❌ Failed to fetch company {company_id}: {error}")
+                    error_count += 1
+                    failed_companies.append({'id': company_id, 'error': str(error)[:100]})
+                    continue
+
+                company_data = company_response.get('result', {})
+                if not company_data:
+                    print(f"❌ No data for company {company_id}")
+                    error_count += 1
+                    failed_companies.append({'id': company_id, 'error': 'No data returned'})
+                    continue
+
+                # Build record for database
+                record = {
+                    'company_id': company_id,
+                    'name': company_data.get('name'),
+                    'public_name': company_data.get('public_name'),
+                    'company_tag': company_data.get('tag'),
+                    'vat_number': company_data.get('vat_number'),
+                    'is_customer': company_data.get('is_customer', False),
+                    'is_supplier': company_data.get('is_supplier', False),
+                    'company_status_id': company_data.get('company_status', {}).get('id') if company_data.get('company_status') else None,
+                    'company_status_name': company_data.get('company_status', {}).get('name') if company_data.get('company_status') else None,
+                    'sales_price_class_id': company_data.get('sales_price_class', {}).get('id') if company_data.get('sales_price_class') else None,
+                    'sales_price_class_name': company_data.get('sales_price_class', {}).get('name') if company_data.get('sales_price_class') else None,
+                    'document_delivery_type': company_data.get('document_delivery_type'),
+                    'email_addresses': company_data.get('email_addresses'),
+                    'default_document_notes': company_data.get('default_document_notes', []),
+                    'company_categories': company_data.get('company_categories', []),
+                    'addresses': company_data.get('addresses', []),
+                    'bank_accounts': company_data.get('bank_accounts', []),
+                    'extension_values': company_data.get('extension_values', []),
+                    'raw_company_data': company_data,
+                    'data_sources': ['douano_api', 'invoices'],
+                    'last_sync_at': datetime.now().isoformat()
+                }
+
+                # Insert into database
+                supabase_client.table('companies').insert(record).execute()
+                synced_count += 1
+                print(f"✅ Synced company {company_id}: {company_data.get('name')} (categories: {company_data.get('company_categories', [])})")
+
+            except Exception as e:
+                print(f"❌ Error syncing company {company_id}: {e}")
+                error_count += 1
+                failed_companies.append({'id': company_id, 'error': str(e)[:100]})
+                continue
+
+        return jsonify({
+            'success': True,
+            'message': f'Synced {synced_count} missing companies',
+            'total_in_invoices': len(invoice_company_ids),
+            'total_in_database': len(existing_company_ids),
+            'missing_count': len(missing_company_ids),
+            'synced': synced_count,
+            'errors': error_count,
+            'failed_companies': failed_companies[:20]  # Return first 20 failures for debugging
+        })
+
+    except Exception as e:
+        print(f"❌ Error syncing missing companies: {e}")
         return jsonify({'error': str(e)}), 500
 
 
