@@ -3906,6 +3906,20 @@ function showCompanyDetails(companyId) {
     // Extract address from raw data if not in structured format
     const invoiceAddress = rawData.invoice_address || {};
 
+    // Get all addresses from company.addresses or rawData.addresses
+    let allAddresses = company.addresses || rawData.addresses || [];
+    if (typeof allAddresses === 'string') {
+        try {
+            allAddresses = JSON.parse(allAddresses);
+        } catch (e) {
+            allAddresses = [];
+        }
+    }
+    // Ensure it's an array
+    if (!Array.isArray(allAddresses)) {
+        allAddresses = [];
+    }
+
     // Extract email_addresses from raw_company_data (can be string or array)
     let emailFromRaw = '';
     if (rawData.email_addresses) {
@@ -4079,7 +4093,7 @@ function showCompanyDetails(companyId) {
                                value="${escapeHtml(company.website || '')}" placeholder="https://example.com">
                     </div>
                     <div class="col-12">
-                        <label class="form-label small fw-bold text-muted">Address</label>
+                        <label class="form-label small fw-bold text-muted">Billing Address</label>
                         <div class="form-control-plaintext small text-muted">
                             ${invoiceAddress.address_line1 ? escapeHtml(invoiceAddress.address_line1) + '<br>' : ''}
                             ${invoiceAddress.post_code ? escapeHtml(invoiceAddress.post_code) + ' ' : ''}${escapeHtml(invoiceAddress.city || '')}<br>
@@ -4088,7 +4102,33 @@ function showCompanyDetails(companyId) {
                     </div>
                 </div>
             </div>
-        
+
+            <!-- All Addresses / Delivery Locations -->
+            ${allAddresses.length > 0 ? `
+            <div class="detail-section">
+                <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-map-marked-alt me-2 text-muted"></i>Delivery Locations (${allAddresses.length})</h6>
+                <div class="addresses-list">
+                    ${allAddresses.map((addr, idx) => `
+                        <div class="address-card mb-2 p-3 bg-light rounded border">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong class="text-dark">${escapeHtml(addr.name || addr.address_name || 'Location ' + (idx + 1))}</strong>
+                                    ${addr.address_type ? `<span class="badge bg-primary ms-2">${escapeHtml(addr.address_type.name || addr.address_type)}</span>` : ''}
+                                </div>
+                                ${addr.is_default ? '<span class="badge bg-success">Default</span>' : ''}
+                            </div>
+                            <div class="small text-muted mt-1">
+                                ${addr.address_line1 || addr.street || addr.address_line_1 ? escapeHtml(addr.address_line1 || addr.street || addr.address_line_1) + '<br>' : ''}
+                                ${addr.address_line2 || addr.address_line_2 ? escapeHtml(addr.address_line2 || addr.address_line_2) + '<br>' : ''}
+                                ${addr.post_code || addr.postal_code ? escapeHtml(addr.post_code || addr.postal_code) + ' ' : ''}${escapeHtml(addr.city || '')}
+                                ${addr.country ? '<br>' + escapeHtml(typeof addr.country === 'object' ? addr.country.name : addr.country) : ''}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+
         <!-- Customer Status -->
         <div class="detail-section">
             <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-tasks me-2 text-muted"></i>CRM Status</h6>
@@ -4699,13 +4739,19 @@ async function loadCompanyInvoicesV2(companyId, year = 'combined') {
 
             container.innerHTML = data.invoices.map(invoice => `
                 <div class="invoice-item" onclick="showInvoiceDetails(${companyId}, ${invoice.id})">
-                    <div class="d-flex align-items-center">
+                    <div class="d-flex align-items-center flex-grow-1">
                         <div class="bg-light rounded p-2 me-3 text-muted">
                             <i class="fas fa-file-invoice"></i>
                         </div>
-                        <div>
+                        <div class="flex-grow-1">
                             <div class="fw-bold text-dark">Invoice #${escapeHtml(invoice.number || invoice.id)}</div>
                             <div class="small text-muted">${invoice.date ? new Date(invoice.date).toLocaleDateString('nl-BE') : 'N/A'}</div>
+                            ${invoice.delivery_address ? `
+                                <div class="small text-info mt-1">
+                                    <i class="fas fa-truck me-1"></i>
+                                    ${escapeHtml(invoice.delivery_address.name || invoice.delivery_address.city || 'Delivery location')}
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                     <div class="text-end">

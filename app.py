@@ -8231,7 +8231,8 @@ def api_companies_from_db():
                     'company_id, email, phone_number, website, latitude, longitude, '
                     'city, country_name, address_line1, post_code, company_tag, '
                     'company_categories, raw_company_data, public_name, customer_since, '
-                    'assigned_salesperson, contact_person_name, geocoded_address, flavour_prices'
+                    'assigned_salesperson, contact_person_name, geocoded_address, flavour_prices, '
+                    'addresses'
                 ).range(offset, offset + batch_size - 1).execute()
 
                 if not comp_result.data:
@@ -8313,6 +8314,7 @@ def api_companies_from_db():
                     'street': details.get('address_line1', ''),
                     'postal_code': details.get('post_code', '')
                 },
+                'addresses': details.get('addresses', []),  # All company addresses (delivery locations, etc.)
                 'geocoded_address': details.get('geocoded_address'),
                 # Flavours from latest invoice
                 'current_flavours': extract_flavours_from_invoice(metrics.get('latest_invoice_data')),
@@ -8473,7 +8475,29 @@ def api_company_invoices(company_id):
             # Handle None values safely
             total_amount = invoice.get('total_amount')
             balance = invoice.get('balance')
-            
+
+            # Extract address from invoice_data (if available)
+            invoice_data = invoice.get('invoice_data', {}) or {}
+            if isinstance(invoice_data, str):
+                try:
+                    import json
+                    invoice_data = json.loads(invoice_data)
+                except:
+                    invoice_data = {}
+
+            # Get delivery address from invoice data
+            delivery_address = None
+            address_data = invoice_data.get('address') or invoice_data.get('delivery_address') or invoice_data.get('shipping_address')
+            if address_data:
+                if isinstance(address_data, dict):
+                    delivery_address = {
+                        'name': address_data.get('name', ''),
+                        'street': address_data.get('address_line1') or address_data.get('street', ''),
+                        'city': address_data.get('city', ''),
+                        'post_code': address_data.get('post_code', ''),
+                        'country': address_data.get('country', {}).get('name') if isinstance(address_data.get('country'), dict) else address_data.get('country', '')
+                    }
+
             processed_invoices.append({
                 'id': invoice['id'],
                 'number': invoice.get('invoice_number', invoice['id']),
@@ -8481,7 +8505,8 @@ def api_company_invoices(company_id):
                 'amount': float(total_amount) if total_amount is not None else 0.0,
                 'balance': float(balance) if balance is not None else 0.0,
                 'is_paid': invoice.get('is_paid', True),
-                'year': invoice.get('year', 2026)
+                'year': invoice.get('year', 2026),
+                'delivery_address': delivery_address
             })
         
         # Sort by date descending
