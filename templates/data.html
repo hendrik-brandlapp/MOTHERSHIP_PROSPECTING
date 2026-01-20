@@ -3173,6 +3173,7 @@ function filterCompanies() {
         if (searchTerm && searchTerm.trim() !== '') {
             const searchableText = [
                 company.name || '',
+                company.public_name || '',
                 company.vat_number || '',
                 company.email || '',
                 company.contact_person || '',
