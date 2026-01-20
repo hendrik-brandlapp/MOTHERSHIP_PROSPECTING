@@ -8287,13 +8287,15 @@ def api_companies_from_db():
             
             avg_invoice = revenue / invoice_count if invoice_count > 0 else 0
             
-            # Use the Duano company_id from companies table if available, otherwise use invoice company_id
-            duano_company_id = details.get('company_id') or cid
+            # Get the Supabase row ID (used for notes, trips, etc.)
+            # This is different from company_id which is the Duano ID
+            supabase_id = details.get('id')  # Supabase auto-increment id
+            duano_company_id = details.get('company_id') or cid  # Duano company_id
 
             company_data = {
                 'id': cid,
-                'company_id': duano_company_id,  # Use Duano company_id for consistency with notes
-                'invoice_company_id': cid,  # Original ID from invoices (for lookups)
+                'company_id': cid,  # Keep using invoice company_id for consistency
+                'supabase_id': supabase_id,  # Supabase row ID - use this for notes/trips
                 'name': metrics['name'],
                 'public_name': details.get('public_name'),
                 'customer_since': details.get('customer_since'),

@@ -1878,6 +1878,12 @@
 </style>
 <script>
 let allCompanies = [];
+
+// Helper to get supabase_id for a company (used for notes/trips API calls)
+function getSupabaseId(companyId) {
+    const company = allCompanies.find(c => c.company_id === companyId || c.id === companyId);
+    return company?.supabase_id || companyId;
+}
 let allProspects = [];
 let filteredCompanies = [];
 let currentViewMode = 'cards';
@@ -4542,7 +4548,8 @@ function showCompanyDetails(companyId) {
     loadCompanyTrips(company.company_id);
 
     // Load notes for this company (unified notes with images)
-    loadCompanyNotes(company.company_id);
+    // Pass company_id for container ID, supabase_id for API calls
+    loadCompanyNotes(company.company_id, company.supabase_id);
 }
 
 // Show prospect details in sidepanel with lavender theme
@@ -5388,18 +5395,21 @@ async function saveFlavourPrices(companyId) {
 // =====================================================
 
 // Load notes for a company
-async function loadCompanyNotes(companyId) {
-    console.log(`📝 Loading notes for company ${companyId}`);
-    const container = document.getElementById(`company-notes-${companyId}`);
+// containerId = the company_id used for HTML element IDs
+// apiId = the supabase_id used for API calls (defaults to containerId if not provided)
+async function loadCompanyNotes(containerId, apiId = null) {
+    const notesApiId = apiId || containerId;
+    console.log(`📝 Loading notes for company container=${containerId}, api=${notesApiId}`);
+    const container = document.getElementById(`company-notes-${containerId}`);
     if (!container) {
-        console.warn(`📝 Notes container not found: company-notes-${companyId}`);
+        console.warn(`📝 Notes container not found: company-notes-${containerId}`);
         return;
     }
 
     try {
-        const response = await fetch(`/api/company-note-blocks/${companyId}`);
+        const response = await fetch(`/api/company-note-blocks/${notesApiId}`);
         const data = await response.json();
-        console.log(`📝 Notes API response for company ${companyId}:`, data);
+        console.log(`📝 Notes API response for company ${notesApiId}:`, data);
 
         if (data.success && data.notes) {
             if (data.notes.length === 0) {
@@ -5501,6 +5511,7 @@ function previewNoteImages(companyId) {
 
 // Create a new note (with optional images)
 async function createCompanyNote(companyId) {
+    const supabaseId = getSupabaseId(companyId);
     const textInput = document.getElementById(`new-note-text-${companyId}`);
     const imageInput = document.getElementById(`new-note-images-${companyId}`);
     const preview = document.getElementById(`new-note-preview-${companyId}`);
@@ -5519,9 +5530,11 @@ async function createCompanyNote(companyId) {
     for (let i = 0; i < files.length; i++) {
         formData.append('files', files[i]);
     }
+    formData.append('supabase_id', supabaseId); // Pass supabase_id for API
 
     try {
-        const response = await fetch(`/api/company-notes/${companyId}`, {
+        // Use supabaseId for API call
+        const response = await fetch(`/api/company-notes/${supabaseId}`, {
             method: 'POST',
             body: formData
         });
@@ -5534,8 +5547,8 @@ async function createCompanyNote(companyId) {
             if (textInput) textInput.value = '';
             if (imageInput) imageInput.value = '';
             if (preview) preview.innerHTML = '';
-            // Reload notes
-            await loadCompanyNotes(companyId);
+            // Reload notes (pass both container ID and API ID)
+            await loadCompanyNotes(companyId, supabaseId);
         } else {
             alert('Error creating note: ' + (data.error || 'Unknown error'));
         }
@@ -5548,6 +5561,7 @@ async function createCompanyNote(companyId) {
 // Delete a note
 async function deleteCompanyNote(noteId, companyId) {
     if (!confirm('Delete this note and all its images?')) return;
+    const supabaseId = getSupabaseId(companyId);
 
     try {
         const response = await fetch(`/api/company-notes/${noteId}`, {
@@ -5558,7 +5572,7 @@ async function deleteCompanyNote(noteId, companyId) {
 
         if (data.success) {
             showSaveSuccess('Note deleted');
-            await loadCompanyNotes(companyId);
+            await loadCompanyNotes(companyId, supabaseId);
         } else {
             alert('Error deleting note: ' + (data.error || 'Unknown error'));
         }
@@ -5570,15 +5584,16 @@ async function deleteCompanyNote(noteId, companyId) {
 
 // Trigger file input to add image to existing note
 function triggerAddImageToNote(noteId, companyId) {
+    const supabaseId = getSupabaseId(companyId);
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.onchange = () => addImageToNote(noteId, companyId, input.files[0]);
+    input.onchange = () => addImageToNote(noteId, companyId, supabaseId, input.files[0]);
     input.click();
 }
 
 // Add image to an existing note
-async function addImageToNote(noteId, companyId, file) {
+async function addImageToNote(noteId, companyId, supabaseId, file) {
     if (!file) return;
 
     const formData = new FormData();
@@ -5594,7 +5609,7 @@ async function addImageToNote(noteId, companyId, file) {
 
         if (data.success) {
             showSaveSuccess('Image added!');
-            await loadCompanyNotes(companyId);
+            await loadCompanyNotes(companyId, supabaseId);
         } else {
             alert('Error adding image: ' + (data.error || 'Unknown error'));
         }
@@ -5607,6 +5622,7 @@ async function addImageToNote(noteId, companyId, file) {
 // Delete a single image from a note
 async function deleteNoteImage(attachmentId, companyId) {
     if (!confirm('Delete this image?')) return;
+    const supabaseId = getSupabaseId(companyId);
 
     try {
         const response = await fetch(`/api/company-attachments/${attachmentId}`, {
@@ -5617,7 +5633,7 @@ async function deleteNoteImage(attachmentId, companyId) {
 
         if (data.success) {
             showSaveSuccess('Image deleted');
-            await loadCompanyNotes(companyId);
+            await loadCompanyNotes(companyId, supabaseId);
         } else {
             alert('Error deleting image: ' + (data.error || 'Unknown error'));
         }
