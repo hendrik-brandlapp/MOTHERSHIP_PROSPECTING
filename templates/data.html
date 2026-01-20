@@ -1896,6 +1896,7 @@ let showOnlyMajorRetailers = false; // Filter for major retailers
 // Map variables
 let map = null;
 let mapMarkers = [];
+let deliveryMapMarkers = []; // Markers for delivery addresses on companies map
 const MAPBOX_TOKEN = '{{ mapbox_api_key }}';
 
 // Shared cache configuration (same keys as map.html for sharing)
@@ -3771,8 +3772,11 @@ function updateMapMarkers() {
     // Clear existing markers
     mapMarkers.forEach(m => m.remove());
     mapMarkers = [];
+    deliveryMapMarkers.forEach(m => m.remove());
+    deliveryMapMarkers = [];
 
     let validMarkerCount = 0;
+    let deliveryMarkerCount = 0;
     const bounds = new mapboxgl.LngLatBounds();
 
     // Add markers for filtered companies
@@ -3787,6 +3791,7 @@ function updateMapMarkers() {
 
         const hasAlerts = company.alerts && company.alerts.length > 0;
         const markerColor = hasAlerts ? '#dc3545' : '#28a745';
+        const displayName = company.public_name || company.name || 'Unknown';
 
         // Create marker element
         const el = document.createElement('div');
@@ -3810,11 +3815,13 @@ function updateMapMarkers() {
         const alertBadges = hasAlerts ? company.alerts.map(a =>
             `<span style="display:inline-block;background:#fee2e2;color:#dc3545;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:4px;">${getAlertLabel(a.type)}</span>`
         ).join('') : '';
+        const deliveryCount = (company.addresses && Array.isArray(company.addresses)) ? company.addresses.filter(a => a.latitude && a.longitude).length : 0;
 
         const popupContent = `
             <div style="min-width:180px;">
-                <strong style="font-size:14px;">${escapeHtml(company.name || company.public_name || 'Unknown')}</strong>
+                <strong style="font-size:14px;">${escapeHtml(displayName)}</strong>
                 <div style="color:#6c757d;font-size:12px;margin:4px 0;">${escapeHtml(city)}</div>
+                ${deliveryCount > 0 ? `<div style="color:#6366f1;font-size:11px;margin:4px 0;"><i class="fas fa-truck"></i> ${deliveryCount} delivery location${deliveryCount > 1 ? 's' : ''}</div>` : ''}
                 ${alertBadges ? `<div style="margin-top:6px;">${alertBadges}</div>` : ''}
                 <button onclick="showCompanyDetails(${company.company_id})"
                         style="margin-top:8px;width:100%;padding:6px;background:#5B5FEF;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">
@@ -3832,6 +3839,64 @@ function updateMapMarkers() {
             .addTo(map);
 
         mapMarkers.push(marker);
+
+        // Add delivery address markers
+        if (company.addresses && Array.isArray(company.addresses)) {
+            company.addresses.forEach((addr, addrIndex) => {
+                const addrLat = parseFloat(addr.latitude);
+                const addrLng = parseFloat(addr.longitude);
+
+                if (!addrLat || !addrLng || isNaN(addrLat) || isNaN(addrLng)) return;
+
+                // Skip if same location as main company marker
+                if (Math.abs(addrLat - lat) < 0.0001 && Math.abs(addrLng - lng) < 0.0001) return;
+
+                deliveryMarkerCount++;
+                bounds.extend([addrLng, addrLat]);
+
+                // Create delivery marker element
+                const delEl = document.createElement('div');
+                delEl.className = 'delivery-map-marker';
+                delEl.style.cssText = `
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 4px;
+                    background: #6366f1;
+                    border: 2px solid white;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                `;
+                delEl.innerHTML = '<i class="fas fa-truck" style="color:white;font-size:10px;"></i>';
+
+                const addressLine = [addr.street_1, addr.postal_code, addr.city].filter(Boolean).join(', ') || 'No address details';
+
+                const delPopupContent = `
+                    <div style="min-width:180px;">
+                        <div style="color:#6366f1;font-size:10px;font-weight:600;margin-bottom:4px;">DELIVERY LOCATION</div>
+                        <strong style="font-size:14px;">${escapeHtml(displayName)}</strong>
+                        <div style="color:#6c757d;font-size:12px;margin:4px 0;">${escapeHtml(addressLine)}</div>
+                        ${addr.name ? `<div style="color:#6c757d;font-size:11px;"><i class="fas fa-tag"></i> ${escapeHtml(addr.name)}</div>` : ''}
+                        <button onclick="showCompanyDetails(${company.company_id})"
+                                style="margin-top:8px;width:100%;padding:6px;background:#6366f1;color:white;border:none;border-radius:6px;cursor:pointer;font-size:12px;">
+                            View Company
+                        </button>
+                    </div>
+                `;
+
+                const delPopup = new mapboxgl.Popup({ offset: 20, closeButton: true })
+                    .setHTML(delPopupContent);
+
+                const delMarker = new mapboxgl.Marker(delEl)
+                    .setLngLat([addrLng, addrLat])
+                    .setPopup(delPopup)
+                    .addTo(map);
+
+                deliveryMapMarkers.push(delMarker);
+            });
+        }
     });
 
     // Fit bounds if markers exist
@@ -3839,7 +3904,7 @@ function updateMapMarkers() {
         map.fitBounds(bounds, { padding: 60, maxZoom: 12 });
     }
 
-    console.log(`Map: Showing ${validMarkerCount} of ${filteredCompanies.length} companies with valid coordinates`);
+    console.log(`Map: Showing ${validMarkerCount} companies + ${deliveryMarkerCount} delivery locations`);
 }
 
 // Helper to get alert label
