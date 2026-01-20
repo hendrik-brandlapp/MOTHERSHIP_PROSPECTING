@@ -5873,11 +5873,19 @@ def recalculate_company_metrics_from_invoices(company_ids=None, max_companies=99
                 metrics_2025 = {'revenue': 0, 'count': 0, 'first_date': None, 'last_date': None}
                 
                 for year, metrics in [('2024', metrics_2024), ('2025', metrics_2025)]:
-                    invoices = supabase_client.table(f'sales_{year}').select('total_amount, invoice_date').eq('company_id', company_id).execute()
-                    
+                    invoices = supabase_client.table(f'sales_{year}').select('total_amount, invoice_date, invoice_data').eq('company_id', company_id).execute()
+
                     if invoices.data:
                         metrics['count'] = len(invoices.data)
-                        metrics['revenue'] = sum(float(inv.get('total_amount') or 0) for inv in invoices.data)
+                        # Calculate revenue from line items (ex-VAT) - matches DUANO's "Omzet"
+                        total_rev = 0
+                        for inv in invoices.data:
+                            invoice_data = inv.get('invoice_data') or {}
+                            line_items = invoice_data.get('invoice_line_items') or []
+                            line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                            # Fall back to total_amount only if no line items
+                            total_rev += line_revenue if line_revenue > 0 else float(inv.get('total_amount') or 0)
+                        metrics['revenue'] = total_rev
                         
                         dates = [inv.get('invoice_date') for inv in invoices.data if inv.get('invoice_date')]
                         if dates:
@@ -6113,20 +6121,16 @@ def api_sync_2025_invoices():
                         company_id = None
                         company_name = None
                     
-                    # Get the amount - try multiple fields to avoid NULL
-                    amount = (
-                        invoice.get('payable_amount_without_financial_discount') or
-                        invoice.get('payable_amount_with_financial_discount') or
-                        invoice.get('total_amount') or
-                        invoice.get('balance') or
-                        0
-                    )
-                    
-                    # If still 0, try to calculate from line items
+                    # Get the amount - prefer line item revenue (ex-VAT)
+                    line_items = invoice.get('invoice_line_items', [])
+                    if line_items:
+                        amount = sum(float(item.get('revenue') or 0) for item in line_items)
+                    else:
+                        amount = 0
+
+                    # Fall back to total_amount only if no line items
                     if amount == 0:
-                        line_items = invoice.get('invoice_line_items', [])
-                        if line_items:
-                            amount = sum(float(item.get('payable_amount') or item.get('revenue') or 0) for item in line_items)
+                        amount = float(invoice.get('total_amount') or invoice.get('balance') or 0)
                     
                     record = {
                         'invoice_id': invoice.get('id'),
@@ -7152,10 +7156,17 @@ def api_2025_sales_stats():
         count_result = supabase_client.table('sales_2025').select('id', count='exact').execute()
         total_count = count_result.count if hasattr(count_result, 'count') else len(count_result.data)
         
-        # Get sum of total amounts (use range to get more records)
-        amounts_result = supabase_client.table('sales_2025').select('total_amount, balance, is_paid').range(0, 9999).execute()
-        
-        total_revenue = sum(float(r.get('total_amount') or 0) for r in amounts_result.data)
+        # Get sum of revenue (ex-VAT from line items)
+        amounts_result = supabase_client.table('sales_2025').select('total_amount, balance, is_paid, invoice_data').range(0, 9999).execute()
+
+        # Calculate revenue from line items (ex-VAT) - matches DUANO's "Omzet"
+        total_revenue = 0
+        for r in amounts_result.data:
+            invoice_data = r.get('invoice_data') or {}
+            line_items = invoice_data.get('invoice_line_items') or []
+            line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+            total_revenue += line_revenue if line_revenue > 0 else float(r.get('total_amount') or 0)
+
         total_balance = sum(float(r.get('balance') or 0) for r in amounts_result.data)
         paid_count = sum(1 for r in amounts_result.data if r.get('is_paid'))
         
@@ -7266,20 +7277,16 @@ def api_sync_2024_invoices():
                         company_id = None
                         company_name = None
                     
-                    # Get the amount - try multiple fields to avoid NULL
-                    amount = (
-                        invoice.get('payable_amount_without_financial_discount') or
-                        invoice.get('payable_amount_with_financial_discount') or
-                        invoice.get('total_amount') or
-                        invoice.get('balance') or
-                        0
-                    )
-                    
-                    # If still 0, try to calculate from line items
+                    # Get the amount - prefer line item revenue (ex-VAT)
+                    line_items = invoice.get('invoice_line_items', [])
+                    if line_items:
+                        amount = sum(float(item.get('revenue') or 0) for item in line_items)
+                    else:
+                        amount = 0
+
+                    # Fall back to total_amount only if no line items
                     if amount == 0:
-                        line_items = invoice.get('invoice_line_items', [])
-                        if line_items:
-                            amount = sum(float(item.get('payable_amount') or item.get('revenue') or 0) for item in line_items)
+                        amount = float(invoice.get('total_amount') or invoice.get('balance') or 0)
                     
                     record = {
                         'invoice_id': invoice.get('id'),
@@ -7353,10 +7360,17 @@ def api_2024_sales_stats():
         count_result = supabase_client.table('sales_2024').select('id', count='exact').execute()
         total_count = count_result.count if hasattr(count_result, 'count') else len(count_result.data)
         
-        # Get sum of total amounts (use range to get more records)
-        amounts_result = supabase_client.table('sales_2024').select('total_amount, balance, is_paid').range(0, 9999).execute()
-        
-        total_revenue = sum(float(r.get('total_amount') or 0) for r in amounts_result.data)
+        # Get sum of revenue (ex-VAT from line items)
+        amounts_result = supabase_client.table('sales_2024').select('total_amount, balance, is_paid, invoice_data').range(0, 9999).execute()
+
+        # Calculate revenue from line items (ex-VAT) - matches DUANO's "Omzet"
+        total_revenue = 0
+        for r in amounts_result.data:
+            invoice_data = r.get('invoice_data') or {}
+            line_items = invoice_data.get('invoice_line_items') or []
+            line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+            total_revenue += line_revenue if line_revenue > 0 else float(r.get('total_amount') or 0)
+
         total_balance = sum(float(r.get('balance') or 0) for r in amounts_result.data)
         paid_count = sum(1 for r in amounts_result.data if r.get('is_paid'))
         
@@ -7681,11 +7695,13 @@ def api_2024_companies_analysis():
                     'currencies': set()
                 }
             
-            # Add invoice data
+            # Add invoice data - calculate revenue from line items (ex-VAT)
             company = companies_data[company_id]
-            invoice_amount = float(invoice.get('total_amount') or 0)
+            line_items = invoice_data.get('invoice_line_items') or []
+            line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+            invoice_amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
             invoice_date = invoice.get('invoice_date')
-            
+
             company['invoices'].append({
                 'id': invoice.get('invoice_id'),
                 'number': invoice.get('invoice_number'),
@@ -7694,7 +7710,7 @@ def api_2024_companies_analysis():
                 'balance': float(invoice.get('balance') or 0),
                 'is_paid': invoice.get('is_paid', False)
             })
-            
+
             company['total_revenue'] += invoice_amount
             company['invoice_count'] += 1
             
@@ -7838,11 +7854,13 @@ def api_2025_companies_analysis():
                     'currencies': set()
                 }
             
-            # Add invoice data
+            # Add invoice data - calculate revenue from line items (ex-VAT)
             company = companies_data[company_id]
-            invoice_amount = float(invoice.get('total_amount') or 0)
+            line_items = invoice_data.get('invoice_line_items') or []
+            line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+            invoice_amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
             invoice_date = invoice.get('invoice_date')
-            
+
             company['invoices'].append({
                 'id': invoice.get('invoice_id'),
                 'number': invoice.get('invoice_number'),
@@ -7851,7 +7869,7 @@ def api_2025_companies_analysis():
                 'balance': float(invoice.get('balance') or 0),
                 'is_paid': invoice.get('is_paid', False)
             })
-            
+
             company['total_revenue'] += invoice_amount
             company['invoice_count'] += 1
             
@@ -9079,12 +9097,18 @@ def api_refresh_alerts():
                 
                 while retry_count < max_retries:
                     try:
-                        invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number, balance').eq('company_id', company_id).execute()
+                        invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number, balance, invoice_data').eq('company_id', company_id).execute()
                         for invoice in invoices_result.data:
                             if invoice.get('invoice_date'):
+                                # Calculate revenue from line items (ex-VAT)
+                                invoice_data = invoice.get('invoice_data') or {}
+                                line_items = invoice_data.get('invoice_line_items') or []
+                                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                                amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
+
                                 all_invoices.append({
                                     'date': datetime.strptime(invoice['invoice_date'], '%Y-%m-%d'),
-                                    'amount': float(invoice.get('total_amount', 0)) if invoice.get('total_amount') else 0,
+                                    'amount': amount,
                                     'balance': float(invoice.get('balance', 0)) if invoice.get('balance') else 0,
                                     'id': invoice['id'],
                                     'number': invoice.get('invoice_number', invoice['id'])
@@ -9571,12 +9595,18 @@ def api_pattern_disruptions():
                 
                 while retry_count < max_retries:
                     try:
-                        invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number').eq('company_id', company_id).execute()
+                        invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number, invoice_data').eq('company_id', company_id).execute()
                         for invoice in invoices_result.data:
                             if invoice.get('invoice_date'):
+                                # Calculate revenue from line items (ex-VAT)
+                                invoice_data = invoice.get('invoice_data') or {}
+                                line_items = invoice_data.get('invoice_line_items') or []
+                                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                                amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
+
                                 all_invoices.append({
                                     'date': datetime.strptime(invoice['invoice_date'], '%Y-%m-%d'),
-                                    'amount': float(invoice.get('total_amount', 0)) if invoice.get('total_amount') else 0,
+                                    'amount': amount,
                                     'id': invoice['id'],
                                     'number': invoice.get('invoice_number', invoice['id'])
                                 })
@@ -9841,14 +9871,16 @@ def api_combined_companies_analysis():
                         'currencies': set()
                     }
                 
-                # Add invoice data to specific year
+                # Add invoice data to specific year - calculate revenue from line items (ex-VAT)
                 company = companies_data[company_id]
-                invoice_amount = float(invoice.get('total_amount') or 0)
+                line_items = invoice_data.get('invoice_line_items') or []
+                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                invoice_amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
                 invoice_date = invoice.get('invoice_date')
-                
+
                 # Extract more details from raw invoice data
                 raw_invoice = invoice_data
-                
+
                 invoice_record = {
                     'id': invoice.get('invoice_id'),
                     'number': invoice.get('invoice_number'),
@@ -9871,7 +9903,7 @@ def api_combined_companies_analysis():
                     'invoice_type': raw_invoice.get('type', ''),
                     'status': raw_invoice.get('status', '')
                 }
-                
+
                 # Add to year-specific data
                 company['years_data'][str(year)]['invoices'].append(invoice_record)
                 company['years_data'][str(year)]['total_revenue'] += invoice_amount
@@ -10178,11 +10210,15 @@ def api_populate_companies_enhanced():
                         company_id = invoice.get('company_id')
                         if not company_id or company_id not in companies_data:
                             continue
-                        
+
                         company = companies_data[company_id]
-                        invoice_amount = float(invoice.get('total_amount') or 0)
+                        # Calculate revenue from line items (ex-VAT)
+                        invoice_data = invoice.get('invoice_data') or {}
+                        line_items = invoice_data.get('invoice_line_items') or []
+                        line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                        invoice_amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
                         invoice_date = invoice.get('invoice_date')
-                        
+
                         # Update year-specific totals
                         if year == 2024:
                             company['total_revenue_2024'] += invoice_amount
@@ -11039,11 +11075,14 @@ def api_populate_companies():
                         'data_sources': ['invoices']
                     }
                 
-                # Update financial data
+                # Update financial data - calculate revenue from line items (ex-VAT)
                 company = companies_data[company_id]
-                invoice_amount = float(invoice.get('total_amount') or 0)
+                invoice_data_obj = invoice.get('invoice_data') or {}
+                line_items = invoice_data_obj.get('invoice_line_items') or []
+                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                invoice_amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
                 invoice_date = invoice.get('invoice_date')
-                
+
                 # Update year-specific totals
                 if year == 2024:
                     company['total_revenue_2024'] += invoice_amount
@@ -14059,20 +14098,20 @@ def execute_ai_tool(function_name, args):
             
             result = query.limit(500).execute()
             
-            # Process to get amounts from invoice_data if total_amount is null
+            # Process to get amounts from line items (ex-VAT)
             processed = []
             for r in result.data:
-                amount = r.get('total_amount')
-                if amount is None or amount == 0:
-                    invoice_data = r.get('invoice_data', {})
-                    if isinstance(invoice_data, dict):
-                        amount = invoice_data.get('payable_amount_with_financial_discount') or invoice_data.get('balance') or 0
-                
+                invoice_data = r.get('invoice_data') or {}
+                line_items = invoice_data.get('invoice_line_items') or []
+                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                # Fall back to total_amount only if no line items
+                amount = line_revenue if line_revenue > 0 else float(r.get('total_amount') or 0)
+
                 processed.append({
                     'invoice_number': r.get('invoice_number'),
                     'company_name': r.get('company_name'),
                     'invoice_date': r.get('invoice_date'),
-                    'total_amount': float(amount) if amount else 0,
+                    'total_amount': round(amount, 2),
                     'is_paid': r.get('is_paid')
                 })
             
@@ -14109,21 +14148,15 @@ def execute_ai_tool(function_name, args):
             
             result = query.execute()
             
-            # Calculate revenue using SAME method as homepage: total_amount or payable_amount_with_financial_discount
+            # Calculate revenue from line items (ex-VAT) - matches DUANO's "Omzet"
             total_revenue = 0
-            
+
             for r in result.data:
-                # Use total_amount from sales table (same as homepage)
-                amount = float(r.get('total_amount') or 0)
-                
-                # If total_amount is 0/null, get from invoice_data
-                if amount == 0:
-                    invoice_data = r.get('invoice_data', {})
-                    if isinstance(invoice_data, dict):
-                        amount = float(invoice_data.get('payable_amount_with_financial_discount') or 
-                                      invoice_data.get('balance') or 0)
-                
-                total_revenue += amount
+                invoice_data = r.get('invoice_data') or {}
+                line_items = invoice_data.get('invoice_line_items') or []
+                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                # Fall back to total_amount only if no line items
+                total_revenue += line_revenue if line_revenue > 0 else float(r.get('total_amount') or 0)
             
             invoice_count = len(result.data)
             
@@ -14161,16 +14194,13 @@ def execute_ai_tool(function_name, args):
                 except:
                     continue
                 
-                # Use total_amount (same as homepage calculation)
-                amount = float(r.get('total_amount') or 0)
-                
-                # If total_amount is 0/null, get from invoice_data
-                if amount == 0:
-                    invoice_data = r.get('invoice_data', {})
-                    if isinstance(invoice_data, dict):
-                        amount = float(invoice_data.get('payable_amount_with_financial_discount') or 
-                                      invoice_data.get('balance') or 0)
-                
+                # Calculate revenue from line items (ex-VAT) - matches DUANO's "Omzet"
+                invoice_data = r.get('invoice_data') or {}
+                line_items = invoice_data.get('invoice_line_items') or []
+                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                # Fall back to total_amount only if no line items
+                amount = line_revenue if line_revenue > 0 else float(r.get('total_amount') or 0)
+
                 monthly_data[month_num]['revenue'] += amount
                 monthly_data[month_num]['count'] += 1
             
@@ -14225,19 +14255,15 @@ def execute_ai_tool(function_name, args):
             # Get more results to sort properly (some might have null total_amount)
             result = query.limit(500).execute()
             
-            # Process results - use SAME calculation as homepage
+            # Process results - calculate revenue from line items (ex-VAT)
             processed = []
             for r in result.data:
-                # Use total_amount (same as homepage)
-                amount = float(r.get('total_amount') or 0)
-                
-                # If total_amount is 0/null, get from invoice_data
-                if amount == 0:
-                    invoice_data = r.get('invoice_data', {})
-                    if isinstance(invoice_data, dict):
-                        amount = float(invoice_data.get('payable_amount_with_financial_discount') or 
-                                      invoice_data.get('balance') or 0)
-                
+                invoice_data = r.get('invoice_data') or {}
+                line_items = invoice_data.get('invoice_line_items') or []
+                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                # Fall back to total_amount only if no line items
+                amount = line_revenue if line_revenue > 0 else float(r.get('total_amount') or 0)
+
                 processed.append({
                     'invoice_number': r.get('invoice_number'),
                     'company_name': r.get('company_name'),
