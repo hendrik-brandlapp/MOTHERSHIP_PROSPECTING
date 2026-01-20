@@ -5422,7 +5422,7 @@ async function loadCompanyNotes(containerId, apiId = null) {
                 `;
             } else {
                 console.log(`📝 Rendering ${data.notes.length} notes`);
-                container.innerHTML = data.notes.map(note => renderNoteBlock(note, companyId)).join('');
+                container.innerHTML = data.notes.map(note => renderNoteBlock(note, containerId)).join('');
             }
         } else {
             console.warn(`📝 Notes API returned error:`, data);
