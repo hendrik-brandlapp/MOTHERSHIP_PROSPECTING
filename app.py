@@ -12970,6 +12970,43 @@ def delete_trip_stop(trip_id, stop_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/trips/<trip_id>/stops/<stop_id>/checklist', methods=['PUT'])
+def update_stop_checklist(trip_id, stop_id):
+    """Update checklist items for a trip stop"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+
+        data = request.json
+        checklist = data.get('checklist', [])
+
+        # Verify stop exists and belongs to the trip
+        stop_response = supabase_client.table('trip_stops').select('*').eq('id', stop_id).eq('trip_id', trip_id).execute()
+
+        if not stop_response.data:
+            return jsonify({'error': 'Stop not found'}), 404
+
+        # Update the checklist (stored as JSONB)
+        result = supabase_client.table('trip_stops').update({
+            'checklist': checklist
+        }).eq('id', stop_id).execute()
+
+        if result.data:
+            return jsonify({
+                'success': True,
+                'checklist': checklist
+            })
+        else:
+            return jsonify({'error': 'Failed to update checklist'}), 500
+
+    except Exception as e:
+        print(f"Error updating stop checklist: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/trips/<trip_id>/reorder', methods=['POST'])
 def reorder_trip_stops(trip_id):
     """Reorder stops in a trip (manual drag and drop)"""

@@ -377,6 +377,150 @@
         font-size: 0.875rem;
     }
 
+    /* Pre-Visit Checklist */
+    .stop-checklist-section {
+        margin-bottom: var(--space-lg);
+        padding-bottom: var(--space-md);
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .stop-checklist-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-sm);
+    }
+
+    .stop-checklist-title {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .checklist-items {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .checklist-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        transition: all 0.2s;
+    }
+
+    .checklist-item:hover {
+        border-color: var(--border-color);
+    }
+
+    .checklist-item.completed {
+        background: var(--success-bg);
+        border-color: var(--success);
+    }
+
+    .checklist-item.completed .checklist-item-text {
+        text-decoration: line-through;
+        color: var(--text-muted);
+    }
+
+    .checklist-checkbox {
+        width: 20px;
+        height: 20px;
+        border-radius: var(--radius-sm);
+        border: 2px solid var(--border-color);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: all 0.2s;
+    }
+
+    .checklist-checkbox:hover {
+        border-color: var(--accent);
+    }
+
+    .checklist-item.completed .checklist-checkbox {
+        background: var(--success);
+        border-color: var(--success);
+        color: white;
+    }
+
+    .checklist-item-text {
+        flex: 1;
+        font-size: 0.875rem;
+        color: var(--text-primary);
+    }
+
+    .checklist-item-delete {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0.25rem;
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+
+    .checklist-item:hover .checklist-item-delete {
+        opacity: 1;
+    }
+
+    .checklist-item-delete:hover {
+        color: var(--danger);
+    }
+
+    .add-checklist-form {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: var(--space-sm);
+    }
+
+    .add-checklist-input {
+        flex: 1;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+    }
+
+    .add-checklist-input:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+
+    .add-checklist-btn {
+        padding: 0.5rem 0.75rem;
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    .add-checklist-btn:hover {
+        background: var(--accent-dark, #4F46E5);
+    }
+
+    .checklist-empty {
+        text-align: center;
+        padding: var(--space-sm);
+        color: var(--text-muted);
+        font-size: 0.8125rem;
+        font-style: italic;
+    }
+
     /* Map Section - Collapsible at bottom */
     .map-section {
         background: var(--bg-surface);
@@ -720,6 +864,24 @@ function renderStops() {
                     </div>
                 </div>
                 <div class="stop-card-body">
+                    <!-- Pre-Visit Checklist -->
+                    <div class="stop-checklist-section">
+                        <div class="stop-checklist-header">
+                            <span class="stop-checklist-title"><i class="fas fa-clipboard-check"></i> Pre-Visit Checklist</span>
+                        </div>
+                        <div class="checklist-items" id="checklist-${stop.id}">
+                            ${renderStopChecklist(stop)}
+                        </div>
+                        <div class="add-checklist-form">
+                            <input type="text" class="add-checklist-input" id="newChecklistItem-${stop.id}"
+                                   placeholder="Add checklist item..."
+                                   onkeypress="if(event.key==='Enter') addChecklistItem('${stop.id}')">
+                            <button class="add-checklist-btn" onclick="addChecklistItem('${stop.id}')">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="stop-notes-section">
                         <div class="stop-notes-header">
                             <span class="stop-notes-title">Notes & Images</span>
@@ -768,6 +930,133 @@ function renderStops() {
     `;
 
     return html;
+}
+
+function renderStopChecklist(stop) {
+    const checklist = stop.checklist || [];
+    if (checklist.length === 0) {
+        return '<div class="checklist-empty">No checklist items - add tasks to prepare for this visit</div>';
+    }
+
+    return checklist.map((item, index) => `
+        <div class="checklist-item ${item.completed ? 'completed' : ''}" data-index="${index}">
+            <div class="checklist-checkbox" onclick="toggleChecklistItem('${stop.id}', ${index})">
+                ${item.completed ? '<i class="fas fa-check"></i>' : ''}
+            </div>
+            <span class="checklist-item-text">${escapeHtml(item.text)}</span>
+            <button class="checklist-item-delete" onclick="deleteChecklistItem('${stop.id}', ${index})" title="Delete item">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+async function addChecklistItem(stopId) {
+    const input = document.getElementById(`newChecklistItem-${stopId}`);
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    // Find the stop in the trip data
+    const stop = trip.stops.find(s => s.id === stopId);
+    if (!stop) return;
+
+    // Initialize checklist if needed
+    if (!stop.checklist) stop.checklist = [];
+
+    // Add new item
+    stop.checklist.push({
+        text: text,
+        completed: false,
+        created_at: new Date().toISOString()
+    });
+
+    // Save to server
+    try {
+        const response = await fetch(`/api/trips/${trip.id}/stops/${stopId}/checklist`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ checklist: stop.checklist })
+        });
+
+        if (response.ok) {
+            // Re-render the checklist
+            document.getElementById(`checklist-${stopId}`).innerHTML = renderStopChecklist(stop);
+            input.value = '';
+        } else {
+            // Remove the item if save failed
+            stop.checklist.pop();
+            alert('Failed to add checklist item');
+        }
+    } catch (error) {
+        stop.checklist.pop();
+        console.error('Error adding checklist item:', error);
+        alert('Failed to add checklist item');
+    }
+}
+
+async function toggleChecklistItem(stopId, index) {
+    const stop = trip.stops.find(s => s.id === stopId);
+    if (!stop || !stop.checklist || !stop.checklist[index]) return;
+
+    // Toggle completion
+    stop.checklist[index].completed = !stop.checklist[index].completed;
+    stop.checklist[index].completed_at = stop.checklist[index].completed ? new Date().toISOString() : null;
+
+    // Save to server
+    try {
+        const response = await fetch(`/api/trips/${trip.id}/stops/${stopId}/checklist`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ checklist: stop.checklist })
+        });
+
+        if (response.ok) {
+            // Re-render the checklist
+            document.getElementById(`checklist-${stopId}`).innerHTML = renderStopChecklist(stop);
+        } else {
+            // Revert the toggle if save failed
+            stop.checklist[index].completed = !stop.checklist[index].completed;
+            alert('Failed to update checklist item');
+        }
+    } catch (error) {
+        stop.checklist[index].completed = !stop.checklist[index].completed;
+        console.error('Error toggling checklist item:', error);
+        alert('Failed to update checklist item');
+    }
+}
+
+async function deleteChecklistItem(stopId, index) {
+    const stop = trip.stops.find(s => s.id === stopId);
+    if (!stop || !stop.checklist || !stop.checklist[index]) return;
+
+    // Store the item in case we need to restore it
+    const deletedItem = stop.checklist[index];
+
+    // Remove the item
+    stop.checklist.splice(index, 1);
+
+    // Save to server
+    try {
+        const response = await fetch(`/api/trips/${trip.id}/stops/${stopId}/checklist`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ checklist: stop.checklist })
+        });
+
+        if (response.ok) {
+            // Re-render the checklist
+            document.getElementById(`checklist-${stopId}`).innerHTML = renderStopChecklist(stop);
+        } else {
+            // Restore the item if save failed
+            stop.checklist.splice(index, 0, deletedItem);
+            alert('Failed to delete checklist item');
+        }
+    } catch (error) {
+        stop.checklist.splice(index, 0, deletedItem);
+        console.error('Error deleting checklist item:', error);
+        alert('Failed to delete checklist item');
+    }
 }
 
 function renderStopNotes(stop) {
