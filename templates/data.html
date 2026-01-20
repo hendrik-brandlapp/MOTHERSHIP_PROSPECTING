@@ -4515,7 +4515,16 @@ function showCompanyDetails(companyId) {
                         <option value="Kesha" ${company.assigned_salesperson === 'Kesha' ? 'selected' : ''}>Kesha</option>
                         <option value="Django" ${company.assigned_salesperson === 'Django' ? 'selected' : ''}>Django</option>
                     </select>
-                    </div>
+                </div>
+                <div class="col-md-6 mt-3">
+                    <label class="form-label small fw-bold text-muted">Lead Source</label>
+                    <select class="form-select-modern w-100" id="leadSourceSelect" onchange="updateLeadSource(${company.company_id})">
+                        <option value="" ${!company.lead_source ? 'selected' : ''}>Not Set</option>
+                        <option value="eigen_prospectie" ${company.lead_source === 'eigen_prospectie' ? 'selected' : ''}>Eigen Prospectie</option>
+                        <option value="reactief" ${company.lead_source === 'reactief' ? 'selected' : ''}>Reactief</option>
+                        <option value="distributeur" ${company.lead_source === 'distributeur' ? 'selected' : ''}>Distributeur</option>
+                    </select>
+                </div>
                 </div>
             </div>
 
@@ -5994,6 +6003,34 @@ async function updateAssignedSalesperson(companyId) {
     } catch (error) {
         console.error('Error updating salesperson:', error);
         alert('Error updating salesperson');
+    }
+}
+
+async function updateLeadSource(companyId) {
+    const leadSource = document.getElementById('leadSourceSelect')?.value || '';
+
+    try {
+        const response = await fetch(`/api/companies/${companyId}/contact`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lead_source: leadSource })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showSaveSuccess('Lead source updated!');
+            // Update local data
+            const company = allCompanies.find(c => c.company_id === companyId);
+            if (company) {
+                company.lead_source = leadSource;
+            }
+        } else {
+            alert('Error updating: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error updating lead source:', error);
+        alert('Error updating lead source');
     }
 }
 

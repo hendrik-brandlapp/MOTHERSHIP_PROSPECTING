@@ -8324,6 +8324,7 @@ def api_companies_from_db():
                 'company_tag': details.get('company_tag'),
                 'contact_person': details.get('contact_person_name'),
                 'assigned_salesperson': details.get('assigned_salesperson'),
+                'lead_source': details.get('lead_source'),
                 # Categories for filtering
                 'company_categories': details.get('company_categories'),
                 'raw_company_data': details.get('raw_company_data'),
@@ -8444,6 +8445,8 @@ def api_update_company_contact(company_id):
             update_fields['website'] = data['website']
         if 'assigned_salesperson' in data:
             update_fields['assigned_salesperson'] = data['assigned_salesperson']
+        if 'lead_source' in data:
+            update_fields['lead_source'] = data['lead_source']
 
         if not update_fields:
             return jsonify({'error': 'No valid fields to update'}), 400
