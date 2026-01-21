@@ -10627,8 +10627,8 @@ def api_sync_missing_companies():
                     'last_sync_at': datetime.now().isoformat()
                 }
 
-                # Insert into database
-                supabase_client.table('companies').insert(record).execute()
+                # Upsert into database (insert or update if exists)
+                supabase_client.table('companies').upsert(record, on_conflict='company_id').execute()
                 synced_count += 1
                 print(f"✅ Synced company {company_id}: {company_data.get('name')} (categories: {company_data.get('company_categories', [])})")
 
