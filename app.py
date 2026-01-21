@@ -8255,13 +8255,16 @@ def api_companies_from_db():
                     'products_proposed, products_sampled, products_listed, products_won, '
                     'contact_person_role, contact_2_name, contact_2_role, contact_2_email, contact_2_phone, '
                     'contact_3_name, contact_3_role, contact_3_email, contact_3_phone, '
-                    'imported_from_crm, crm_import_date, external_account_number'
-                ).neq('crm_review_status', 'merged').range(offset, offset + batch_size - 1).execute()
+                    'imported_from_crm, crm_import_date, external_account_number, crm_review_status'
+                ).range(offset, offset + batch_size - 1).execute()
 
                 if not comp_result.data:
                     break
 
                 for c in comp_result.data:
+                    # Skip merged CRM imports (their data was transferred to target company)
+                    if c.get('crm_review_status') == 'merged':
+                        continue
                     # Key by both id and company_id for flexible lookup
                     # (sales tables may use either depending on how data was imported)
                     company_details[c['company_id']] = c
