@@ -1,0 +1,678 @@
+{% extends "base.html" %}
+
+{% block title %}CRM Import Merge - CRMinal{% endblock %}
+
+{% block content %}
+<style>
+    .merge-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+        height: calc(100vh - 200px);
+    }
+
+    .merge-panel {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .panel-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #f9fafb;
+    }
+
+    .panel-header h5 {
+        margin: 0;
+        font-weight: 600;
+        color: #111827;
+    }
+
+    .panel-header .badge {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+    }
+
+    .panel-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px;
+    }
+
+    .crm-card {
+        background: #fefce8;
+        border: 1px solid #fde047;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .crm-card:hover {
+        border-color: #facc15;
+        box-shadow: 0 2px 8px rgba(250, 204, 21, 0.2);
+    }
+
+    .crm-card.selected {
+        border-color: #f59e0b;
+        box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+    }
+
+    .crm-card h6 {
+        margin: 0 0 8px 0;
+        font-weight: 600;
+        color: #92400e;
+    }
+
+    .crm-card .meta {
+        font-size: 0.8rem;
+        color: #78716c;
+    }
+
+    .crm-card .badges {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .existing-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .existing-card:hover {
+        border-color: #3b82f6;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+    }
+
+    .existing-card.selected {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+    }
+
+    .existing-card h6 {
+        margin: 0 0 4px 0;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .existing-card .legal-name {
+        font-size: 0.75rem;
+        color: #6b7280;
+        margin-bottom: 8px;
+    }
+
+    .existing-card .stats {
+        display: flex;
+        gap: 16px;
+        font-size: 0.8rem;
+        color: #059669;
+        font-weight: 500;
+    }
+
+    .search-box {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .search-box input {
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 0.9rem;
+    }
+
+    .search-box input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .action-bar {
+        padding: 16px 20px;
+        border-top: 1px solid #e5e7eb;
+        background: #f9fafb;
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+    }
+
+    .btn-merge {
+        background: #059669;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-merge:hover:not(:disabled) {
+        background: #047857;
+    }
+
+    .btn-merge:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-standalone {
+        background: #6366f1;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-standalone:hover {
+        background: #4f46e5;
+    }
+
+    .btn-skip {
+        background: #ef4444;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-skip:hover {
+        background: #dc2626;
+    }
+
+    .stats-bar {
+        display: flex;
+        gap: 24px;
+        padding: 16px 24px;
+        background: white;
+        border-radius: 12px;
+        margin-bottom: 24px;
+        border: 1px solid #e5e7eb;
+    }
+
+    .stat-item {
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        color: #6b7280;
+        text-transform: uppercase;
+    }
+
+    .stat-item.pending .stat-value { color: #f59e0b; }
+    .stat-item.merged .stat-value { color: #059669; }
+    .stat-item.standalone .stat-value { color: #6366f1; }
+
+    .empty-state {
+        text-align: center;
+        padding: 48px 24px;
+        color: #6b7280;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 16px;
+        opacity: 0.5;
+    }
+
+    .crm-details {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px dashed #fde047;
+        font-size: 0.8rem;
+    }
+
+    .crm-details .detail-row {
+        display: flex;
+        margin-bottom: 4px;
+    }
+
+    .crm-details .detail-label {
+        width: 100px;
+        color: #92400e;
+        font-weight: 500;
+    }
+
+    .crm-details .detail-value {
+        flex: 1;
+        color: #78716c;
+    }
+
+    .import-btn {
+        background: #f59e0b;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 16px;
+    }
+
+    .import-btn:hover {
+        background: #d97706;
+    }
+
+    .import-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+</style>
+
+<div class="container-fluid px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold text-dark mb-1">CRM Import Merge</h2>
+            <p class="text-muted mb-0">Review imported companies and merge with existing records</p>
+        </div>
+        <div>
+            <button class="import-btn" onclick="startImport()" id="importBtn">
+                <i class="fas fa-upload me-2"></i>Import CRM Data
+            </button>
+            <a href="/data" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Companies
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat-item pending">
+            <div class="stat-value" id="statPending">-</div>
+            <div class="stat-label">Pending Review</div>
+        </div>
+        <div class="stat-item merged">
+            <div class="stat-value" id="statMerged">-</div>
+            <div class="stat-label">Merged</div>
+        </div>
+        <div class="stat-item standalone">
+            <div class="stat-value" id="statStandalone">-</div>
+            <div class="stat-label">New Companies</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="statProgress">-</div>
+            <div class="stat-label">Progress</div>
+        </div>
+    </div>
+
+    <!-- Main Merge Interface -->
+    <div class="merge-container">
+        <!-- Left Panel: CRM Imports -->
+        <div class="merge-panel">
+            <div class="panel-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-file-import me-2 text-warning"></i>CRM Imports</h5>
+                <span class="badge bg-warning text-dark" id="pendingCount">0 pending</span>
+            </div>
+            <div class="panel-content" id="crmList">
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No CRM imports pending review.<br>Click "Import CRM Data" to start.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Existing Companies Search -->
+        <div class="merge-panel">
+            <div class="panel-header">
+                <h5><i class="fas fa-building me-2 text-primary"></i>Existing Companies</h5>
+            </div>
+            <div class="search-box">
+                <input type="text" id="searchExisting" placeholder="Search existing companies..." oninput="searchExisting()">
+            </div>
+            <div class="panel-content" id="existingList">
+                <div class="empty-state">
+                    <i class="fas fa-search"></i>
+                    <p>Select a CRM import on the left,<br>then search for matching companies here.</p>
+                </div>
+            </div>
+            <div class="action-bar">
+                <button class="btn-merge" id="mergeBtn" disabled onclick="mergeCompanies()">
+                    <i class="fas fa-link me-2"></i>Merge Selected
+                </button>
+                <button class="btn-standalone" id="standaloneBtn" disabled onclick="keepStandalone()">
+                    <i class="fas fa-plus me-2"></i>Keep as New
+                </button>
+                <button class="btn-skip" id="skipBtn" disabled onclick="skipImport()">
+                    <i class="fas fa-times me-2"></i>Skip/Delete
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let pendingCRM = [];
+let selectedCRM = null;
+let selectedExisting = null;
+
+// Load stats and pending items on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadStats();
+    loadPending();
+});
+
+async function loadStats() {
+    try {
+        const response = await fetch('/api/crm-stats');
+        const data = await response.json();
+
+        document.getElementById('statPending').textContent = data.pending || 0;
+        document.getElementById('statMerged').textContent = data.merged || 0;
+        document.getElementById('statStandalone').textContent = data.standalone || 0;
+
+        const total = data.pending + data.merged + data.standalone;
+        const progress = total > 0 ? Math.round((data.total_reviewed / total) * 100) : 0;
+        document.getElementById('statProgress').textContent = progress + '%';
+    } catch (e) {
+        console.error('Error loading stats:', e);
+    }
+}
+
+async function loadPending() {
+    try {
+        const response = await fetch('/api/crm-pending');
+        const data = await response.json();
+
+        pendingCRM = data.pending || [];
+        document.getElementById('pendingCount').textContent = pendingCRM.length + ' pending';
+
+        renderCRMList();
+    } catch (e) {
+        console.error('Error loading pending:', e);
+    }
+}
+
+function renderCRMList() {
+    const container = document.getElementById('crmList');
+
+    if (pendingCRM.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-check-circle text-success"></i>
+                <p>All CRM imports have been reviewed!</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = pendingCRM.map(crm => {
+        const source = crm.crm_source_data || {};
+        return `
+            <div class="crm-card ${selectedCRM?.company_id === crm.company_id ? 'selected' : ''}"
+                 onclick="selectCRM(${crm.company_id})">
+                <h6>${escapeHtml(crm.name || 'Unknown')}</h6>
+                <div class="meta">
+                    ${crm.address_line1 ? `<div><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(crm.address_line1)}, ${escapeHtml(crm.post_code || '')} ${escapeHtml(crm.city || '')}</div>` : ''}
+                </div>
+                <div class="badges">
+                    ${crm.lead_status ? `<span class="badge bg-${crm.lead_status === 'Customer' ? 'success' : 'secondary'}">${crm.lead_status}</span>` : ''}
+                    ${crm.channel ? `<span class="badge bg-${crm.channel === 'On-Trade' ? 'primary' : 'info'}">${crm.channel}</span>` : ''}
+                    ${crm.priority ? `<span class="badge bg-${crm.priority === 'High' ? 'danger' : 'warning'}">${crm.priority}</span>` : ''}
+                </div>
+                ${selectedCRM?.company_id === crm.company_id ? `
+                <div class="crm-details">
+                    ${source.notes ? `<div class="detail-row"><span class="detail-label">Notes:</span><span class="detail-value">${escapeHtml(source.notes.substring(0, 100))}${source.notes.length > 100 ? '...' : ''}</span></div>` : ''}
+                    ${source.contact_1_name ? `<div class="detail-row"><span class="detail-label">Contact:</span><span class="detail-value">${escapeHtml(source.contact_1_name)} ${source.contact_1_email ? '(' + escapeHtml(source.contact_1_email) + ')' : ''}</span></div>` : ''}
+                    ${source.company_owner ? `<div class="detail-row"><span class="detail-label">Owner:</span><span class="detail-value">${escapeHtml(source.company_owner)}</span></div>` : ''}
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function selectCRM(companyId) {
+    selectedCRM = pendingCRM.find(c => c.company_id === companyId);
+    selectedExisting = null;
+
+    renderCRMList();
+    updateButtons();
+
+    // Pre-fill search with company name
+    if (selectedCRM) {
+        document.getElementById('searchExisting').value = selectedCRM.name || '';
+        searchExisting();
+    }
+}
+
+async function searchExisting() {
+    const query = document.getElementById('searchExisting').value.trim();
+    const container = document.getElementById('existingList');
+
+    if (query.length < 2) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-search"></i>
+                <p>Type at least 2 characters to search</p>
+            </div>
+        `;
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/crm-search-existing?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        if (!data.results || data.results.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-times-circle"></i>
+                    <p>No existing companies found for "${escapeHtml(query)}"<br>
+                    <small>This might be a new company - click "Keep as New"</small></p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = data.results.map(company => {
+            const revenue = (company.total_revenue_2024 || 0) + (company.total_revenue_2025 || 0);
+            const orders = (company.invoice_count_2024 || 0) + (company.invoice_count_2025 || 0);
+
+            return `
+                <div class="existing-card ${selectedExisting?.company_id === company.company_id ? 'selected' : ''}"
+                     onclick="selectExisting(${company.company_id})">
+                    <h6>${escapeHtml(company.public_name || company.name || 'Unknown')}</h6>
+                    ${company.name !== company.public_name && company.name ? `<div class="legal-name">${escapeHtml(company.name)}</div>` : ''}
+                    <div class="meta">
+                        ${company.address_line1 ? `<div><i class="fas fa-map-marker-alt me-1"></i>${escapeHtml(company.address_line1)}, ${escapeHtml(company.post_code || '')} ${escapeHtml(company.city || '')}</div>` : ''}
+                        ${company.email ? `<div><i class="fas fa-envelope me-1"></i>${escapeHtml(company.email)}</div>` : ''}
+                    </div>
+                    <div class="stats">
+                        <span><i class="fas fa-euro-sign me-1"></i>${revenue.toLocaleString('nl-BE', {minimumFractionDigits: 0})}</span>
+                        <span><i class="fas fa-file-invoice me-1"></i>${orders} orders</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (e) {
+        console.error('Error searching:', e);
+    }
+}
+
+function selectExisting(companyId) {
+    // Fetch from the displayed results
+    const container = document.getElementById('existingList');
+    const cards = container.querySelectorAll('.existing-card');
+
+    cards.forEach(card => {
+        card.classList.remove('selected');
+        if (card.onclick.toString().includes(companyId)) {
+            card.classList.add('selected');
+        }
+    });
+
+    // Store selected company ID
+    selectedExisting = { company_id: companyId };
+    updateButtons();
+}
+
+function updateButtons() {
+    const mergeBtn = document.getElementById('mergeBtn');
+    const standaloneBtn = document.getElementById('standaloneBtn');
+    const skipBtn = document.getElementById('skipBtn');
+
+    mergeBtn.disabled = !selectedCRM || !selectedExisting;
+    standaloneBtn.disabled = !selectedCRM;
+    skipBtn.disabled = !selectedCRM;
+}
+
+async function mergeCompanies() {
+    if (!selectedCRM || !selectedExisting) return;
+
+    if (!confirm(`Merge "${selectedCRM.name}" into the selected existing company?`)) return;
+
+    try {
+        const response = await fetch('/api/crm-merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                crm_company_id: selectedCRM.company_id,
+                target_company_id: selectedExisting.company_id
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Remove from list and refresh
+            pendingCRM = pendingCRM.filter(c => c.company_id !== selectedCRM.company_id);
+            selectedCRM = null;
+            selectedExisting = null;
+
+            renderCRMList();
+            loadStats();
+
+            document.getElementById('existingList').innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-check-circle text-success"></i>
+                    <p>Merged successfully!<br>Select another CRM import to continue.</p>
+                </div>
+            `;
+            updateButtons();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error merging: ' + e.message);
+    }
+}
+
+async function keepStandalone() {
+    if (!selectedCRM) return;
+
+    if (!confirm(`Keep "${selectedCRM.name}" as a new standalone company?`)) return;
+
+    try {
+        const response = await fetch('/api/crm-keep-standalone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ crm_company_id: selectedCRM.company_id })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            pendingCRM = pendingCRM.filter(c => c.company_id !== selectedCRM.company_id);
+            selectedCRM = null;
+            selectedExisting = null;
+
+            renderCRMList();
+            loadStats();
+            updateButtons();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function skipImport() {
+    if (!selectedCRM) return;
+
+    if (!confirm(`Delete/skip "${selectedCRM.name}"? This CRM record will be removed.`)) return;
+
+    try {
+        const response = await fetch('/api/crm-delete-pending', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ crm_company_id: selectedCRM.company_id })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            pendingCRM = pendingCRM.filter(c => c.company_id !== selectedCRM.company_id);
+            selectedCRM = null;
+            selectedExisting = null;
+
+            renderCRMList();
+            loadStats();
+            updateButtons();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function startImport() {
+    if (!confirm('This will import all CRM records as pending review. Continue?')) return;
+
+    const btn = document.getElementById('importBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Importing...';
+
+    try {
+        const response = await fetch('/api/crm-import-safe', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.success) {
+            alert(`Imported ${data.imported} of ${data.total} records.\n${data.errors} errors.`);
+            loadStats();
+            loadPending();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Error importing: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-upload me-2"></i>Import CRM Data';
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

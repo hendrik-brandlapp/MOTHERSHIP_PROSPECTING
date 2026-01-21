@@ -15622,6 +15622,398 @@ def import_crm_data():
         return jsonify({'error': str(e)}), 500
 
 
+# ============================================================================
+# CRM IMPORT & MERGE INTERFACE
+# ============================================================================
+
+@app.route('/crm-merge')
+def crm_merge_page():
+    """Page for reviewing and merging CRM imports."""
+    if not is_logged_in():
+        return redirect(url_for('login'))
+    return render_template('crm_merge.html')
+
+
+@app.route('/api/crm-import-safe', methods=['POST'])
+def crm_import_safe():
+    """
+    Safe CRM import - imports ALL records as pending review.
+    No auto-matching, no updates to existing companies.
+    """
+    try:
+        import csv
+        import re
+        import time as time_module
+
+        def parse_address(address):
+            if not address:
+                return {}
+            result = {'address_line1': '', 'city': '', 'post_code': '', 'country_name': ''}
+            parts = [p.strip() for p in address.split(',')]
+            if len(parts) >= 1:
+                result['address_line1'] = parts[0]
+            if len(parts) >= 2:
+                city_part = parts[1].strip()
+                match = re.match(r'(\d{4,5})\s+(.+)', city_part)
+                if match:
+                    result['post_code'] = match.group(1)
+                    result['city'] = match.group(2)
+                else:
+                    result['city'] = city_part
+            if len(parts) >= 3:
+                result['country_name'] = parts[2].strip()
+            return result
+
+        def parse_coordinates(coord_string):
+            if not coord_string or ',' not in coord_string:
+                return None, None
+            try:
+                parts = coord_string.split(',')
+                return float(parts[0].strip()), float(parts[1].strip())
+            except:
+                return None, None
+
+        def parse_list(s):
+            if not s or not s.strip():
+                return []
+            return [p.strip() for p in s.split(',') if p.strip()]
+
+        # Load CSV
+        csv_path = os.path.join(os.path.dirname(__file__), '2026-01-20_location_export.csv')
+        csv_records = []
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter=';')
+            for row in reader:
+                csv_records.append(row)
+
+        # Import each record as a new pending company
+        imported = 0
+        errors = []
+
+        for i, csv_record in enumerate(csv_records):
+            address_parts = parse_address(csv_record.get('Address', ''))
+            lat, lng = parse_coordinates(csv_record.get('Coordinates', ''))
+
+            # Store all CRM data in a JSON field for reference
+            crm_source = {
+                'original_name': csv_record.get('Name', ''),
+                'original_address': csv_record.get('Address', ''),
+                'account_number': csv_record.get('Account Number', ''),
+                'lead_status': csv_record.get('Lead Status', ''),
+                'channel': csv_record.get('Channel', ''),
+                'priority': csv_record.get('Priority', ''),
+                'language': csv_record.get('Language', ''),
+                'province': csv_record.get('Province / Region', ''),
+                'sub_type': csv_record.get('Sub Type', ''),
+                'business_type': csv_record.get('Type (Yugen Website)', ''),
+                'company_owner': csv_record.get('Company Owner', ''),
+                'parent_company': csv_record.get('Parent Company', ''),
+                'suppliers': csv_record.get('Suppliers', ''),
+                'notes': csv_record.get('Notes', ''),
+                'activations': csv_record.get('Activations', ''),
+                'products_proposed': csv_record.get('Proposed', ''),
+                'products_sampled': csv_record.get('Sampled', ''),
+                'products_listed': csv_record.get('Listed', ''),
+                'products_won': csv_record.get('Win', ''),
+                'contact_1_name': csv_record.get('Contact 1 Name', ''),
+                'contact_1_role': csv_record.get('Contact 1 Role', ''),
+                'contact_1_email': csv_record.get('Contact 1 Email', ''),
+                'contact_1_phone': csv_record.get('Contact 1 Phone', ''),
+                'contact_2_name': csv_record.get('Contact 2 Name', ''),
+                'contact_2_role': csv_record.get('Contact 2 Role', ''),
+                'contact_2_email': csv_record.get('Contact 2 Email', ''),
+                'contact_2_phone': csv_record.get('Contact 2 Phone', ''),
+                'contact_3_name': csv_record.get('Contact 3 Name', ''),
+                'contact_3_role': csv_record.get('Contact 3 Role', ''),
+                'contact_3_email': csv_record.get('Contact 3 Email', ''),
+                'contact_3_phone': csv_record.get('Contact 3 Phone', ''),
+            }
+
+            # Generate unique negative company_id for CRM imports
+            unique_id = -(1000000 + i)
+
+            record = {
+                'company_id': unique_id,
+                'name': csv_record.get('Name', ''),
+                'public_name': csv_record.get('Name', ''),
+                'address_line1': address_parts.get('address_line1', ''),
+                'city': address_parts.get('city', ''),
+                'post_code': address_parts.get('post_code', ''),
+                'country_name': address_parts.get('country_name', '') or 'Belgium',
+                'latitude': lat,
+                'longitude': lng,
+                'lead_status': csv_record.get('Lead Status', '') or None,
+                'channel': csv_record.get('Channel', '') or None,
+                'language': csv_record.get('Language', '') or None,
+                'priority': csv_record.get('Priority', '') or None,
+                'province': csv_record.get('Province / Region', '') or None,
+                'sub_type': csv_record.get('Sub Type', '') or None,
+                'assigned_salesperson': csv_record.get('Company Owner', '') or None,
+                'crm_notes': csv_record.get('Notes', '') or None,
+                'contact_person_name': csv_record.get('Contact 1 Name', '') or None,
+                'contact_person_email': csv_record.get('Contact 1 Email', '') or None,
+                'contact_person_phone': csv_record.get('Contact 1 Phone', '') or None,
+                'crm_review_status': 'pending',
+                'crm_source_data': crm_source,
+                'imported_from_crm': True,
+                'crm_import_date': datetime.now().isoformat()
+            }
+
+            # Remove None/empty values
+            record = {k: v for k, v in record.items() if v is not None and v != ''}
+            record['crm_review_status'] = 'pending'  # Always set this
+
+            try:
+                supabase_client.table('companies').insert(record).execute()
+                imported += 1
+            except Exception as e:
+                errors.append({'name': csv_record.get('Name', ''), 'error': str(e)})
+
+            if (i + 1) % 100 == 0:
+                time_module.sleep(0.2)
+
+        return jsonify({
+            'success': True,
+            'imported': imported,
+            'total': len(csv_records),
+            'errors': len(errors),
+            'error_samples': errors[:10]
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/crm-pending', methods=['GET'])
+def get_crm_pending():
+    """Get all CRM imports pending review."""
+    try:
+        result = supabase_client.table('companies').select(
+            'id, company_id, name, public_name, address_line1, city, post_code, '
+            'lead_status, channel, priority, crm_notes, crm_source_data, latitude, longitude'
+        ).eq('crm_review_status', 'pending').order('name').execute()
+
+        return jsonify({
+            'success': True,
+            'pending': result.data if result.data else [],
+            'count': len(result.data) if result.data else 0
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/crm-search-existing', methods=['GET'])
+def crm_search_existing():
+    """Search existing companies (non-CRM) for merge candidates."""
+    try:
+        query = request.args.get('q', '').strip()
+        if not query or len(query) < 2:
+            return jsonify({'results': []})
+
+        # Search by name (case-insensitive)
+        result = supabase_client.table('companies').select(
+            'id, company_id, name, public_name, address_line1, city, post_code, '
+            'email, phone_number, total_revenue_2024, total_revenue_2025, invoice_count_2024, invoice_count_2025'
+        ).is_('crm_review_status', 'null').ilike('name', f'%{query}%').limit(20).execute()
+
+        # Also search by public_name
+        result2 = supabase_client.table('companies').select(
+            'id, company_id, name, public_name, address_line1, city, post_code, '
+            'email, phone_number, total_revenue_2024, total_revenue_2025, invoice_count_2024, invoice_count_2025'
+        ).is_('crm_review_status', 'null').ilike('public_name', f'%{query}%').limit(20).execute()
+
+        # Combine and dedupe
+        seen_ids = set()
+        combined = []
+        for c in (result.data or []) + (result2.data or []):
+            if c['company_id'] not in seen_ids:
+                seen_ids.add(c['company_id'])
+                combined.append(c)
+
+        return jsonify({'results': combined[:20]})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/crm-merge', methods=['POST'])
+def crm_merge_companies():
+    """Merge a CRM import into an existing company."""
+    try:
+        data = request.get_json()
+        crm_company_id = data.get('crm_company_id')  # The pending CRM import (negative ID)
+        target_company_id = data.get('target_company_id')  # The existing company to merge into
+
+        if not crm_company_id or not target_company_id:
+            return jsonify({'error': 'Missing crm_company_id or target_company_id'}), 400
+
+        # Get the CRM import data
+        crm_result = supabase_client.table('companies').select('*').eq('company_id', crm_company_id).single().execute()
+        if not crm_result.data:
+            return jsonify({'error': 'CRM import not found'}), 404
+
+        crm_data = crm_result.data
+        crm_source = crm_data.get('crm_source_data', {})
+
+        # Get the target company
+        target_result = supabase_client.table('companies').select('*').eq('company_id', target_company_id).single().execute()
+        if not target_result.data:
+            return jsonify({'error': 'Target company not found'}), 404
+
+        target_data = target_result.data
+
+        # Build update for target company - only add CRM data, don't overwrite existing
+        update_fields = {}
+
+        # CRM fields to merge (only if target doesn't have them)
+        crm_fields_map = {
+            'lead_status': crm_data.get('lead_status'),
+            'channel': crm_data.get('channel'),
+            'language': crm_data.get('language'),
+            'priority': crm_data.get('priority'),
+            'province': crm_data.get('province'),
+            'sub_type': crm_data.get('sub_type'),
+            'business_type': crm_source.get('business_type'),
+            'parent_company': crm_source.get('parent_company'),
+            'crm_notes': crm_source.get('notes'),
+            'activations': crm_source.get('activations'),
+            'external_account_number': crm_source.get('account_number'),
+        }
+
+        for field, value in crm_fields_map.items():
+            if value and not target_data.get(field):
+                update_fields[field] = value
+
+        # Products (parse and add as arrays)
+        if crm_source.get('products_proposed'):
+            update_fields['products_proposed'] = [p.strip() for p in crm_source['products_proposed'].split(',') if p.strip()]
+        if crm_source.get('products_sampled'):
+            update_fields['products_sampled'] = [p.strip() for p in crm_source['products_sampled'].split(',') if p.strip()]
+        if crm_source.get('products_listed'):
+            update_fields['products_listed'] = [p.strip() for p in crm_source['products_listed'].split(',') if p.strip()]
+        if crm_source.get('products_won'):
+            update_fields['products_won'] = [p.strip() for p in crm_source['products_won'].split(',') if p.strip()]
+
+        # Suppliers
+        if crm_source.get('suppliers'):
+            update_fields['suppliers'] = [s.strip() for s in crm_source['suppliers'].split(',') if s.strip()]
+
+        # Contact info (only if target doesn't have it)
+        if crm_source.get('contact_1_name') and not target_data.get('contact_person_name'):
+            update_fields['contact_person_name'] = crm_source['contact_1_name']
+        if crm_source.get('contact_1_role'):
+            update_fields['contact_person_role'] = crm_source['contact_1_role']
+        if crm_source.get('contact_1_email') and not target_data.get('contact_person_email'):
+            update_fields['contact_person_email'] = crm_source['contact_1_email']
+        if crm_source.get('contact_1_phone') and not target_data.get('contact_person_phone'):
+            update_fields['contact_person_phone'] = crm_source['contact_1_phone']
+
+        # Additional contacts
+        if crm_source.get('contact_2_name'):
+            update_fields['contact_2_name'] = crm_source['contact_2_name']
+            update_fields['contact_2_role'] = crm_source.get('contact_2_role')
+            update_fields['contact_2_email'] = crm_source.get('contact_2_email')
+            update_fields['contact_2_phone'] = crm_source.get('contact_2_phone')
+        if crm_source.get('contact_3_name'):
+            update_fields['contact_3_name'] = crm_source['contact_3_name']
+            update_fields['contact_3_role'] = crm_source.get('contact_3_role')
+            update_fields['contact_3_email'] = crm_source.get('contact_3_email')
+            update_fields['contact_3_phone'] = crm_source.get('contact_3_phone')
+
+        # Coordinates (only if target doesn't have them)
+        if crm_data.get('latitude') and not target_data.get('latitude'):
+            update_fields['latitude'] = crm_data['latitude']
+            update_fields['longitude'] = crm_data.get('longitude')
+
+        # Assigned salesperson (only if target doesn't have one)
+        if crm_source.get('company_owner') and not target_data.get('assigned_salesperson'):
+            update_fields['assigned_salesperson'] = crm_source['company_owner']
+
+        # Mark as having CRM data
+        update_fields['imported_from_crm'] = True
+        update_fields['crm_import_date'] = datetime.now().isoformat()
+        update_fields['crm_source_data'] = crm_source  # Keep original CRM data for reference
+
+        # Update the target company
+        if update_fields:
+            supabase_client.table('companies').update(update_fields).eq('company_id', target_company_id).execute()
+
+        # Mark the CRM import as merged and record which company it merged into
+        supabase_client.table('companies').update({
+            'crm_review_status': 'merged',
+            'merged_into_company_id': target_company_id
+        }).eq('company_id', crm_company_id).execute()
+
+        return jsonify({
+            'success': True,
+            'message': f'Merged CRM data into {target_data.get("name")}',
+            'fields_updated': list(update_fields.keys())
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/crm-keep-standalone', methods=['POST'])
+def crm_keep_standalone():
+    """Mark a CRM import as a standalone new company (no merge needed)."""
+    try:
+        data = request.get_json()
+        crm_company_id = data.get('crm_company_id')
+
+        if not crm_company_id:
+            return jsonify({'error': 'Missing crm_company_id'}), 400
+
+        # Update status to standalone
+        supabase_client.table('companies').update({
+            'crm_review_status': 'standalone'
+        }).eq('company_id', crm_company_id).execute()
+
+        return jsonify({'success': True, 'message': 'Marked as standalone company'})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/crm-delete-pending', methods=['POST'])
+def crm_delete_pending():
+    """Delete a pending CRM import (skip it)."""
+    try:
+        data = request.get_json()
+        crm_company_id = data.get('crm_company_id')
+
+        if not crm_company_id:
+            return jsonify({'error': 'Missing crm_company_id'}), 400
+
+        supabase_client.table('companies').delete().eq('company_id', crm_company_id).execute()
+
+        return jsonify({'success': True, 'message': 'Deleted CRM import'})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/crm-stats', methods=['GET'])
+def crm_stats():
+    """Get CRM import statistics."""
+    try:
+        pending = supabase_client.table('companies').select('id', count='exact').eq('crm_review_status', 'pending').execute()
+        merged = supabase_client.table('companies').select('id', count='exact').eq('crm_review_status', 'merged').execute()
+        standalone = supabase_client.table('companies').select('id', count='exact').eq('crm_review_status', 'standalone').execute()
+
+        return jsonify({
+            'pending': pending.count or 0,
+            'merged': merged.count or 0,
+            'standalone': standalone.count or 0,
+            'total_reviewed': (merged.count or 0) + (standalone.count or 0)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/check-db-state', methods=['GET'])
 def check_db_state():
     """Check the current database state - companies with/without invoices."""
