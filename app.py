@@ -10489,6 +10489,7 @@ def api_sync_missing_companies():
     """Sync only companies that are in invoices but missing from the companies table.
     This is faster than a full sync because it only processes missing companies.
     Admin only - requires DUANO authentication.
+    Accepts optional 'batch_size' parameter (default 50) to prevent worker timeout.
     """
     if not is_admin():
         return jsonify({'error': 'Admin access required'}), 403
@@ -10497,7 +10498,11 @@ def api_sync_missing_companies():
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
 
-        print("🔍 Finding companies missing from companies table...")
+        # Get batch size from request (default 50 to avoid timeout)
+        data = request.get_json() or {}
+        batch_size_limit = data.get('batch_size', 50)
+
+        print(f"🔍 Finding companies missing from companies table (batch size: {batch_size_limit})...")
 
         # Step 1: Get all unique company IDs from invoices (all years)
         def get_company_ids_from_year(year):
@@ -10558,16 +10563,18 @@ def api_sync_missing_companies():
                 'errors': 0
             })
 
-        # Step 4: Fetch missing companies from DOUANO API
-        print(f"🚀 Fetching {len(missing_company_ids)} missing companies from DOUANO API...")
+        # Step 4: Fetch missing companies from DOUANO API (limited by batch_size)
+        missing_list = list(missing_company_ids)[:batch_size_limit]
+        total_missing = len(missing_company_ids)
+        print(f"🚀 Fetching {len(missing_list)} of {total_missing} missing companies from DOUANO API...")
 
         synced_count = 0
         error_count = 0
         failed_companies = []
 
-        for i, company_id in enumerate(missing_company_ids):
+        for i, company_id in enumerate(missing_list):
             try:
-                print(f"Fetching company {company_id}... ({i+1}/{len(missing_company_ids)})")
+                print(f"Fetching company {company_id}... ({i+1}/{len(missing_list)})")
 
                 # Minimal rate limiting (API is fast)
                 if i > 0 and i % 25 == 0:
@@ -10638,13 +10645,15 @@ def api_sync_missing_companies():
                 failed_companies.append({'id': company_id, 'error': str(e)[:100]})
                 continue
 
+        remaining = total_missing - synced_count
         return jsonify({
             'success': True,
-            'message': f'Synced {synced_count} missing companies',
+            'message': f'Synced {synced_count} of {total_missing} missing companies. {remaining} remaining - run again to continue.',
             'total_in_invoices': len(invoice_company_ids),
             'total_in_database': len(existing_company_ids),
-            'missing_count': len(missing_company_ids),
+            'missing_count': total_missing,
             'synced': synced_count,
+            'remaining': remaining,
             'errors': error_count,
             'failed_companies': failed_companies[:20]  # Return first 20 failures for debugging
         })
