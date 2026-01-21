@@ -15741,8 +15741,9 @@ def crm_import_safe():
                 'contact_3_phone': csv_record.get('Contact 3 Phone', ''),
             }
 
-            # Generate unique negative company_id for CRM imports
-            unique_id = -(1000000 + i)
+            # Generate unique negative company_id for CRM imports using timestamp + index
+            import_timestamp = int(time_module.time())
+            unique_id = -(import_timestamp * 10000 + i)
 
             record = {
                 'company_id': unique_id,
@@ -15824,22 +15825,27 @@ def crm_search_existing():
         if not query or len(query) < 2:
             return jsonify({'results': []})
 
-        # Search by name (case-insensitive)
-        result = supabase_client.table('companies').select(
+        select_fields = (
             'id, company_id, name, public_name, address_line1, city, post_code, '
             'email, phone_number, total_revenue_2024, total_revenue_2025, invoice_count_2024, invoice_count_2025'
-        ).is_('crm_review_status', 'null').ilike('name', f'%{query}%').limit(20).execute()
+        )
+
+        # Search by name (case-insensitive)
+        result = supabase_client.table('companies').select(select_fields).is_('crm_review_status', 'null').ilike('name', f'%{query}%').limit(20).execute()
 
         # Also search by public_name
-        result2 = supabase_client.table('companies').select(
-            'id, company_id, name, public_name, address_line1, city, post_code, '
-            'email, phone_number, total_revenue_2024, total_revenue_2025, invoice_count_2024, invoice_count_2025'
-        ).is_('crm_review_status', 'null').ilike('public_name', f'%{query}%').limit(20).execute()
+        result2 = supabase_client.table('companies').select(select_fields).is_('crm_review_status', 'null').ilike('public_name', f'%{query}%').limit(20).execute()
+
+        # Search by address
+        result3 = supabase_client.table('companies').select(select_fields).is_('crm_review_status', 'null').ilike('address_line1', f'%{query}%').limit(20).execute()
+
+        # Search by city
+        result4 = supabase_client.table('companies').select(select_fields).is_('crm_review_status', 'null').ilike('city', f'%{query}%').limit(20).execute()
 
         # Combine and dedupe
         seen_ids = set()
         combined = []
-        for c in (result.data or []) + (result2.data or []):
+        for c in (result.data or []) + (result2.data or []) + (result3.data or []) + (result4.data or []):
             if c['company_id'] not in seen_ids:
                 seen_ids.add(c['company_id'])
                 combined.append(c)

@@ -672,7 +672,17 @@ async function handleFileSelect(event) {
         const data = await response.json();
 
         if (data.success) {
-            alert(`Imported ${data.imported} of ${data.total} records.\n${data.errors} errors.`);
+            let msg = `Imported ${data.imported} of ${data.total} records.`;
+            if (data.errors > 0) {
+                msg += `\n${data.errors} errors.`;
+                if (data.error_samples && data.error_samples.length > 0) {
+                    msg += '\n\nSample errors:';
+                    data.error_samples.slice(0, 5).forEach(e => {
+                        msg += `\n- ${e.name}: ${e.error.substring(0, 100)}`;
+                    });
+                }
+            }
+            alert(msg);
             loadStats();
             loadPending();
         } else {
