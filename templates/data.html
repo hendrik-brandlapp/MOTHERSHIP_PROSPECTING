@@ -160,6 +160,31 @@
                         <option value="Caitlin">Caitlin</option>
                         <option value="Kesha">Kesha</option>
                         <option value="Django">Django</option>
+                        <option value="Lucia Beligoy">Lucia Beligoy</option>
+                        <option value="Caitlin Blondeel">Caitlin Blondeel</option>
+                        <option value="Peter Versieren">Peter Versieren</option>
+                    </select>
+                </div>
+
+                <!-- Channel Filter -->
+                <div class="filter-cell">
+                    <select class="filter-select" id="channelFilter" onchange="filterCompanies()">
+                        <option value="">All channels</option>
+                        <option value="On-Trade">On-Trade</option>
+                        <option value="Off-Trade">Off-Trade</option>
+                    </select>
+                </div>
+
+                <!-- Lead Status Filter -->
+                <div class="filter-cell">
+                    <select class="filter-select" id="leadStatusFilter" onchange="filterCompanies()">
+                        <option value="">All lead statuses</option>
+                        <option value="Customer">Customer</option>
+                        <option value="To be contacted">To be contacted</option>
+                        <option value="Follow up">Follow up</option>
+                        <option value="Contact later">Contact later</option>
+                        <option value="Unqualified">Unqualified</option>
+                        <option value="Ex customer">Ex customer</option>
                     </select>
                 </div>
 
@@ -3147,8 +3172,22 @@ function filterCompanies() {
             if (salespersonFilter === 'unassigned') {
                 if (company.assigned_salesperson) return false;
             } else {
-                if (company.assigned_salesperson !== salespersonFilter) return false;
+                // Check if salesperson matches (exact or contains)
+                const sp = company.assigned_salesperson || '';
+                if (sp !== salespersonFilter && !sp.includes(salespersonFilter) && !salespersonFilter.includes(sp)) return false;
             }
+        }
+
+        // Channel filtering (On-Trade/Off-Trade)
+        const channelFilter = document.getElementById('channelFilter')?.value || '';
+        if (channelFilter) {
+            if (company.channel !== channelFilter) return false;
+        }
+
+        // Lead Status filtering
+        const leadStatusFilter = document.getElementById('leadStatusFilter')?.value || '';
+        if (leadStatusFilter) {
+            if (company.lead_status !== leadStatusFilter) return false;
         }
 
         // Region/City filtering
@@ -4017,6 +4056,12 @@ function displayCardsView() {
         const prospectBadge = isProspect ? `<span class="prospect-badge"><i class="fas fa-user-plus"></i> Prospect</span>` : '';
         const statusBadge = !isProspect && company.customer_status ? `<span class="badge badge-soft-${getStatusColor(company.customer_status)}">${escapeHtml(company.customer_status)}</span>` : '';
 
+        // Channel badge (On-Trade/Off-Trade)
+        const channelBadge = company.channel ? `<span class="badge ${company.channel === 'On-Trade' ? 'bg-primary' : 'bg-info'}" style="font-size: 0.65rem;">${company.channel}</span>` : '';
+
+        // Priority badge
+        const priorityBadge = company.priority ? `<span class="badge ${company.priority === 'High' ? 'bg-danger' : company.priority === 'Medium' ? 'bg-warning' : 'bg-secondary'}" style="font-size: 0.65rem;">${company.priority}</span>` : '';
+
         // For prospects, use the prospect_id for the onclick, otherwise use company.id
         const clickId = isProspect ? `'${company.prospect_id}'` : company.id;
         const clickHandler = isProspect ? `showProspectDetails('${company.prospect_id}')` : `showCompanyDetails(${company.id})`;
@@ -4028,7 +4073,9 @@ function displayCardsView() {
                         <h5 class="company-name">${escapeHtml(publicName)}</h5>
                         ${showLegalName ? `<p class="company-legal-name">${escapeHtml(legalName)}</p>` : ''}
                     </div>
-                    ${prospectBadge}${statusBadge}
+                    <div class="d-flex flex-wrap gap-1 align-items-center">
+                        ${prospectBadge}${statusBadge}${channelBadge}${priorityBadge}
+                    </div>
                 </div>
 
                 ${alertTagsHtml ? `<div class="company-alerts">${alertTagsHtml}</div>` : ''}
@@ -4527,6 +4574,160 @@ function showCompanyDetails(companyId) {
                 </div>
                 </div>
             </div>
+
+        <!-- CRM Details (imported from old CRM) -->
+        ${company.imported_from_crm ? `
+        <div class="detail-section">
+            <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-database me-2 text-muted"></i>CRM Details</h6>
+            <div class="row g-3">
+                ${company.lead_status ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Lead Status</label>
+                    <div class="badge ${company.lead_status === 'Customer' ? 'bg-success' : company.lead_status === 'Unqualified' ? 'bg-secondary' : company.lead_status === 'To be contacted' ? 'bg-info' : 'bg-warning'}">${company.lead_status}</div>
+                </div>
+                ` : ''}
+                ${company.channel ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Channel</label>
+                    <div class="badge ${company.channel === 'On-Trade' ? 'bg-primary' : 'bg-info'}">${company.channel}</div>
+                </div>
+                ` : ''}
+                ${company.priority ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Priority</label>
+                    <div class="badge ${company.priority === 'High' ? 'bg-danger' : company.priority === 'Medium' ? 'bg-warning' : 'bg-secondary'}">${company.priority}</div>
+                </div>
+                ` : ''}
+                ${company.language ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Language</label>
+                    <div class="text-dark">${company.language}</div>
+                </div>
+                ` : ''}
+                ${company.province ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Province</label>
+                    <div class="text-dark">${company.province}</div>
+                </div>
+                ` : ''}
+                ${company.sub_type ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Sub Type</label>
+                    <div class="text-dark">${company.sub_type}</div>
+                </div>
+                ` : ''}
+                ${company.business_type ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Business Type</label>
+                    <div class="text-dark">${company.business_type}</div>
+                </div>
+                ` : ''}
+                ${company.parent_company ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Parent Company</label>
+                    <div class="text-dark">${company.parent_company}</div>
+                </div>
+                ` : ''}
+                ${company.external_account_number ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Account #</label>
+                    <div class="text-dark font-monospace">${company.external_account_number}</div>
+                </div>
+                ` : ''}
+            </div>
+            ${company.suppliers && company.suppliers.length > 0 ? `
+            <div class="mt-3">
+                <label class="form-label small fw-bold text-muted">Suppliers</label>
+                <div class="d-flex flex-wrap gap-1">
+                    ${company.suppliers.map(s => `<span class="badge bg-light text-dark border">${s}</span>`).join('')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        ` : ''}
+
+        <!-- Products Tracking -->
+        ${(company.products_proposed?.length || company.products_sampled?.length || company.products_listed?.length || company.products_won?.length) ? `
+        <div class="detail-section">
+            <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-box me-2 text-muted"></i>Product History</h6>
+            ${company.products_proposed?.length ? `
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-muted">Proposed</label>
+                <div class="d-flex flex-wrap gap-1">
+                    ${company.products_proposed.map(p => `<span class="badge bg-light text-dark border" style="font-size: 0.7rem;">${p}</span>`).join('')}
+                </div>
+            </div>
+            ` : ''}
+            ${company.products_sampled?.length ? `
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-muted">Sampled</label>
+                <div class="d-flex flex-wrap gap-1">
+                    ${company.products_sampled.map(p => `<span class="badge bg-info text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
+                </div>
+            </div>
+            ` : ''}
+            ${company.products_listed?.length ? `
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-muted">Listed</label>
+                <div class="d-flex flex-wrap gap-1">
+                    ${company.products_listed.map(p => `<span class="badge bg-success text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
+                </div>
+            </div>
+            ` : ''}
+            ${company.products_won?.length ? `
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-muted">Won</label>
+                <div class="d-flex flex-wrap gap-1">
+                    ${company.products_won.map(p => `<span class="badge bg-primary text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        ` : ''}
+
+        <!-- Additional Contacts -->
+        ${(company.contact_2_name || company.contact_3_name) ? `
+        <div class="detail-section">
+            <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-users me-2 text-muted"></i>Additional Contacts</h6>
+            ${company.contact_2_name ? `
+            <div class="mb-3 p-2 bg-light rounded">
+                <div class="fw-bold">${company.contact_2_name} ${company.contact_2_role ? `<span class="text-muted fw-normal">(${company.contact_2_role})</span>` : ''}</div>
+                <div class="small">
+                    ${company.contact_2_email ? `<a href="mailto:${company.contact_2_email}" class="text-primary me-3"><i class="fas fa-envelope me-1"></i>${company.contact_2_email}</a>` : ''}
+                    ${company.contact_2_phone ? `<a href="tel:${company.contact_2_phone}" class="text-primary"><i class="fas fa-phone me-1"></i>${company.contact_2_phone}</a>` : ''}
+                </div>
+            </div>
+            ` : ''}
+            ${company.contact_3_name ? `
+            <div class="p-2 bg-light rounded">
+                <div class="fw-bold">${company.contact_3_name} ${company.contact_3_role ? `<span class="text-muted fw-normal">(${company.contact_3_role})</span>` : ''}</div>
+                <div class="small">
+                    ${company.contact_3_email ? `<a href="mailto:${company.contact_3_email}" class="text-primary me-3"><i class="fas fa-envelope me-1"></i>${company.contact_3_email}</a>` : ''}
+                    ${company.contact_3_phone ? `<a href="tel:${company.contact_3_phone}" class="text-primary"><i class="fas fa-phone me-1"></i>${company.contact_3_phone}</a>` : ''}
+                </div>
+            </div>
+            ` : ''}
+        </div>
+        ` : ''}
+
+        <!-- CRM Notes (from old system) -->
+        ${(company.crm_notes || company.activations) ? `
+        <div class="detail-section">
+            <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-history me-2 text-muted"></i>Historical Notes (CRM Import)</h6>
+            ${company.crm_notes ? `
+            <div class="mb-3">
+                <label class="form-label small fw-bold text-muted">Notes</label>
+                <div class="p-2 bg-light rounded text-dark" style="white-space: pre-wrap;">${company.crm_notes}</div>
+            </div>
+            ` : ''}
+            ${company.activations ? `
+            <div>
+                <label class="form-label small fw-bold text-muted">Activations</label>
+                <div class="p-2 bg-warning bg-opacity-10 border border-warning border-opacity-25 rounded text-dark">${company.activations}</div>
+            </div>
+            ` : ''}
+        </div>
+        ` : ''}
 
         <!-- Notes (unified notes with images) -->
         <div class="detail-section">

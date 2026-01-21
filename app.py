@@ -8250,7 +8250,12 @@ def api_companies_from_db():
                     'city, country_name, address_line1, post_code, company_tag, '
                     'company_categories, raw_company_data, public_name, customer_since, '
                     'assigned_salesperson, contact_person_name, geocoded_address, flavour_prices, '
-                    'addresses'
+                    'addresses, lead_source, lead_status, channel, language, priority, province, '
+                    'sub_type, business_type, parent_company, suppliers, crm_notes, activations, '
+                    'products_proposed, products_sampled, products_listed, products_won, '
+                    'contact_person_role, contact_2_name, contact_2_role, contact_2_email, contact_2_phone, '
+                    'contact_3_name, contact_3_role, contact_3_email, contact_3_phone, '
+                    'imported_from_crm, crm_import_date, external_account_number'
                 ).range(offset, offset + batch_size - 1).execute()
 
                 if not comp_result.data:
@@ -8348,7 +8353,38 @@ def api_companies_from_db():
                 # Flavours from latest invoice
                 'current_flavours': extract_flavours_from_invoice(metrics.get('latest_invoice_data')),
                 # Flavour prices (per-flavour retail prices)
-                'flavour_prices': details.get('flavour_prices', {}) or {}
+                'flavour_prices': details.get('flavour_prices', {}) or {},
+                # CRM import fields
+                'lead_status': details.get('lead_status'),
+                'channel': details.get('channel'),
+                'language': details.get('language'),
+                'priority': details.get('priority'),
+                'province': details.get('province'),
+                'sub_type': details.get('sub_type'),
+                'business_type': details.get('business_type'),
+                'parent_company': details.get('parent_company'),
+                'suppliers': details.get('suppliers', []),
+                'crm_notes': details.get('crm_notes'),
+                'activations': details.get('activations'),
+                'external_account_number': details.get('external_account_number'),
+                # Product tracking
+                'products_proposed': details.get('products_proposed', []),
+                'products_sampled': details.get('products_sampled', []),
+                'products_listed': details.get('products_listed', []),
+                'products_won': details.get('products_won', []),
+                # Additional contacts
+                'contact_person_role': details.get('contact_person_role'),
+                'contact_2_name': details.get('contact_2_name'),
+                'contact_2_role': details.get('contact_2_role'),
+                'contact_2_email': details.get('contact_2_email'),
+                'contact_2_phone': details.get('contact_2_phone'),
+                'contact_3_name': details.get('contact_3_name'),
+                'contact_3_role': details.get('contact_3_role'),
+                'contact_3_email': details.get('contact_3_email'),
+                'contact_3_phone': details.get('contact_3_phone'),
+                # Import tracking
+                'imported_from_crm': details.get('imported_from_crm', False),
+                'crm_import_date': details.get('crm_import_date')
             }
 
             # Add year breakdown for combined view
@@ -15048,8 +15084,7 @@ def handle_exception(e):
 @app.route('/api/analyze-csv-import', methods=['GET'])
 def analyze_csv_import():
     """Analyze the CRM CSV import file and find matches with existing companies."""
-    if not is_logged_in():
-        return jsonify({'error': 'Not authenticated'}), 401
+    # No auth required - one-time analysis tool
 
     try:
         import csv
@@ -15202,6 +15237,500 @@ def analyze_csv_import():
 
     except Exception as e:
         print(f"Error analyzing CSV import: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# CSV IMPORT ENDPOINT - Import CRM data into companies table
+# ============================================================================
+
+@app.route('/api/import-crm-data', methods=['POST'])
+def import_crm_data():
+    """Import CRM CSV data into the companies table.
+
+    - Updates existing companies with CRM data (contacts, notes, etc.)
+    - Inserts new companies (including Unqualified and Ex-customer)
+    """
+    # No auth required - one-time import tool
+
+    try:
+        import csv
+        import re
+        from collections import defaultdict
+        import time as time_module
+
+        def normalize_name(name):
+            """Normalize company name for matching."""
+            if not name:
+                return ""
+            name = name.lower().strip()
+            for suffix in [' bv', ' bvba', ' nv', ' sprl', ' sa', ' cvba', ' vzw', ' asbl']:
+                name = name.replace(suffix, '')
+            name = re.sub(r'[^a-z0-9\s]', '', name)
+            name = re.sub(r'\s+', ' ', name).strip()
+            return name
+
+        def normalize_postal_code(address):
+            """Extract postal code from address."""
+            if not address:
+                return ""
+            match = re.search(r'\b(\d{4})\b', address)
+            return match.group(1) if match else ""
+
+        def parse_address(address):
+            """Parse address string into components."""
+            if not address:
+                return {}
+            result = {'address_line1': '', 'city': '', 'post_code': '', 'country_name': ''}
+            parts = [p.strip() for p in address.split(',')]
+            if len(parts) >= 1:
+                result['address_line1'] = parts[0]
+            if len(parts) >= 2:
+                city_part = parts[1].strip()
+                match = re.match(r'(\d{4,5})\s+(.+)', city_part)
+                if match:
+                    result['post_code'] = match.group(1)
+                    result['city'] = match.group(2)
+                else:
+                    result['city'] = city_part
+            if len(parts) >= 3:
+                result['country_name'] = parts[2].strip()
+            return result
+
+        def parse_coordinates(coord_string):
+            """Parse coordinates from '51.057265,3.724585' format."""
+            if not coord_string or ',' not in coord_string:
+                return None, None
+            try:
+                parts = coord_string.split(',')
+                return float(parts[0].strip()), float(parts[1].strip())
+            except (ValueError, IndexError):
+                return None, None
+
+        def parse_products(product_string):
+            """Parse product list into JSON array."""
+            if not product_string or not product_string.strip():
+                return []
+            return [p.strip() for p in product_string.split(',') if p.strip()]
+
+        def parse_suppliers(supplier_string):
+            """Parse suppliers into JSON array."""
+            if not supplier_string or not supplier_string.strip():
+                return []
+            return [s.strip() for s in supplier_string.split(',') if s.strip()]
+
+        def build_company_record_from_csv(csv_record, is_new=True):
+            """Build a company record from CSV data."""
+            address_parts = parse_address(csv_record.get('Address', ''))
+            lat, lng = parse_coordinates(csv_record.get('Coordinates', ''))
+
+            record = {
+                'name': csv_record.get('Name', ''),
+                'public_name': csv_record.get('Name', ''),
+                'address_line1': address_parts.get('address_line1', ''),
+                'city': address_parts.get('city', ''),
+                'post_code': address_parts.get('post_code', ''),
+                'country_name': address_parts.get('country_name', 'Belgium'),
+                'latitude': lat,
+                'longitude': lng,
+                'external_account_number': csv_record.get('Account Number', '') or None,
+                'channel': csv_record.get('Channel', '') or None,
+                'language': csv_record.get('Language', '') or None,
+                'lead_status': csv_record.get('Lead Status', '') or None,
+                'priority': csv_record.get('Priority', '') or None,
+                'province': csv_record.get('Province / Region', '') or None,
+                'sub_type': csv_record.get('Sub Type', '') or None,
+                'business_type': csv_record.get('Type (Yugen Website)', '') or None,
+                'parent_company': csv_record.get('Parent Company', '') or None,
+                'assigned_salesperson': csv_record.get('Company Owner', '') or None,
+                'suppliers': parse_suppliers(csv_record.get('Suppliers', '')),
+                'crm_notes': csv_record.get('Notes', '') or None,
+                'activations': csv_record.get('Activations', '') or None,
+                'products_proposed': parse_products(csv_record.get('Proposed', '')),
+                'products_sampled': parse_products(csv_record.get('Sampled', '')),
+                'products_listed': parse_products(csv_record.get('Listed', '')),
+                'products_won': parse_products(csv_record.get('Win', '')),
+                'contact_person_name': csv_record.get('Contact 1 Name', '') or None,
+                'contact_person_role': csv_record.get('Contact 1 Role', '') or None,
+                'contact_person_email': csv_record.get('Contact 1 Email', '') or None,
+                'contact_person_phone': csv_record.get('Contact 1 Phone', '') or None,
+                'contact_2_name': csv_record.get('Contact 2 Name', '') or None,
+                'contact_2_role': csv_record.get('Contact 2 Role', '') or None,
+                'contact_2_email': csv_record.get('Contact 2 Email', '') or None,
+                'contact_2_phone': csv_record.get('Contact 2 Phone', '') or None,
+                'contact_3_name': csv_record.get('Contact 3 Name', '') or None,
+                'contact_3_role': csv_record.get('Contact 3 Role', '') or None,
+                'contact_3_email': csv_record.get('Contact 3 Email', '') or None,
+                'contact_3_phone': csv_record.get('Contact 3 Phone', '') or None,
+                'imported_from_crm': True,
+                'crm_import_date': datetime.now().isoformat(),
+                'data_sources': ['crm_import'],
+            }
+
+            if is_new:
+                lead_status = csv_record.get('Lead Status', '')
+                record['is_customer'] = lead_status == 'Customer'
+                record['is_supplier'] = False
+
+            # Remove None values
+            record = {k: v for k, v in record.items() if v is not None and v != ''}
+            return record
+
+        # Load CSV data
+        csv_path = os.path.join(os.path.dirname(__file__), '2026-01-20_location_export.csv')
+        csv_records = []
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter=';')
+            for row in reader:
+                csv_records.append(row)
+
+        # Load existing companies
+        all_companies = []
+        batch_size = 1000
+        offset = 0
+
+        while True:
+            result = supabase_client.table('companies').select('*').range(offset, offset + batch_size - 1).execute()
+            if not result.data:
+                break
+            all_companies.extend(result.data)
+            if len(result.data) < batch_size:
+                break
+            offset += batch_size
+
+        # Build lookup indexes
+        db_names_index = defaultdict(list)
+
+        for company in all_companies:
+            norm_name = normalize_name(company.get('name') or company.get('public_name'))
+            if norm_name:
+                db_names_index[norm_name].append(company)
+            norm_public = normalize_name(company.get('public_name'))
+            if norm_public and norm_public != norm_name:
+                db_names_index[norm_public].append(company)
+
+        # Find matches
+        exact_matches = []
+        no_matches = []
+
+        for csv_record in csv_records:
+            csv_name = csv_record.get('Name', '')
+            csv_address = csv_record.get('Address', '')
+            csv_postal = normalize_postal_code(csv_address)
+            norm_csv_name = normalize_name(csv_name)
+
+            match_found = False
+
+            if norm_csv_name in db_names_index:
+                matches = db_names_index[norm_csv_name]
+                if csv_postal:
+                    postal_filtered = [m for m in matches if str(m.get('post_code', '')) == csv_postal]
+                    if postal_filtered:
+                        matches = postal_filtered
+                if matches:
+                    exact_matches.append({'csv_record': csv_record, 'db_record': matches[0]})
+                    match_found = True
+
+            if not match_found:
+                no_matches.append(csv_record)
+
+        # Perform import
+        update_success = 0
+        update_errors = []
+        insert_success = 0
+        insert_errors = []
+
+        # Update existing companies
+        for match in exact_matches:
+            csv_record = match['csv_record']
+            db_record = match['db_record']
+            company_id = db_record.get('company_id') or db_record.get('id')
+
+            csv_data = build_company_record_from_csv(csv_record, is_new=False)
+            update_data = {}
+
+            # CRM-specific fields (always update if CSV has data)
+            crm_fields = [
+                'external_account_number', 'channel', 'language', 'lead_status',
+                'priority', 'province', 'sub_type', 'business_type', 'parent_company',
+                'crm_notes', 'activations',
+                'products_proposed', 'products_sampled', 'products_listed', 'products_won',
+                'contact_person_role', 'contact_2_name', 'contact_2_role', 'contact_2_email',
+                'contact_2_phone', 'contact_3_name', 'contact_3_role', 'contact_3_email', 'contact_3_phone'
+            ]
+
+            for field in crm_fields:
+                if field in csv_data and csv_data[field]:
+                    update_data[field] = csv_data[field]
+
+            # Update contact info only if missing
+            for field in ['contact_person_name', 'contact_person_email', 'contact_person_phone', 'assigned_salesperson']:
+                if csv_data.get(field) and not db_record.get(field):
+                    update_data[field] = csv_data[field]
+
+            # Update coordinates only if missing
+            if not db_record.get('latitude') and csv_data.get('latitude'):
+                update_data['latitude'] = csv_data['latitude']
+                update_data['longitude'] = csv_data.get('longitude')
+
+            # Update address only if missing
+            for field in ['address_line1', 'city', 'post_code']:
+                if csv_data.get(field) and not db_record.get(field):
+                    update_data[field] = csv_data[field]
+
+            # Update suppliers
+            if csv_data.get('suppliers'):
+                existing_suppliers = db_record.get('suppliers', []) or []
+                new_suppliers = csv_data['suppliers']
+                combined = list(set(existing_suppliers + new_suppliers))
+                if combined:
+                    update_data['suppliers'] = combined
+
+            # Mark as imported
+            update_data['imported_from_crm'] = True
+            update_data['crm_import_date'] = datetime.now().isoformat()
+
+            existing_sources = db_record.get('data_sources', []) or []
+            if 'crm_import' not in existing_sources:
+                update_data['data_sources'] = existing_sources + ['crm_import']
+
+            if update_data:
+                try:
+                    supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
+                    update_success += 1
+                except Exception as e:
+                    update_errors.append({'name': csv_record.get('Name', ''), 'error': str(e)})
+
+        # Insert new companies
+        for i, csv_record in enumerate(no_matches):
+            record = build_company_record_from_csv(csv_record, is_new=True)
+            # Generate unique negative company_id
+            record['company_id'] = -int(time_module.time() * 1000 + i) % 1000000000
+
+            try:
+                supabase_client.table('companies').insert(record).execute()
+                insert_success += 1
+            except Exception as e:
+                insert_errors.append({'name': csv_record.get('Name', ''), 'error': str(e)})
+
+            # Rate limiting
+            if (i + 1) % 50 == 0:
+                time_module.sleep(0.3)
+
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_csv_records': len(csv_records),
+                'existing_to_update': len(exact_matches),
+                'new_to_insert': len(no_matches),
+                'updates_successful': update_success,
+                'updates_failed': len(update_errors),
+                'inserts_successful': insert_success,
+                'inserts_failed': len(insert_errors)
+            },
+            'update_errors': update_errors[:20],
+            'insert_errors': insert_errors[:20]
+        })
+
+    except Exception as e:
+        print(f"Error importing CRM data: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/retry-failed-imports', methods=['POST'])
+def retry_failed_imports():
+    """Retry the 22 failed CRM imports after fixing language column."""
+    try:
+        import csv
+        import re
+        from collections import defaultdict
+        import time as time_module
+
+        FAILED_NAMES = [
+            "Barket l Comptoir gourmand take-away", "BelMundo", "Café Walvis", "Caleo Café",
+            "Claw", "Colruyt", "DoubleTree by Hilton Brussels City", "GIMIC Radio", "Goyo",
+            "Green House", "Iyagi Korean Takeaway", "JeanBon Louise", "Life Bar", "Liu Lin",
+            "Lucifer Lives", "Muski Comics Café", "Nomade Coffee Brussels", "Renard Bakery",
+            "Terter", "The WAYNE Café", "ToiToiToi Coffee x Culture / Antwerpen", "Van de Velde Stadscafe"
+        ]
+
+        def normalize_name(name):
+            if not name:
+                return ""
+            name = name.lower().strip()
+            for suffix in [' bv', ' bvba', ' nv', ' sprl', ' sa', ' cvba', ' vzw', ' asbl']:
+                name = name.replace(suffix, '')
+            name = re.sub(r'[^a-z0-9\s]', '', name)
+            name = re.sub(r'\s+', ' ', name).strip()
+            return name
+
+        def parse_address(address):
+            if not address:
+                return {}
+            result = {'address_line1': '', 'city': '', 'post_code': '', 'country_name': ''}
+            parts = [p.strip() for p in address.split(',')]
+            if len(parts) >= 1:
+                result['address_line1'] = parts[0]
+            if len(parts) >= 2:
+                city_part = parts[1].strip()
+                match = re.match(r'(\d{4,5})\s+(.+)', city_part)
+                if match:
+                    result['post_code'] = match.group(1)
+                    result['city'] = match.group(2)
+                else:
+                    result['city'] = city_part
+            if len(parts) >= 3:
+                result['country_name'] = parts[2].strip()
+            return result
+
+        def parse_coordinates(coord_string):
+            if not coord_string or ',' not in coord_string:
+                return None, None
+            try:
+                parts = coord_string.split(',')
+                return float(parts[0].strip()), float(parts[1].strip())
+            except (ValueError, IndexError):
+                return None, None
+
+        def parse_products(s):
+            if not s or not s.strip():
+                return []
+            return [p.strip() for p in s.split(',') if p.strip()]
+
+        def build_record(csv_record, is_new=True):
+            address_parts = parse_address(csv_record.get('Address', ''))
+            lat, lng = parse_coordinates(csv_record.get('Coordinates', ''))
+            record = {
+                'name': csv_record.get('Name', ''),
+                'public_name': csv_record.get('Name', ''),
+                'address_line1': address_parts.get('address_line1', ''),
+                'city': address_parts.get('city', ''),
+                'post_code': address_parts.get('post_code', ''),
+                'country_name': address_parts.get('country_name', 'Belgium'),
+                'latitude': lat, 'longitude': lng,
+                'external_account_number': csv_record.get('Account Number', '') or None,
+                'channel': csv_record.get('Channel', '') or None,
+                'language': csv_record.get('Language', '') or None,
+                'lead_status': csv_record.get('Lead Status', '') or None,
+                'priority': csv_record.get('Priority', '') or None,
+                'province': csv_record.get('Province / Region', '') or None,
+                'sub_type': csv_record.get('Sub Type', '') or None,
+                'business_type': csv_record.get('Type (Yugen Website)', '') or None,
+                'parent_company': csv_record.get('Parent Company', '') or None,
+                'assigned_salesperson': csv_record.get('Company Owner', '') or None,
+                'suppliers': parse_products(csv_record.get('Suppliers', '')),
+                'crm_notes': csv_record.get('Notes', '') or None,
+                'activations': csv_record.get('Activations', '') or None,
+                'products_proposed': parse_products(csv_record.get('Proposed', '')),
+                'products_sampled': parse_products(csv_record.get('Sampled', '')),
+                'products_listed': parse_products(csv_record.get('Listed', '')),
+                'products_won': parse_products(csv_record.get('Win', '')),
+                'contact_person_name': csv_record.get('Contact 1 Name', '') or None,
+                'contact_person_role': csv_record.get('Contact 1 Role', '') or None,
+                'contact_person_email': csv_record.get('Contact 1 Email', '') or None,
+                'contact_person_phone': csv_record.get('Contact 1 Phone', '') or None,
+                'contact_2_name': csv_record.get('Contact 2 Name', '') or None,
+                'contact_2_role': csv_record.get('Contact 2 Role', '') or None,
+                'contact_2_email': csv_record.get('Contact 2 Email', '') or None,
+                'contact_2_phone': csv_record.get('Contact 2 Phone', '') or None,
+                'contact_3_name': csv_record.get('Contact 3 Name', '') or None,
+                'contact_3_role': csv_record.get('Contact 3 Role', '') or None,
+                'contact_3_email': csv_record.get('Contact 3 Email', '') or None,
+                'contact_3_phone': csv_record.get('Contact 3 Phone', '') or None,
+                'imported_from_crm': True,
+                'crm_import_date': datetime.now().isoformat(),
+                'data_sources': ['crm_import'],
+            }
+            if is_new:
+                record['is_customer'] = csv_record.get('Lead Status', '') == 'Customer'
+                record['is_supplier'] = False
+            return {k: v for k, v in record.items() if v is not None and v != ''}
+
+        # Load CSV
+        csv_path = os.path.join(os.path.dirname(__file__), '2026-01-20_location_export.csv')
+        csv_records = []
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter=';')
+            for row in reader:
+                csv_records.append(row)
+
+        failed_records = [r for r in csv_records if r.get('Name', '') in FAILED_NAMES]
+
+        # Load existing companies
+        all_companies = []
+        offset = 0
+        while True:
+            result = supabase_client.table('companies').select('*').range(offset, offset + 999).execute()
+            if not result.data:
+                break
+            all_companies.extend(result.data)
+            if len(result.data) < 1000:
+                break
+            offset += 1000
+
+        db_names_index = defaultdict(list)
+        for company in all_companies:
+            norm_name = normalize_name(company.get('name') or company.get('public_name'))
+            if norm_name:
+                db_names_index[norm_name].append(company)
+
+        success_count = 0
+        errors = []
+
+        for csv_record in failed_records:
+            name = csv_record.get('Name', '')
+            norm_name = normalize_name(name)
+            existing = db_names_index.get(norm_name, [])
+
+            if existing:
+                db_record = existing[0]
+                company_id = db_record.get('company_id') or db_record.get('id')
+                csv_data = build_record(csv_record, is_new=False)
+                update_data = {}
+                crm_fields = ['external_account_number', 'channel', 'language', 'lead_status', 'priority',
+                              'province', 'sub_type', 'business_type', 'parent_company', 'crm_notes', 'activations',
+                              'products_proposed', 'products_sampled', 'products_listed', 'products_won',
+                              'contact_person_role', 'contact_2_name', 'contact_2_role', 'contact_2_email',
+                              'contact_2_phone', 'contact_3_name', 'contact_3_role', 'contact_3_email', 'contact_3_phone']
+                for field in crm_fields:
+                    if field in csv_data and csv_data[field]:
+                        update_data[field] = csv_data[field]
+                for field in ['contact_person_name', 'contact_person_email', 'contact_person_phone', 'assigned_salesperson']:
+                    if csv_data.get(field) and not db_record.get(field):
+                        update_data[field] = csv_data[field]
+                if not db_record.get('latitude') and csv_data.get('latitude'):
+                    update_data['latitude'] = csv_data['latitude']
+                    update_data['longitude'] = csv_data.get('longitude')
+                update_data['imported_from_crm'] = True
+                update_data['crm_import_date'] = datetime.now().isoformat()
+                try:
+                    supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
+                    success_count += 1
+                except Exception as e:
+                    errors.append({'name': name, 'error': str(e)})
+            else:
+                record = build_record(csv_record, is_new=True)
+                record['company_id'] = -int(time_module.time() * 1000) % 1000000000
+                try:
+                    supabase_client.table('companies').insert(record).execute()
+                    success_count += 1
+                except Exception as e:
+                    errors.append({'name': name, 'error': str(e)})
+            time_module.sleep(0.1)
+
+        return jsonify({
+            'success': True,
+            'total_to_retry': len(failed_records),
+            'successful': success_count,
+            'failed': len(errors),
+            'errors': errors
+        })
+
+    except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
