@@ -15622,6 +15622,162 @@ def import_crm_data():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/check-db-state', methods=['GET'])
+def check_db_state():
+    """Check the current database state - companies with/without invoices."""
+    try:
+        # Get company IDs from invoices
+        invoice_company_ids = set()
+        for year in ['2024', '2025', '2026']:
+            try:
+                offset = 0
+                while True:
+                    result = supabase_client.table(f'sales_{year}').select('company_id').range(offset, offset + 999).execute()
+                    if not result.data:
+                        break
+                    for r in result.data:
+                        if r.get('company_id'):
+                            invoice_company_ids.add(r['company_id'])
+                    if len(result.data) < 1000:
+                        break
+                    offset += 1000
+            except:
+                pass
+
+        # Get all companies
+        all_companies = []
+        offset = 0
+        while True:
+            result = supabase_client.table('companies').select('company_id, name, imported_from_crm').range(offset, offset + 999).execute()
+            if not result.data:
+                break
+            all_companies.extend(result.data)
+            if len(result.data) < 1000:
+                break
+            offset += 1000
+
+        companies_with_invoices = [c for c in all_companies if c['company_id'] in invoice_company_ids]
+        companies_without_invoices = [c for c in all_companies if c['company_id'] not in invoice_company_ids]
+        crm_imported = [c for c in all_companies if c.get('imported_from_crm')]
+
+        return jsonify({
+            'total_companies': len(all_companies),
+            'companies_with_invoices': len(companies_with_invoices),
+            'companies_without_invoices': len(companies_without_invoices),
+            'crm_imported_remaining': len(crm_imported),
+            'sample_without_invoices': [{'name': c['name'], 'id': c['company_id']} for c in companies_without_invoices[:30]]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/delete-companies-without-invoices', methods=['POST'])
+def delete_companies_without_invoices():
+    """Delete all companies that have no invoices (CRM-only imports)."""
+    try:
+        # Get company IDs from invoices
+        invoice_company_ids = set()
+        for year in ['2024', '2025', '2026']:
+            try:
+                offset = 0
+                while True:
+                    result = supabase_client.table(f'sales_{year}').select('company_id').range(offset, offset + 999).execute()
+                    if not result.data:
+                        break
+                    for r in result.data:
+                        if r.get('company_id'):
+                            invoice_company_ids.add(r['company_id'])
+                    if len(result.data) < 1000:
+                        break
+                    offset += 1000
+            except:
+                pass
+
+        # Get all companies
+        all_companies = []
+        offset = 0
+        while True:
+            result = supabase_client.table('companies').select('id, company_id, name').range(offset, offset + 999).execute()
+            if not result.data:
+                break
+            all_companies.extend(result.data)
+            if len(result.data) < 1000:
+                break
+            offset += 1000
+
+        # Find companies without invoices
+        companies_to_delete = [c for c in all_companies if c['company_id'] not in invoice_company_ids]
+
+        # Delete them
+        deleted = 0
+        for c in companies_to_delete:
+            try:
+                supabase_client.table('companies').delete().eq('id', c['id']).execute()
+                deleted += 1
+            except:
+                pass
+
+        return jsonify({
+            'success': True,
+            'deleted': deleted,
+            'total_without_invoices': len(companies_to_delete)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/rollback-crm-import', methods=['POST'])
+def rollback_crm_import():
+    """Rollback the bad CRM import - delete new companies and clear CRM fields from existing."""
+    try:
+        # Find all companies marked as CRM imported
+        result = supabase_client.table('companies').select('id, company_id, name, imported_from_crm').eq('imported_from_crm', True).execute()
+        affected = result.data if result.data else []
+
+        # Separate into new inserts (negative IDs) vs updated existing (positive IDs)
+        new_inserts = [c for c in affected if c['company_id'] < 0]
+        updated_existing = [c for c in affected if c['company_id'] > 0]
+
+        # Delete newly inserted companies
+        delete_count = 0
+        for company in new_inserts:
+            try:
+                supabase_client.table('companies').delete().eq('id', company['id']).execute()
+                delete_count += 1
+            except:
+                pass
+
+        # Clear CRM fields from existing companies
+        clear_fields = {
+            'lead_status': None, 'channel': None, 'language': None, 'priority': None,
+            'province': None, 'sub_type': None, 'business_type': None, 'parent_company': None,
+            'suppliers': None, 'crm_notes': None, 'activations': None, 'external_account_number': None,
+            'products_proposed': None, 'products_sampled': None, 'products_listed': None, 'products_won': None,
+            'contact_person_role': None, 'contact_2_name': None, 'contact_2_role': None,
+            'contact_2_email': None, 'contact_2_phone': None, 'contact_3_name': None,
+            'contact_3_role': None, 'contact_3_email': None, 'contact_3_phone': None,
+            'imported_from_crm': False, 'crm_import_date': None
+        }
+
+        clear_count = 0
+        for company in updated_existing:
+            try:
+                supabase_client.table('companies').update(clear_fields).eq('company_id', company['company_id']).execute()
+                clear_count += 1
+            except:
+                pass
+
+        return jsonify({
+            'success': True,
+            'deleted_new_companies': delete_count,
+            'cleared_existing_companies': clear_count,
+            'total_affected': len(affected)
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/retry-failed-imports', methods=['POST'])
 def retry_failed_imports():
     """Retry the 22 failed CRM imports after fixing language column."""
