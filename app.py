@@ -15041,5 +15041,171 @@ def handle_exception(e):
     raise e
 
 
+# ============================================================================
+# CSV IMPORT ANALYSIS ENDPOINT
+# ============================================================================
+
+@app.route('/api/analyze-csv-import', methods=['GET'])
+def analyze_csv_import():
+    """Analyze the CRM CSV import file and find matches with existing companies."""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        import csv
+        import re
+        from collections import defaultdict
+
+        def normalize_name(name):
+            """Normalize company name for matching."""
+            if not name:
+                return ""
+            name = name.lower().strip()
+            for suffix in [' bv', ' bvba', ' nv', ' sprl', ' sa', ' cvba', ' vzw', ' asbl']:
+                name = name.replace(suffix, '')
+            name = re.sub(r'[^a-z0-9\s]', '', name)
+            name = re.sub(r'\s+', ' ', name).strip()
+            return name
+
+        def normalize_postal_code(address):
+            """Extract postal code from address."""
+            if not address:
+                return ""
+            match = re.search(r'\b(\d{4})\b', address)
+            return match.group(1) if match else ""
+
+        # Load CSV data
+        csv_path = os.path.join(os.path.dirname(__file__), '2026-01-20_location_export.csv')
+        csv_records = []
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter=';')
+            for row in reader:
+                csv_records.append(row)
+
+        # Load existing companies from database
+        all_companies = []
+        batch_size = 1000
+        offset = 0
+
+        while True:
+            result = supabase_client.table('companies').select(
+                'id, company_id, name, public_name, vat_number, post_code, city'
+            ).range(offset, offset + batch_size - 1).execute()
+
+            if not result.data:
+                break
+            all_companies.extend(result.data)
+            if len(result.data) < batch_size:
+                break
+            offset += batch_size
+
+        # Build lookup indexes
+        db_names_index = defaultdict(list)
+        db_postal_index = defaultdict(list)
+
+        for company in all_companies:
+            norm_name = normalize_name(company.get('name') or company.get('public_name'))
+            if norm_name:
+                db_names_index[norm_name].append(company)
+
+            norm_public = normalize_name(company.get('public_name'))
+            if norm_public and norm_public != norm_name:
+                db_names_index[norm_public].append(company)
+
+            postal = company.get('post_code')
+            if postal:
+                db_postal_index[str(postal)].append(company)
+
+        # Find matches
+        exact_matches = []
+        fuzzy_matches = []
+        no_matches = []
+
+        for csv_record in csv_records:
+            csv_name = csv_record.get('Name', '')
+            csv_address = csv_record.get('Address', '')
+            csv_postal = normalize_postal_code(csv_address)
+            norm_csv_name = normalize_name(csv_name)
+
+            match_found = False
+
+            # Try exact name match
+            if norm_csv_name in db_names_index:
+                matches = db_names_index[norm_csv_name]
+                if csv_postal:
+                    postal_filtered = [m for m in matches if str(m.get('post_code', '')) == csv_postal]
+                    if postal_filtered:
+                        matches = postal_filtered
+
+                if matches:
+                    exact_matches.append({
+                        'csv_name': csv_name,
+                        'csv_address': csv_address,
+                        'csv_status': csv_record.get('Lead Status', ''),
+                        'db_name': matches[0].get('name') or matches[0].get('public_name'),
+                        'db_id': matches[0].get('company_id') or matches[0].get('id')
+                    })
+                    match_found = True
+
+            # Try fuzzy matching
+            if not match_found and csv_postal and csv_postal in db_postal_index:
+                for db_record in db_postal_index[csv_postal]:
+                    db_name = normalize_name(db_record.get('name') or db_record.get('public_name', ''))
+                    if db_name and norm_csv_name:
+                        if db_name in norm_csv_name or norm_csv_name in db_name:
+                            fuzzy_matches.append({
+                                'csv_name': csv_name,
+                                'csv_address': csv_address,
+                                'csv_status': csv_record.get('Lead Status', ''),
+                                'db_name': db_record.get('name') or db_record.get('public_name'),
+                                'db_id': db_record.get('company_id') or db_record.get('id')
+                            })
+                            match_found = True
+                            break
+
+            if not match_found:
+                no_matches.append({
+                    'name': csv_name,
+                    'address': csv_address,
+                    'status': csv_record.get('Lead Status', ''),
+                    'channel': csv_record.get('Channel', ''),
+                    'owner': csv_record.get('Company Owner', ''),
+                    'priority': csv_record.get('Priority', ''),
+                    'sub_type': csv_record.get('Sub Type', '')
+                })
+
+        # Status distribution for new records
+        status_counts = defaultdict(int)
+        for record in no_matches:
+            status = record.get('status', 'Unknown') or 'Unknown'
+            status_counts[status] += 1
+
+        return jsonify({
+            'success': True,
+            'summary': {
+                'total_csv_records': len(csv_records),
+                'total_db_companies': len(all_companies),
+                'exact_matches': len(exact_matches),
+                'fuzzy_matches': len(fuzzy_matches),
+                'new_records': len(no_matches),
+                'exact_match_pct': round(len(exact_matches) / len(csv_records) * 100, 1),
+                'new_records_pct': round(len(no_matches) / len(csv_records) * 100, 1)
+            },
+            'new_records_by_status': dict(status_counts),
+            'exact_matches_sample': exact_matches[:20],
+            'fuzzy_matches_sample': fuzzy_matches[:20],
+            'new_records_sample': no_matches[:30],
+            'all_exact_matches': exact_matches,
+            'all_fuzzy_matches': fuzzy_matches,
+            'all_new_records': no_matches
+        })
+
+    except Exception as e:
+        print(f"Error analyzing CSV import: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5002)
