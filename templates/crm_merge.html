@@ -290,7 +290,8 @@
             <p class="text-muted mb-0">Review imported companies and merge with existing records</p>
         </div>
         <div>
-            <button class="import-btn" onclick="startImport()" id="importBtn">
+            <input type="file" id="csvFileInput" accept=".csv" style="display: none;" onchange="handleFileSelect(event)">
+            <button class="import-btn" onclick="document.getElementById('csvFileInput').click()" id="importBtn">
                 <i class="fas fa-upload me-2"></i>Import CRM Data
             </button>
             <a href="/data" class="btn btn-outline-secondary">
@@ -642,15 +643,32 @@ async function skipImport() {
     }
 }
 
-async function startImport() {
-    if (!confirm('This will import all CRM records as pending review. Continue?')) return;
+async function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.csv')) {
+        alert('Please select a CSV file');
+        return;
+    }
+
+    if (!confirm(`Import "${file.name}" as pending CRM records for review?`)) {
+        event.target.value = '';
+        return;
+    }
 
     const btn = document.getElementById('importBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Importing...';
 
     try {
-        const response = await fetch('/api/crm-import-safe', { method: 'POST' });
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/crm-import-safe', {
+            method: 'POST',
+            body: formData
+        });
         const data = await response.json();
 
         if (data.success) {
@@ -665,6 +683,7 @@ async function startImport() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-upload me-2"></i>Import CRM Data';
+        event.target.value = '';
     }
 }
 

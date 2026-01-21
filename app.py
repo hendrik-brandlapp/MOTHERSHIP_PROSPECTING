@@ -15639,11 +15639,24 @@ def crm_import_safe():
     """
     Safe CRM import - imports ALL records as pending review.
     No auto-matching, no updates to existing companies.
+    Accepts CSV file upload.
     """
     try:
         import csv
         import re
         import time as time_module
+        import io
+
+        # Check for file upload
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded. Please select a CSV file.'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        if not file.filename.endswith('.csv'):
+            return jsonify({'error': 'Please upload a CSV file'}), 400
 
         def parse_address(address):
             if not address:
@@ -15678,13 +15691,12 @@ def crm_import_safe():
                 return []
             return [p.strip() for p in s.split(',') if p.strip()]
 
-        # Load CSV
-        csv_path = os.path.join(os.path.dirname(__file__), '2026-01-20_location_export.csv')
+        # Read CSV from uploaded file
         csv_records = []
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f, delimiter=';')
-            for row in reader:
-                csv_records.append(row)
+        stream = io.StringIO(file.stream.read().decode('utf-8'))
+        reader = csv.DictReader(stream, delimiter=';')
+        for row in reader:
+            csv_records.append(row)
 
         # Import each record as a new pending company
         imported = 0
