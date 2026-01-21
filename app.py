@@ -8256,7 +8256,7 @@ def api_companies_from_db():
                     'contact_person_role, contact_2_name, contact_2_role, contact_2_email, contact_2_phone, '
                     'contact_3_name, contact_3_role, contact_3_email, contact_3_phone, '
                     'imported_from_crm, crm_import_date, external_account_number'
-                ).range(offset, offset + batch_size - 1).execute()
+                ).neq('crm_review_status', 'merged').range(offset, offset + batch_size - 1).execute()
 
                 if not comp_result.data:
                     break
