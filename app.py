@@ -10499,7 +10499,7 @@ def api_sync_missing_companies():
             return jsonify({'error': 'Supabase not configured'}), 500
 
         # Get batch size from request (default 50 to avoid timeout)
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         batch_size_limit = data.get('batch_size', 50)
 
         print(f"🔍 Finding companies missing from companies table (batch size: {batch_size_limit})...")
