@@ -10484,6 +10484,144 @@ def api_populate_companies_enhanced():
         return jsonify({'error': str(e)}), 500
 
 
+# Global variable to track background sync status
+_sync_status = {'running': False, 'synced': 0, 'total': 0, 'errors': 0, 'message': ''}
+
+def _background_sync_all_missing():
+    """Background thread function to sync all missing companies."""
+    global _sync_status
+
+    try:
+        _sync_status = {'running': True, 'synced': 0, 'total': 0, 'errors': 0, 'message': 'Starting...'}
+
+        # Get company IDs from invoices
+        def get_company_ids_from_year(year):
+            company_ids = set()
+            batch_size = 1000
+            offset = 0
+            while True:
+                try:
+                    batch_result = supabase_client.table(f'sales_{year}').select('company_id').range(offset, offset + batch_size - 1).execute()
+                    if not batch_result.data:
+                        break
+                    for record in batch_result.data:
+                        if record.get('company_id'):
+                            company_ids.add(record.get('company_id'))
+                    if len(batch_result.data) < batch_size:
+                        break
+                    offset += batch_size
+                    if offset > 50000:
+                        break
+                except Exception as e:
+                    print(f"Error fetching {year} company IDs: {e}")
+                    break
+            return company_ids
+
+        invoice_company_ids = set()
+        for year in ['2024', '2025', '2026']:
+            invoice_company_ids.update(get_company_ids_from_year(year))
+
+        existing_result = supabase_client.table('companies').select('company_id').execute()
+        existing_company_ids = set(c['company_id'] for c in existing_result.data)
+
+        missing_company_ids = list(invoice_company_ids - existing_company_ids)
+        _sync_status['total'] = len(missing_company_ids)
+
+        print(f"🚀 [Background] Starting sync of {len(missing_company_ids)} missing companies...")
+
+        for i, company_id in enumerate(missing_company_ids):
+            try:
+                if i > 0 and i % 10 == 0:
+                    time.sleep(0.3)  # Rate limiting
+
+                company_response, error = make_api_request(f'/api/public/v1/core/companies/{company_id}')
+
+                if error or not company_response:
+                    _sync_status['errors'] += 1
+                    print(f"❌ [Background] Failed to fetch company {company_id}: {error}")
+                    continue
+
+                company_data = company_response.get('result', {})
+                if not company_data:
+                    _sync_status['errors'] += 1
+                    continue
+
+                record = {
+                    'company_id': company_id,
+                    'name': company_data.get('name'),
+                    'public_name': company_data.get('public_name'),
+                    'company_tag': company_data.get('tag'),
+                    'vat_number': company_data.get('vat_number'),
+                    'is_customer': company_data.get('is_customer', False),
+                    'is_supplier': company_data.get('is_supplier', False),
+                    'company_status_id': company_data.get('company_status', {}).get('id') if company_data.get('company_status') else None,
+                    'company_status_name': company_data.get('company_status', {}).get('name') if company_data.get('company_status') else None,
+                    'sales_price_class_id': company_data.get('sales_price_class', {}).get('id') if company_data.get('sales_price_class') else None,
+                    'sales_price_class_name': company_data.get('sales_price_class', {}).get('name') if company_data.get('sales_price_class') else None,
+                    'document_delivery_type': company_data.get('document_delivery_type'),
+                    'email_addresses': company_data.get('email_addresses'),
+                    'default_document_notes': company_data.get('default_document_notes', []),
+                    'company_categories': company_data.get('company_categories', []),
+                    'addresses': company_data.get('addresses', []),
+                    'bank_accounts': company_data.get('bank_accounts', []),
+                    'extension_values': company_data.get('extension_values', []),
+                    'raw_company_data': company_data,
+                    'data_sources': ['douano_api', 'invoices'],
+                    'last_sync_at': datetime.now().isoformat()
+                }
+
+                supabase_client.table('companies').upsert(record, on_conflict='company_id').execute()
+                _sync_status['synced'] += 1
+                print(f"✅ [Background] ({_sync_status['synced']}/{_sync_status['total']}) Synced {company_id}: {company_data.get('name')}")
+
+            except Exception as e:
+                _sync_status['errors'] += 1
+                print(f"❌ [Background] Error syncing {company_id}: {e}")
+
+        _sync_status['message'] = f"Completed! Synced {_sync_status['synced']} companies with {_sync_status['errors']} errors."
+        _sync_status['running'] = False
+        print(f"🎉 [Background] Sync complete: {_sync_status['synced']} synced, {_sync_status['errors']} errors")
+
+    except Exception as e:
+        _sync_status['message'] = f"Error: {str(e)}"
+        _sync_status['running'] = False
+        print(f"❌ [Background] Sync failed: {e}")
+
+
+@app.route('/api/sync-missing-companies-background', methods=['POST'])
+def api_sync_missing_companies_background():
+    """Start syncing all missing companies in the background."""
+    global _sync_status
+
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    if _sync_status.get('running'):
+        return jsonify({
+            'success': False,
+            'message': 'Sync already running',
+            'status': _sync_status
+        })
+
+    # Start background thread
+    import threading
+    thread = threading.Thread(target=_background_sync_all_missing)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'success': True,
+        'message': 'Background sync started. Check /api/sync-status for progress.',
+        'status': _sync_status
+    })
+
+
+@app.route('/api/sync-status', methods=['GET'])
+def api_sync_status():
+    """Get the current status of background sync."""
+    return jsonify(_sync_status)
+
+
 @app.route('/api/sync-missing-companies', methods=['POST'])
 def api_sync_missing_companies():
     """Sync only companies that are in invoices but missing from the companies table.
