@@ -8436,6 +8436,87 @@ def api_companies_from_db():
         for company in companies_list:
             company['alerts'] = alerts_by_company.get(company['id'], [])
 
+        # Step 6: Add CRM-imported companies that don't have invoices yet
+        existing_company_ids = set(c['company_id'] for c in companies_list)
+        crm_companies_added = 0
+        try:
+            # Fetch companies that were imported from CRM but don't have invoices
+            for details in company_details.values():
+                cid = details.get('company_id')
+                if cid and cid not in existing_company_ids and details.get('imported_from_crm'):
+                    existing_company_ids.add(cid)  # Prevent duplicates
+                    crm_company = {
+                        'id': cid,
+                        'company_id': cid,
+                        'supabase_id': details.get('id'),
+                        'name': details.get('name') or details.get('public_name') or 'Unknown',
+                        'public_name': details.get('public_name'),
+                        'customer_since': details.get('customer_since'),
+                        'email': details.get('email'),
+                        'phone': details.get('phone_number'),
+                        'website': details.get('website'),
+                        'company_tag': details.get('company_tag'),
+                        'contact_person': details.get('contact_person_name'),
+                        'assigned_salesperson': details.get('assigned_salesperson'),
+                        'lead_source': details.get('lead_source'),
+                        'company_categories': details.get('company_categories'),
+                        'raw_company_data': details.get('raw_company_data'),
+                        'latitude': details.get('latitude'),
+                        'longitude': details.get('longitude'),
+                        'total_revenue': 0,
+                        'invoice_count': 0,
+                        'average_invoice_value': 0,
+                        'first_invoice_date': None,
+                        'last_invoice_date': None,
+                        'address': {
+                            'city': details.get('city', ''),
+                            'country': details.get('country_name', ''),
+                            'street': details.get('address_line1', ''),
+                            'postal_code': details.get('post_code', '')
+                        },
+                        'addresses': details.get('addresses', []),
+                        'geocoded_address': details.get('geocoded_address'),
+                        'current_flavours': [],
+                        'flavour_prices': {},
+                        # CRM fields
+                        'lead_status': details.get('lead_status'),
+                        'channel': details.get('channel'),
+                        'language': details.get('language'),
+                        'priority': details.get('priority'),
+                        'province': details.get('province'),
+                        'sub_type': details.get('sub_type'),
+                        'business_type': details.get('business_type'),
+                        'parent_company': details.get('parent_company'),
+                        'suppliers': details.get('suppliers', []),
+                        'crm_notes': details.get('crm_notes'),
+                        'activations': details.get('activations'),
+                        'external_account_number': details.get('external_account_number'),
+                        'products_proposed': details.get('products_proposed', []),
+                        'products_sampled': details.get('products_sampled', []),
+                        'products_listed': details.get('products_listed', []),
+                        'products_won': details.get('products_won', []),
+                        'contact_person_role': details.get('contact_person_role'),
+                        'contact_2_name': details.get('contact_2_name'),
+                        'contact_2_role': details.get('contact_2_role'),
+                        'contact_2_email': details.get('contact_2_email'),
+                        'contact_2_phone': details.get('contact_2_phone'),
+                        'contact_3_name': details.get('contact_3_name'),
+                        'contact_3_role': details.get('contact_3_role'),
+                        'contact_3_email': details.get('contact_3_email'),
+                        'contact_3_phone': details.get('contact_3_phone'),
+                        'imported_from_crm': True,
+                        'crm_import_date': details.get('crm_import_date'),
+                        'alerts': []
+                    }
+                    companies_list.append(crm_company)
+                    crm_companies_added += 1
+            print(f"📥 Added {crm_companies_added} CRM-imported companies without invoices")
+        except Exception as e:
+            print(f"Could not add CRM companies: {e}")
+
+        # Re-sort after adding CRM companies (by revenue, then by name for 0-revenue)
+        companies_list.sort(key=lambda x: (-x['total_revenue'], x.get('name', '').lower()))
+
         print(f"✅ Returning {len(companies_list)} companies, {total_invoices} invoices, €{round(total_revenue, 2)} revenue")
 
         return jsonify({

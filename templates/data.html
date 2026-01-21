@@ -4635,7 +4635,7 @@ function showCompanyDetails(companyId) {
                 </div>
                 ` : ''}
             </div>
-            ${company.suppliers && company.suppliers.length > 0 ? `
+            ${Array.isArray(company.suppliers) && company.suppliers.length > 0 ? `
             <div class="mt-3">
                 <label class="form-label small fw-bold text-muted">Suppliers</label>
                 <div class="d-flex flex-wrap gap-1">
@@ -4647,43 +4647,52 @@ function showCompanyDetails(companyId) {
         ` : ''}
 
         <!-- Products Tracking -->
-        ${(company.products_proposed?.length || company.products_sampled?.length || company.products_listed?.length || company.products_won?.length) ? `
+        ${(() => {
+            const proposed = Array.isArray(company.products_proposed) ? company.products_proposed : [];
+            const sampled = Array.isArray(company.products_sampled) ? company.products_sampled : [];
+            const listed = Array.isArray(company.products_listed) ? company.products_listed : [];
+            const won = Array.isArray(company.products_won) ? company.products_won : [];
+            if (proposed.length || sampled.length || listed.length || won.length) {
+                return `
         <div class="detail-section">
             <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-box me-2 text-muted"></i>Product History</h6>
-            ${company.products_proposed?.length ? `
+            ${proposed.length ? `
             <div class="mb-3">
                 <label class="form-label small fw-bold text-muted">Proposed</label>
                 <div class="d-flex flex-wrap gap-1">
-                    ${company.products_proposed.map(p => `<span class="badge bg-light text-dark border" style="font-size: 0.7rem;">${p}</span>`).join('')}
+                    ${proposed.map(p => `<span class="badge bg-light text-dark border" style="font-size: 0.7rem;">${p}</span>`).join('')}
                 </div>
             </div>
             ` : ''}
-            ${company.products_sampled?.length ? `
+            ${sampled.length ? `
             <div class="mb-3">
                 <label class="form-label small fw-bold text-muted">Sampled</label>
                 <div class="d-flex flex-wrap gap-1">
-                    ${company.products_sampled.map(p => `<span class="badge bg-info text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
+                    ${sampled.map(p => `<span class="badge bg-info text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
                 </div>
             </div>
             ` : ''}
-            ${company.products_listed?.length ? `
+            ${listed.length ? `
             <div class="mb-3">
                 <label class="form-label small fw-bold text-muted">Listed</label>
                 <div class="d-flex flex-wrap gap-1">
-                    ${company.products_listed.map(p => `<span class="badge bg-success text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
+                    ${listed.map(p => `<span class="badge bg-success text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
                 </div>
             </div>
             ` : ''}
-            ${company.products_won?.length ? `
+            ${won.length ? `
             <div class="mb-3">
                 <label class="form-label small fw-bold text-muted">Won</label>
                 <div class="d-flex flex-wrap gap-1">
-                    ${company.products_won.map(p => `<span class="badge bg-primary text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
+                    ${won.map(p => `<span class="badge bg-primary text-white" style="font-size: 0.7rem;">${p}</span>`).join('')}
                 </div>
             </div>
             ` : ''}
         </div>
-        ` : ''}
+                `;
+            }
+            return '';
+        })()}
 
         <!-- Additional Contacts -->
         ${(company.contact_2_name || company.contact_3_name) ? `
