@@ -16,6 +16,11 @@
                 </div>
                 <div class="d-flex gap-2">
                     {% if session.user_role == 'admin' %}
+                    <button class="btn btn-modern btn-outline-success" onclick="syncCompaniesFromInvoices()"
+                            data-bs-toggle="tooltip" data-bs-placement="bottom"
+                            title="Sync Companies from Invoice Data">
+                        <i class="fas fa-file-invoice"></i>
+                    </button>
                     <button class="btn btn-modern btn-outline-warning" onclick="syncAllDuanoCompanies()"
                             data-bs-toggle="tooltip" data-bs-placement="bottom"
                             title="Sync All Companies from Duano">
@@ -2707,6 +2712,85 @@ async function syncMissingCompanies() {
                 </div>
             `;
         }
+
+    } catch (error) {
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+async function syncCompaniesFromInvoices() {
+    try {
+        document.getElementById('sync-status').style.display = 'block';
+        document.getElementById('sync-results').style.display = 'none';
+        document.getElementById('sync-message').textContent = 'Starting sync of companies from invoice data...';
+
+        // Start the background sync
+        const startResponse = await fetch('/api/sync-companies-from-invoices', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const startResult = await startResponse.json();
+
+        if (!startResult.success && startResult.message !== 'Invoice company sync already running') {
+            throw new Error(startResult.error || startResult.message);
+        }
+
+        // Poll for status
+        const pollStatus = async () => {
+            const statusResponse = await fetch('/api/invoice-company-sync-status');
+            const status = await statusResponse.json();
+
+            document.getElementById('sync-message').textContent =
+                `Syncing companies from invoices... ${status.synced || 0}/${status.total || '?'} processed (${status.created || 0} new, ${status.updated || 0} updated)`;
+
+            if (status.running) {
+                setTimeout(pollStatus, 1500);
+            } else {
+                // Sync complete
+                document.getElementById('sync-status').style.display = 'none';
+                document.getElementById('sync-results').style.display = 'block';
+
+                const alertClass = status.errors > 0 ? 'alert-warning' : 'alert-success';
+                document.getElementById('sync-results').innerHTML = `
+                    <div class="alert ${alertClass}">
+                        <h5><i class="fas fa-check-circle me-2"></i>Invoice Company Sync Complete!</h5>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <strong>New Companies:</strong> <span class="text-success">${status.created || 0}</span>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Updated:</strong> <span class="text-info">${status.updated || 0}</span>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Total Processed:</strong> ${status.synced || 0}
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Errors:</strong> <span class="text-danger">${status.errors || 0}</span>
+                            </div>
+                        </div>
+                        <p class="mt-3 mb-0">
+                            <i class="fas fa-info-circle me-2"></i>
+                            ${status.message}
+                        </p>
+                    </div>
+                `;
+
+                // Refresh data
+                clearCache();
+                setTimeout(() => loadData(true), 2000);
+            }
+        };
+
+        // Start polling
+        setTimeout(pollStatus, 1000);
 
     } catch (error) {
         document.getElementById('sync-status').style.display = 'none';

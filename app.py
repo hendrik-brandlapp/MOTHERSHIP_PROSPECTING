@@ -11017,6 +11017,199 @@ def api_full_sync_status():
     return jsonify(_full_sync_status)
 
 
+# Global status for invoice-based company sync
+_invoice_sync_status = {'running': False, 'synced': 0, 'created': 0, 'updated': 0, 'total': 0, 'errors': 0, 'message': ''}
+
+def _background_sync_companies_from_invoices():
+    """Background thread to sync companies from invoice data in sales tables."""
+    global _invoice_sync_status
+
+    try:
+        _invoice_sync_status = {
+            'running': True, 'synced': 0, 'created': 0, 'updated': 0,
+            'total': 0, 'errors': 0, 'message': 'Starting company sync from invoices...'
+        }
+
+        print("🚀 [Invoice Sync] Starting sync of companies from invoice data...")
+
+        if not supabase_client:
+            _invoice_sync_status['message'] = 'Error: Supabase not configured'
+            _invoice_sync_status['running'] = False
+            return
+
+        # Collect unique companies from all sales tables
+        all_companies = {}  # company_id -> company_data
+
+        for year in ['2024', '2025', '2026']:
+            table_name = f'sales_{year}'
+            _invoice_sync_status['message'] = f'Reading {table_name}...'
+            print(f"📄 [Invoice Sync] Reading {table_name}...")
+
+            try:
+                # Fetch all invoices with company data
+                result = supabase_client.table(table_name).select('company_id, company_name, invoice_data').execute()
+
+                if result.data:
+                    for row in result.data:
+                        company_id = row.get('company_id')
+                        if not company_id:
+                            continue
+
+                        # Extract company data from invoice_data jsonb
+                        invoice_data = row.get('invoice_data', {})
+                        company_from_invoice = invoice_data.get('company', {}) if invoice_data else {}
+
+                        # Merge with existing data (later years override earlier)
+                        if company_id not in all_companies:
+                            all_companies[company_id] = {
+                                'company_id': company_id,
+                                'name': row.get('company_name'),
+                                'invoice_company_data': company_from_invoice
+                            }
+                        else:
+                            # Update with newer data if available
+                            if company_from_invoice:
+                                all_companies[company_id]['invoice_company_data'] = company_from_invoice
+                            if row.get('company_name'):
+                                all_companies[company_id]['name'] = row.get('company_name')
+
+                    print(f"📦 [Invoice Sync] Found {len(result.data)} invoices in {table_name}")
+
+            except Exception as e:
+                print(f"❌ [Invoice Sync] Error reading {table_name}: {e}")
+                _invoice_sync_status['errors'] += 1
+
+        print(f"📊 [Invoice Sync] Total unique companies from invoices: {len(all_companies)}")
+        _invoice_sync_status['total'] = len(all_companies)
+        _invoice_sync_status['message'] = f'Processing {len(all_companies)} unique companies...'
+
+        # Get existing company IDs from database
+        existing_result = supabase_client.table('companies').select('company_id').execute()
+        existing_ids = set(row['company_id'] for row in existing_result.data) if existing_result.data else set()
+        print(f"📋 [Invoice Sync] Existing companies in database: {len(existing_ids)}")
+
+        # Process each unique company
+        created_count = 0
+        updated_count = 0
+        error_count = 0
+
+        for company_id, company_info in all_companies.items():
+            try:
+                invoice_company = company_info.get('invoice_company_data', {})
+
+                # Build record from invoice company data
+                record = {
+                    'company_id': company_id,
+                    'name': invoice_company.get('name') or company_info.get('name'),
+                    'public_name': invoice_company.get('public_name'),
+                    'vat_number': invoice_company.get('vat_number'),
+                    'is_customer': invoice_company.get('is_customer', True),
+                    'is_supplier': invoice_company.get('is_supplier', False),
+                    'data_sources': ['invoice_data'],
+                    'last_sync_at': datetime.now().isoformat()
+                }
+
+                # Extract address if available
+                addresses = invoice_company.get('addresses', [])
+                if addresses and len(addresses) > 0:
+                    addr = addresses[0]
+                    record['address_line1'] = addr.get('address_line_1')
+                    record['address_line2'] = addr.get('address_line_2')
+                    record['city'] = addr.get('city')
+                    record['post_code'] = addr.get('post_code')
+                    record['phone_number'] = addr.get('phone_number')
+                    if addr.get('country'):
+                        record['country_id'] = addr['country'].get('id')
+                        record['country_name'] = addr['country'].get('name')
+                        record['country_code'] = addr['country'].get('country_code')
+                    record['addresses'] = addresses
+
+                # Extract other fields
+                if invoice_company.get('company_status'):
+                    record['company_status_id'] = invoice_company['company_status'].get('id')
+                    record['company_status_name'] = invoice_company['company_status'].get('name')
+
+                if invoice_company.get('company_categories'):
+                    record['company_categories'] = invoice_company['company_categories']
+
+                record['email_addresses'] = invoice_company.get('email_addresses')
+                record['raw_company_data'] = invoice_company if invoice_company else None
+
+                # Check if this is a new company or update
+                is_new = company_id not in existing_ids
+
+                # Upsert to database
+                supabase_client.table('companies').upsert(record, on_conflict='company_id').execute()
+
+                if is_new:
+                    created_count += 1
+                    existing_ids.add(company_id)  # Track newly created
+                else:
+                    updated_count += 1
+
+                _invoice_sync_status['synced'] = created_count + updated_count
+                _invoice_sync_status['created'] = created_count
+                _invoice_sync_status['updated'] = updated_count
+
+                # Progress update every 50 companies
+                if (created_count + updated_count) % 50 == 0:
+                    _invoice_sync_status['message'] = f'Processed {created_count + updated_count}/{len(all_companies)} companies ({created_count} new, {updated_count} updated)'
+                    print(f"📊 [Invoice Sync] Progress: {created_count + updated_count}/{len(all_companies)}")
+
+            except Exception as e:
+                error_count += 1
+                _invoice_sync_status['errors'] = error_count
+                print(f"❌ [Invoice Sync] Error syncing company {company_id}: {e}")
+
+        _invoice_sync_status['message'] = f'Complete! {created_count} new companies created, {updated_count} updated, {error_count} errors.'
+        _invoice_sync_status['running'] = False
+        print(f"🎉 [Invoice Sync] Complete: {created_count} created, {updated_count} updated, {error_count} errors")
+
+    except Exception as e:
+        _invoice_sync_status['message'] = f'Error: {str(e)}'
+        _invoice_sync_status['running'] = False
+        print(f"❌ [Invoice Sync] Failed: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+@app.route('/api/sync-companies-from-invoices', methods=['POST'])
+def api_sync_companies_from_invoices():
+    """Sync companies by extracting unique company data from sales invoice tables.
+    This restores companies that exist in invoice data but are missing from companies table.
+    Runs in background to avoid timeout.
+    """
+    global _invoice_sync_status
+
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    if _invoice_sync_status.get('running'):
+        return jsonify({
+            'success': False,
+            'message': 'Invoice company sync already running',
+            'status': _invoice_sync_status
+        })
+
+    # Start background thread
+    import threading
+    thread = threading.Thread(target=_background_sync_companies_from_invoices)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'success': True,
+        'message': 'Company sync from invoices started in background. Check /api/invoice-company-sync-status for progress.',
+        'status': _invoice_sync_status
+    })
+
+
+@app.route('/api/invoice-company-sync-status', methods=['GET'])
+def api_invoice_company_sync_status():
+    """Get the status of the invoice-based company sync."""
+    return jsonify(_invoice_sync_status)
+
+
 @app.route('/api/update-empty-categories', methods=['POST'])
 def api_update_empty_categories():
     """Update companies that have empty categories in the database.
