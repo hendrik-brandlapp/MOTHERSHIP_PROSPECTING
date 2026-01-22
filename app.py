@@ -10826,7 +10826,7 @@ def api_sync_missing_companies():
 # Global status for full Duano sync
 _full_sync_status = {'running': False, 'synced': 0, 'total': 0, 'errors': 0, 'message': '', 'page': 0}
 
-def _background_sync_all_duano_companies():
+def _background_sync_all_duano_companies(access_token):
     """Background thread to sync ALL companies from Duano API (not just invoice ones)."""
     global _full_sync_status
 
@@ -10834,6 +10834,13 @@ def _background_sync_all_duano_companies():
         _full_sync_status = {'running': True, 'synced': 0, 'total': 0, 'errors': 0, 'message': 'Starting full Duano sync...', 'page': 0}
 
         print("🚀 [Full Sync] Starting sync of ALL companies from Duano API...")
+
+        # Headers for direct API calls (no Flask context needed)
+        headers = {
+            'Authorization': f"Bearer {access_token}",
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
 
         page = 1
         per_page = 100
@@ -10846,11 +10853,17 @@ def _background_sync_all_duano_companies():
 
             print(f"📄 [Full Sync] Fetching page {page}...")
 
-            # Fetch a page of companies from Duano API
-            response, error = make_api_request('/api/public/v1/core/companies', params={'per_page': per_page, 'page': page})
-
-            if error:
-                print(f"❌ [Full Sync] Error fetching page {page}: {error}")
+            # Fetch a page of companies from Duano API (direct call, no Flask context)
+            try:
+                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies"
+                api_response = requests.get(url, headers=headers, params={'per_page': per_page, 'page': page}, timeout=30)
+                if api_response.status_code != 200:
+                    print(f"❌ [Full Sync] API error on page {page}: {api_response.status_code}")
+                    _full_sync_status['errors'] += 1
+                    break
+                response = api_response.json()
+            except Exception as e:
+                print(f"❌ [Full Sync] Error fetching page {page}: {e}")
                 _full_sync_status['errors'] += 1
                 break
 
@@ -10941,9 +10954,14 @@ def api_sync_all_duano_companies():
             'status': _full_sync_status
         })
 
-    # Start background thread
+    # Capture access token before starting thread (thread can't access Flask session)
+    access_token = session.get('access_token')
+    if not access_token:
+        return jsonify({'error': 'Not authenticated - please log in again'}), 401
+
+    # Start background thread with access token
     import threading
-    thread = threading.Thread(target=_background_sync_all_duano_companies)
+    thread = threading.Thread(target=_background_sync_all_duano_companies, args=(access_token,))
     thread.daemon = True
     thread.start()
 
