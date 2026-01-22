@@ -10867,19 +10867,36 @@ def _background_sync_all_duano_companies(access_token):
                 _full_sync_status['errors'] += 1
                 break
 
-            companies = response.get('result', [])
-            if not companies:
+            # API returns list of company IDs (integers), not full objects
+            company_ids = response.get('result', [])
+            if not company_ids:
                 print(f"✅ [Full Sync] No more companies on page {page}, sync complete!")
                 break
 
-            _full_sync_status['total'] += len(companies)
-            print(f"📦 [Full Sync] Got {len(companies)} companies on page {page}")
+            _full_sync_status['total'] += len(company_ids)
+            print(f"📦 [Full Sync] Got {len(company_ids)} company IDs on page {page}")
 
-            # Sync each company
-            for company_data in companies:
+            # Fetch and sync each company individually
+            for company_id in company_ids:
                 try:
-                    company_id = company_data.get('id')
+                    # Handle if API returns dicts or just IDs
+                    if isinstance(company_id, dict):
+                        company_id = company_id.get('id')
                     if not company_id:
+                        continue
+
+                    # Fetch full company data
+                    company_url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies/{company_id}"
+                    company_response = requests.get(company_url, headers=headers, timeout=15)
+                    if company_response.status_code != 200:
+                        all_errors += 1
+                        _full_sync_status['errors'] = all_errors
+                        continue
+
+                    company_data = company_response.json().get('result', {})
+                    if not company_data:
+                        all_errors += 1
+                        _full_sync_status['errors'] = all_errors
                         continue
 
                     record = {
@@ -10910,10 +10927,14 @@ def _background_sync_all_duano_companies(access_token):
                     all_synced += 1
                     _full_sync_status['synced'] = all_synced
 
+                    # Rate limiting
+                    if all_synced % 10 == 0:
+                        time.sleep(0.3)
+
                 except Exception as e:
                     all_errors += 1
                     _full_sync_status['errors'] = all_errors
-                    print(f"❌ [Full Sync] Error syncing company: {e}")
+                    print(f"❌ [Full Sync] Error syncing company {company_id}: {e}")
 
             print(f"✅ [Full Sync] Page {page} complete. Total synced: {all_synced}")
 
