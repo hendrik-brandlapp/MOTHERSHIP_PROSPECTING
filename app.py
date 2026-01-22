@@ -10823,6 +10823,143 @@ def api_sync_missing_companies():
         return jsonify({'error': str(e)}), 500
 
 
+# Global status for full Duano sync
+_full_sync_status = {'running': False, 'synced': 0, 'total': 0, 'errors': 0, 'message': '', 'page': 0}
+
+def _background_sync_all_duano_companies():
+    """Background thread to sync ALL companies from Duano API (not just invoice ones)."""
+    global _full_sync_status
+
+    try:
+        _full_sync_status = {'running': True, 'synced': 0, 'total': 0, 'errors': 0, 'message': 'Starting full Duano sync...', 'page': 0}
+
+        print("🚀 [Full Sync] Starting sync of ALL companies from Duano API...")
+
+        page = 1
+        per_page = 100
+        all_synced = 0
+        all_errors = 0
+
+        while True:
+            _full_sync_status['page'] = page
+            _full_sync_status['message'] = f'Fetching page {page}...'
+
+            print(f"📄 [Full Sync] Fetching page {page}...")
+
+            # Fetch a page of companies from Duano API
+            response, error = make_api_request('/api/public/v1/core/companies', params={'per_page': per_page, 'page': page})
+
+            if error:
+                print(f"❌ [Full Sync] Error fetching page {page}: {error}")
+                _full_sync_status['errors'] += 1
+                break
+
+            companies = response.get('result', [])
+            if not companies:
+                print(f"✅ [Full Sync] No more companies on page {page}, sync complete!")
+                break
+
+            _full_sync_status['total'] += len(companies)
+            print(f"📦 [Full Sync] Got {len(companies)} companies on page {page}")
+
+            # Sync each company
+            for company_data in companies:
+                try:
+                    company_id = company_data.get('id')
+                    if not company_id:
+                        continue
+
+                    record = {
+                        'company_id': company_id,
+                        'name': company_data.get('name'),
+                        'public_name': company_data.get('public_name'),
+                        'company_tag': company_data.get('tag'),
+                        'vat_number': company_data.get('vat_number'),
+                        'is_customer': company_data.get('is_customer', False),
+                        'is_supplier': company_data.get('is_supplier', False),
+                        'company_status_id': company_data.get('company_status', {}).get('id') if company_data.get('company_status') else None,
+                        'company_status_name': company_data.get('company_status', {}).get('name') if company_data.get('company_status') else None,
+                        'sales_price_class_id': company_data.get('sales_price_class', {}).get('id') if company_data.get('sales_price_class') else None,
+                        'sales_price_class_name': company_data.get('sales_price_class', {}).get('name') if company_data.get('sales_price_class') else None,
+                        'document_delivery_type': company_data.get('document_delivery_type'),
+                        'email_addresses': company_data.get('email_addresses'),
+                        'default_document_notes': company_data.get('default_document_notes', []),
+                        'company_categories': company_data.get('company_categories', []),
+                        'addresses': company_data.get('addresses', []),
+                        'bank_accounts': company_data.get('bank_accounts', []),
+                        'extension_values': company_data.get('extension_values', []),
+                        'raw_company_data': company_data,
+                        'data_sources': ['douano_api'],
+                        'last_sync_at': datetime.now().isoformat()
+                    }
+
+                    supabase_client.table('companies').upsert(record, on_conflict='company_id').execute()
+                    all_synced += 1
+                    _full_sync_status['synced'] = all_synced
+
+                except Exception as e:
+                    all_errors += 1
+                    _full_sync_status['errors'] = all_errors
+                    print(f"❌ [Full Sync] Error syncing company: {e}")
+
+            print(f"✅ [Full Sync] Page {page} complete. Total synced: {all_synced}")
+
+            # Rate limiting between pages
+            time.sleep(0.5)
+            page += 1
+
+            # Safety limit
+            if page > 100:
+                print("⚠️ [Full Sync] Reached page limit (100), stopping")
+                break
+
+        _full_sync_status['message'] = f'Complete! Synced {all_synced} companies with {all_errors} errors.'
+        _full_sync_status['running'] = False
+        print(f"🎉 [Full Sync] Complete: {all_synced} synced, {all_errors} errors")
+
+    except Exception as e:
+        _full_sync_status['message'] = f'Error: {str(e)}'
+        _full_sync_status['running'] = False
+        print(f"❌ [Full Sync] Failed: {e}")
+
+
+@app.route('/api/sync-all-duano-companies', methods=['POST'])
+def api_sync_all_duano_companies():
+    """Sync ALL companies from Duano API (not just ones with invoices).
+    This restores companies that were deleted but exist in Duano.
+    Runs in background to avoid timeout.
+    """
+    global _full_sync_status
+
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    if _full_sync_status.get('running'):
+        return jsonify({
+            'success': False,
+            'message': 'Full sync already running',
+            'status': _full_sync_status
+        })
+
+    # Start background thread
+    import threading
+    thread = threading.Thread(target=_background_sync_all_duano_companies)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'success': True,
+        'message': 'Full Duano sync started in background. Check /api/full-sync-status for progress.',
+        'status': _full_sync_status
+    })
+
+
+@app.route('/api/full-sync-status', methods=['GET'])
+def api_full_sync_status():
+    """Get the status of the full Duano company sync."""
+    return jsonify(_full_sync_status)
+
+
 @app.route('/api/update-empty-categories', methods=['POST'])
 def api_update_empty_categories():
     """Update companies that have empty categories in the database.
