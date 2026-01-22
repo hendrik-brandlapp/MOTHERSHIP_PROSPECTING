@@ -11039,6 +11039,7 @@ def _background_sync_companies_from_invoices():
 
         # Collect unique companies from all sales tables
         all_companies = {}  # company_id -> company_data
+        PAGE_SIZE = 500  # Fetch in smaller batches
 
         for year in ['2024', '2025', '2026']:
             table_name = f'sales_{year}'
@@ -11046,10 +11047,22 @@ def _background_sync_companies_from_invoices():
             print(f"📄 [Invoice Sync] Reading {table_name}...")
 
             try:
-                # Fetch all invoices with company data
-                result = supabase_client.table(table_name).select('company_id, company_name, invoice_data').execute()
+                # Use pagination to fetch all invoices
+                offset = 0
+                total_invoices = 0
 
-                if result.data:
+                while True:
+                    # Fetch batch of invoices with company data
+                    result = supabase_client.table(table_name).select(
+                        'company_id, company_name, invoice_data'
+                    ).range(offset, offset + PAGE_SIZE - 1).execute()
+
+                    if not result.data:
+                        break
+
+                    batch_count = len(result.data)
+                    total_invoices += batch_count
+
                     for row in result.data:
                         company_id = row.get('company_id')
                         if not company_id:
@@ -11073,19 +11086,39 @@ def _background_sync_companies_from_invoices():
                             if row.get('company_name'):
                                 all_companies[company_id]['name'] = row.get('company_name')
 
-                    print(f"📦 [Invoice Sync] Found {len(result.data)} invoices in {table_name}")
+                    _invoice_sync_status['message'] = f'Reading {table_name}... ({total_invoices} invoices)'
+                    print(f"📦 [Invoice Sync] Read {total_invoices} invoices from {table_name} ({len(all_companies)} unique companies)")
+
+                    # Check if we got less than PAGE_SIZE - means we're at the end
+                    if batch_count < PAGE_SIZE:
+                        break
+
+                    offset += PAGE_SIZE
+
+                print(f"📦 [Invoice Sync] Total: {total_invoices} invoices in {table_name}")
 
             except Exception as e:
                 print(f"❌ [Invoice Sync] Error reading {table_name}: {e}")
                 _invoice_sync_status['errors'] += 1
+                import traceback
+                traceback.print_exc()
 
         print(f"📊 [Invoice Sync] Total unique companies from invoices: {len(all_companies)}")
         _invoice_sync_status['total'] = len(all_companies)
         _invoice_sync_status['message'] = f'Processing {len(all_companies)} unique companies...'
 
-        # Get existing company IDs from database
-        existing_result = supabase_client.table('companies').select('company_id').execute()
-        existing_ids = set(row['company_id'] for row in existing_result.data) if existing_result.data else set()
+        # Get existing company IDs from database (with pagination)
+        existing_ids = set()
+        offset = 0
+        while True:
+            existing_result = supabase_client.table('companies').select('company_id').range(offset, offset + PAGE_SIZE - 1).execute()
+            if not existing_result.data:
+                break
+            for row in existing_result.data:
+                existing_ids.add(row['company_id'])
+            if len(existing_result.data) < PAGE_SIZE:
+                break
+            offset += PAGE_SIZE
         print(f"📋 [Invoice Sync] Existing companies in database: {len(existing_ids)}")
 
         # Process each unique company
