@@ -10521,8 +10521,19 @@ def _background_sync_all_missing():
         for year in ['2024', '2025', '2026']:
             invoice_company_ids.update(get_company_ids_from_year(year))
 
-        existing_result = supabase_client.table('companies').select('company_id').execute()
-        existing_company_ids = set(c['company_id'] for c in existing_result.data)
+        # Get ALL existing company IDs with pagination
+        existing_company_ids = set()
+        offset = 0
+        while True:
+            existing_result = supabase_client.table('companies').select('company_id').range(offset, offset + 999).execute()
+            if not existing_result.data:
+                break
+            for c in existing_result.data:
+                if c.get('company_id'):
+                    existing_company_ids.add(c['company_id'])
+            if len(existing_result.data) < 1000:
+                break
+            offset += 1000
 
         missing_company_ids = list(invoice_company_ids - existing_company_ids)
         _sync_status['total'] = len(missing_company_ids)
@@ -10681,9 +10692,20 @@ def api_sync_missing_companies():
 
         print(f"Total unique companies in invoices: {len(invoice_company_ids)}")
 
-        # Step 2: Get company IDs already in companies table
-        existing_result = supabase_client.table('companies').select('company_id').execute()
-        existing_company_ids = set(c['company_id'] for c in existing_result.data)
+        # Step 2: Get ALL company IDs already in companies table (with pagination)
+        existing_company_ids = set()
+        offset = 0
+        batch_size = 1000
+        while True:
+            existing_result = supabase_client.table('companies').select('company_id').range(offset, offset + batch_size - 1).execute()
+            if not existing_result.data:
+                break
+            for c in existing_result.data:
+                if c.get('company_id'):
+                    existing_company_ids.add(c['company_id'])
+            if len(existing_result.data) < batch_size:
+                break
+            offset += batch_size
         print(f"Companies already in database: {len(existing_company_ids)}")
 
         # Step 3: Find missing companies
