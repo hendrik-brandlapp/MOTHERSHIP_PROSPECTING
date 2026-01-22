@@ -10827,13 +10827,13 @@ def api_sync_missing_companies():
 _full_sync_status = {'running': False, 'synced': 0, 'total': 0, 'errors': 0, 'message': '', 'page': 0}
 
 def _background_sync_all_duano_companies(access_token):
-    """Background thread to sync ALL companies from Duano API (not just invoice ones)."""
+    """Background thread to sync ALL companies from Duano CRM API."""
     global _full_sync_status
 
     try:
         _full_sync_status = {'running': True, 'synced': 0, 'total': 0, 'errors': 0, 'message': 'Starting full Duano sync...', 'page': 0}
 
-        print("🚀 [Full Sync] Starting sync of ALL companies from Duano API...")
+        print("🚀 [Full Sync] Starting sync of ALL companies from Duano CRM API...")
 
         # Headers for direct API calls (no Flask context needed)
         headers = {
@@ -10843,7 +10843,7 @@ def _background_sync_all_duano_companies(access_token):
         }
 
         page = 1
-        per_page = 100
+        per_page = 50  # CRM endpoint works better with smaller pages
         all_synced = 0
         all_errors = 0
 
@@ -10853,59 +10853,58 @@ def _background_sync_all_duano_companies(access_token):
 
             print(f"📄 [Full Sync] Fetching page {page}...")
 
-            # Fetch a page of companies from Duano API (direct call, no Flask context)
+            # Use CRM companies endpoint - returns full company data in list
             try:
-                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies"
-                api_response = requests.get(url, headers=headers, params={'per_page': per_page, 'page': page}, timeout=30)
+                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/crm/crm-companies"
+                api_response = requests.get(url, headers=headers, params={'per_page': per_page, 'page': page}, timeout=60)
                 if api_response.status_code != 200:
-                    print(f"❌ [Full Sync] API error on page {page}: {api_response.status_code}")
+                    print(f"❌ [Full Sync] API error on page {page}: {api_response.status_code} - {api_response.text[:200]}")
                     _full_sync_status['errors'] += 1
-                    break
+                    # Don't break on single page error, try next page
+                    page += 1
+                    time.sleep(1)
+                    continue
                 response = api_response.json()
             except Exception as e:
                 print(f"❌ [Full Sync] Error fetching page {page}: {e}")
                 _full_sync_status['errors'] += 1
-                break
+                # Don't break, try next page
+                page += 1
+                time.sleep(1)
+                continue
 
-            # API returns paginated result with 'data' array containing companies
+            # API returns paginated result with 'data' array containing full company objects
             result = response.get('result', {})
             companies = result.get('data', [])
-            if not companies:
-                print(f"✅ [Full Sync] No more companies on page {page}, sync complete!")
-                break
 
             # Check pagination info
             current_page = result.get('current_page', page)
-            last_page = result.get('last_page', page)
+            last_page = result.get('last_page', 1)
             total_count = result.get('total', 0)
 
-            _full_sync_status['total'] = total_count if total_count else _full_sync_status['total'] + len(companies)
-            print(f"📦 [Full Sync] Got {len(companies)} companies on page {page} (Total in API: {total_count})")
+            print(f"📦 [Full Sync] Page {current_page}/{last_page} - Got {len(companies)} companies (Total: {total_count})")
 
-            # Fetch and sync each company individually
-            for company in companies:
+            if not companies:
+                if current_page >= last_page:
+                    print(f"✅ [Full Sync] No more companies, sync complete!")
+                    break
+                else:
+                    # Empty page but not at end, try next
+                    page += 1
+                    continue
+
+            _full_sync_status['total'] = total_count
+
+            # Process companies directly from list (CRM endpoint returns full data)
+            for company_data in companies:
                 try:
-                    # Handle if API returns dicts or just IDs
-                    if isinstance(company, dict):
-                        company_id = company.get('id')
-                    else:
-                        company_id = company
+                    company_id = company_data.get('id')
                     if not company_id:
                         continue
 
-                    # Fetch full company data
-                    company_url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies/{company_id}"
-                    company_response = requests.get(company_url, headers=headers, timeout=15)
-                    if company_response.status_code != 200:
-                        all_errors += 1
-                        _full_sync_status['errors'] = all_errors
-                        continue
-
-                    company_data = company_response.json().get('result', {})
-                    if not company_data:
-                        all_errors += 1
-                        _full_sync_status['errors'] = all_errors
-                        continue
+                    # Extract address from addresses array
+                    addresses = company_data.get('addresses', [])
+                    primary_address = addresses[0] if addresses else {}
 
                     record = {
                         'company_id': company_id,
@@ -10921,13 +10920,23 @@ def _background_sync_all_duano_companies(access_token):
                         'sales_price_class_name': company_data.get('sales_price_class', {}).get('name') if company_data.get('sales_price_class') else None,
                         'document_delivery_type': company_data.get('document_delivery_type'),
                         'email_addresses': company_data.get('email_addresses'),
+                        'email': company_data.get('email_addresses'),
+                        'phone_number': primary_address.get('phone_number'),
+                        'website': company_data.get('website'),
+                        'address_line1': primary_address.get('address_line_1'),
+                        'address_line2': primary_address.get('address_line_2'),
+                        'city': primary_address.get('city'),
+                        'post_code': primary_address.get('post_code'),
+                        'country_id': primary_address.get('country', {}).get('id') if primary_address.get('country') else None,
+                        'country_name': primary_address.get('country', {}).get('name') if primary_address.get('country') else None,
+                        'country_code': primary_address.get('country', {}).get('country_code') if primary_address.get('country') else None,
                         'default_document_notes': company_data.get('default_document_notes', []),
                         'company_categories': company_data.get('company_categories', []),
-                        'addresses': company_data.get('addresses', []),
+                        'addresses': addresses,
                         'bank_accounts': company_data.get('bank_accounts', []),
                         'extension_values': company_data.get('extension_values', []),
                         'raw_company_data': company_data,
-                        'data_sources': ['douano_api'],
+                        'data_sources': ['douano_crm_api'],
                         'last_sync_at': datetime.now().isoformat()
                     }
 
@@ -10935,14 +10944,10 @@ def _background_sync_all_duano_companies(access_token):
                     all_synced += 1
                     _full_sync_status['synced'] = all_synced
 
-                    # Rate limiting
-                    if all_synced % 10 == 0:
-                        time.sleep(0.3)
-
                 except Exception as e:
                     all_errors += 1
                     _full_sync_status['errors'] = all_errors
-                    print(f"❌ [Full Sync] Error syncing company {company_id}: {e}")
+                    print(f"❌ [Full Sync] Error syncing company {company_data.get('id', 'unknown')}: {e}")
 
             print(f"✅ [Full Sync] Page {page} complete. Total synced: {all_synced}")
 
@@ -10952,12 +10957,12 @@ def _background_sync_all_duano_companies(access_token):
                 break
 
             # Rate limiting between pages
-            time.sleep(0.5)
+            time.sleep(0.3)
             page += 1
 
-            # Safety limit
-            if page > 100:
-                print("⚠️ [Full Sync] Reached page limit (100), stopping")
+            # Safety limit - increased to 500 pages (25,000 companies max)
+            if page > 500:
+                print("⚠️ [Full Sync] Reached page limit (500), stopping")
                 break
 
         _full_sync_status['message'] = f'Complete! Synced {all_synced} companies with {all_errors} errors.'
