@@ -11040,6 +11040,7 @@ def _background_sync_companies_from_invoices():
         # Collect unique companies from all sales tables
         all_companies = {}  # company_id -> company_data
         PAGE_SIZE = 500  # Fetch in smaller batches
+        grand_total_invoices = 0  # Track total across all years
 
         for year in ['2024', '2025', '2026']:
             table_name = f'sales_{year}'
@@ -11096,6 +11097,7 @@ def _background_sync_companies_from_invoices():
                     offset += PAGE_SIZE
 
                 print(f"📦 [Invoice Sync] Total: {total_invoices} invoices in {table_name}")
+                grand_total_invoices += total_invoices
 
             except Exception as e:
                 print(f"❌ [Invoice Sync] Error reading {table_name}: {e}")
@@ -11103,6 +11105,7 @@ def _background_sync_companies_from_invoices():
                 import traceback
                 traceback.print_exc()
 
+        print(f"📊 [Invoice Sync] GRAND TOTAL: {grand_total_invoices} invoices scanned across all years")
         print(f"📊 [Invoice Sync] Total unique companies from invoices: {len(all_companies)}")
         _invoice_sync_status['total'] = len(all_companies)
         _invoice_sync_status['message'] = f'Processing {len(all_companies)} unique companies...'
@@ -11120,6 +11123,13 @@ def _background_sync_companies_from_invoices():
                 break
             offset += PAGE_SIZE
         print(f"📋 [Invoice Sync] Existing companies in database: {len(existing_ids)}")
+
+        # Calculate how many are truly new
+        invoice_company_ids = set(all_companies.keys())
+        new_company_ids = invoice_company_ids - existing_ids
+        print(f"🆕 [Invoice Sync] Companies in invoices but NOT in database: {len(new_company_ids)}")
+        if len(new_company_ids) > 0 and len(new_company_ids) <= 20:
+            print(f"🆕 [Invoice Sync] New company IDs: {list(new_company_ids)}")
 
         # Process each unique company
         created_count = 0
