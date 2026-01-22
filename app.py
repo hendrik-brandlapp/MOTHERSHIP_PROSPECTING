@@ -6205,11 +6205,11 @@ def api_sync_invoices():
         request_data = request.json if request.is_json else {}
         full_sync = request_data.get('full_sync', False)
 
-        # For full sync, start from beginning of current year
+        # For full sync, start from beginning of 2024 to sync all years
         # For incremental, sync last 7 days
         if full_sync:
-            start_date = '2026-01-01'
-            print("📅 FULL SYNC requested - syncing all 2026 invoices")
+            start_date = '2024-01-01'
+            print("📅 FULL SYNC requested - syncing all invoices from 2024, 2025, and 2026")
         else:
             start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
             print(f"📅 Incremental sync from: {start_date}")
@@ -10867,21 +10867,29 @@ def _background_sync_all_duano_companies(access_token):
                 _full_sync_status['errors'] += 1
                 break
 
-            # API returns list of company IDs (integers), not full objects
-            company_ids = response.get('result', [])
-            if not company_ids:
+            # API returns paginated result with 'data' array containing companies
+            result = response.get('result', {})
+            companies = result.get('data', [])
+            if not companies:
                 print(f"✅ [Full Sync] No more companies on page {page}, sync complete!")
                 break
 
-            _full_sync_status['total'] += len(company_ids)
-            print(f"📦 [Full Sync] Got {len(company_ids)} company IDs on page {page}")
+            # Check pagination info
+            current_page = result.get('current_page', page)
+            last_page = result.get('last_page', page)
+            total_count = result.get('total', 0)
+
+            _full_sync_status['total'] = total_count if total_count else _full_sync_status['total'] + len(companies)
+            print(f"📦 [Full Sync] Got {len(companies)} companies on page {page} (Total in API: {total_count})")
 
             # Fetch and sync each company individually
-            for company_id in company_ids:
+            for company in companies:
                 try:
                     # Handle if API returns dicts or just IDs
-                    if isinstance(company_id, dict):
-                        company_id = company_id.get('id')
+                    if isinstance(company, dict):
+                        company_id = company.get('id')
+                    else:
+                        company_id = company
                     if not company_id:
                         continue
 
@@ -10937,6 +10945,11 @@ def _background_sync_all_duano_companies(access_token):
                     print(f"❌ [Full Sync] Error syncing company {company_id}: {e}")
 
             print(f"✅ [Full Sync] Page {page} complete. Total synced: {all_synced}")
+
+            # Check if we've reached the last page
+            if current_page >= last_page:
+                print(f"✅ [Full Sync] Reached last page ({last_page}), sync complete!")
+                break
 
             # Rate limiting between pages
             time.sleep(0.5)
