@@ -2541,18 +2541,30 @@ def api_get_dashboard():
             'recent_activity': []
         }
 
-        # Get tasks for current user
+        # Get tasks for current user - optimized with date filters and limits
         try:
-            tasks_result = supabase_client.table('sales_tasks').select('''
-                *,
-                prospects:prospect_id (id, name, status, address)
-            ''').or_(f'assigned_to.eq.{current_user},assigned_to.is.null').execute()
+            week_ahead = (today + timedelta(days=7)).isoformat()
+
+            # Get non-completed tasks due within relevant range (overdue to 7 days ahead)
+            tasks_result = supabase_client.table('sales_tasks').select(
+                'id, title, task_type, priority, status, due_date, prospect_id'
+            ).or_(f'assigned_to.eq.{current_user},assigned_to.is.null').neq(
+                'status', 'completed'
+            ).lte('due_date', week_ahead).order('due_date').limit(50).execute()
+
+            # Get today's completed tasks count separately
+            completed_today_result = supabase_client.table('sales_tasks').select(
+                'id', count='exact', head=True
+            ).or_(f'assigned_to.eq.{current_user},assigned_to.is.null').eq(
+                'status', 'completed'
+            ).eq('due_date', today_str).execute()
+            dashboard_data['tasks']['completed_today'] = completed_today_result.count or 0
 
             if tasks_result.data:
                 for task in tasks_result.data:
                     due_date = task.get('due_date', '')
                     if due_date:
-                        due = datetime.fromisoformat(due_date.replace('Z', '+00:00')).date() if 'T' in due_date else datetime.strptime(due_date, '%Y-%m-%d').date()
+                        due = datetime.strptime(due_date, '%Y-%m-%d').date() if due_date else None
 
                         task_info = {
                             'id': task.get('id'),
@@ -2561,25 +2573,22 @@ def api_get_dashboard():
                             'priority': task.get('priority', 2),
                             'status': task.get('status'),
                             'due_date': due_date,
-                            'prospect': task.get('prospects')
+                            'prospect': None  # Skip join for speed
                         }
 
-                        if task.get('status') == 'completed':
-                            if due == today:
-                                dashboard_data['tasks']['completed_today'] += 1
-                        elif due < today:
+                        if due < today:
                             dashboard_data['tasks']['overdue'].append(task_info)
                             dashboard_data['tasks']['total_overdue'] += 1
                         elif due == today:
                             dashboard_data['tasks']['today'].append(task_info)
                             dashboard_data['tasks']['total_today'] += 1
-                        elif due <= today + timedelta(days=7):
+                        else:
                             dashboard_data['tasks']['upcoming'].append(task_info)
 
-                # Sort by priority (high first) then due date
+                # Sort by priority (high first) then due date, limit to 5
                 for key in ['today', 'overdue', 'upcoming']:
                     dashboard_data['tasks'][key].sort(key=lambda x: (-x.get('priority', 2), x.get('due_date', '')))
-                    dashboard_data['tasks'][key] = dashboard_data['tasks'][key][:5]  # Limit to 5
+                    dashboard_data['tasks'][key] = dashboard_data['tasks'][key][:5]
         except Exception as e:
             print(f"Error fetching tasks for dashboard: {e}")
 
