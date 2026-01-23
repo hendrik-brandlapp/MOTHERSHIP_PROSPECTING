@@ -405,6 +405,12 @@ def index():
     return render_template('login.html')
 
 
+@app.route('/favicon.ico')
+def favicon():
+    """Return empty response for favicon to prevent 404 errors"""
+    return '', 204
+
+
 @app.route('/login-sales-rep', methods=['POST'])
 def login_sales_rep():
     """Login as a sales rep (no DUANO auth required)"""
@@ -2608,15 +2614,18 @@ def api_get_dashboard():
         except Exception as e:
             print(f"Error fetching trips for dashboard: {e}")
 
-        # Get pipeline stats
+        # Get pipeline stats - use count queries for efficiency
         try:
-            prospects_result = supabase_client.table('prospects').select('status').execute()
-            if prospects_result.data:
-                dashboard_data['pipeline']['total'] = len(prospects_result.data)
-                for prospect in prospects_result.data:
-                    status = prospect.get('status', 'new_leads')
-                    if status:
-                        dashboard_data['pipeline']['by_status'][status] = dashboard_data['pipeline']['by_status'].get(status, 0) + 1
+            # Get total count
+            total_result = supabase_client.table('prospects').select('id', count='exact', head=True).execute()
+            dashboard_data['pipeline']['total'] = total_result.count or 0
+
+            # Get counts by status - common statuses only
+            statuses = ['new_leads', 'contacted', 'meeting_scheduled', 'negotiating', 'won', 'lost']
+            for status in statuses:
+                count_result = supabase_client.table('prospects').select('id', count='exact', head=True).eq('status', status).execute()
+                if count_result.count and count_result.count > 0:
+                    dashboard_data['pipeline']['by_status'][status] = count_result.count
         except Exception as e:
             print(f"Error fetching pipeline for dashboard: {e}")
 
@@ -15744,10 +15753,16 @@ def handle_500_error(e):
 @app.errorhandler(Exception)
 def handle_exception(e):
     """Handle all unhandled exceptions and return JSON for API routes"""
+    from werkzeug.exceptions import HTTPException
+
+    # Pass through HTTP exceptions (404, etc.) to Flask's default handling
+    if isinstance(e, HTTPException):
+        return e
+
     print(f"Unhandled exception: {e}")
     import traceback
     traceback.print_exc()
-    
+
     # Check if this is an API request
     if request.path.startswith('/api/'):
         return jsonify({
@@ -15755,9 +15770,9 @@ def handle_exception(e):
             'message': str(e),
             'success': False
         }), 500
-    
-    # For non-API routes, re-raise to use default error handling
-    raise e
+
+    # For non-API routes, return a generic error page
+    return jsonify({'error': 'Internal server error'}), 500
 
 
 # ============================================================================
