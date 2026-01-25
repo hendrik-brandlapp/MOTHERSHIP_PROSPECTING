@@ -8457,14 +8457,15 @@ def api_companies_from_db():
         for company in companies_list:
             company['alerts'] = alerts_by_company.get(company['id'], [])
 
-        # Step 6: Add CRM-imported companies that don't have invoices yet
+        # Step 6: Add ALL companies from database that don't have invoices yet
+        # This includes both CRM-imported companies AND Duano-synced companies without invoices
         existing_company_ids = set(c['company_id'] for c in companies_list)
-        crm_companies_added = 0
+        extra_companies_added = 0
         try:
-            # Fetch companies that were imported from CRM but don't have invoices
+            # Fetch companies that don't have invoices (regardless of source)
             for details in company_details.values():
                 cid = details.get('company_id')
-                if cid and cid not in existing_company_ids and details.get('imported_from_crm'):
+                if cid and cid not in existing_company_ids:
                     existing_company_ids.add(cid)  # Prevent duplicates
                     crm_company = {
                         'id': cid,
@@ -8525,13 +8526,13 @@ def api_companies_from_db():
                         'contact_3_role': details.get('contact_3_role'),
                         'contact_3_email': details.get('contact_3_email'),
                         'contact_3_phone': details.get('contact_3_phone'),
-                        'imported_from_crm': True,
+                        'imported_from_crm': details.get('imported_from_crm', False),
                         'crm_import_date': details.get('crm_import_date'),
                         'alerts': []
                     }
                     companies_list.append(crm_company)
-                    crm_companies_added += 1
-            print(f"📥 Added {crm_companies_added} CRM-imported companies without invoices")
+                    extra_companies_added += 1
+            print(f"📥 Added {extra_companies_added} companies without invoices (from database)")
         except Exception as e:
             print(f"Could not add CRM companies: {e}")
 
