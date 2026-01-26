@@ -320,6 +320,14 @@
         </div>
     </div>
 
+    <!-- Quick Actions -->
+    <div class="d-flex gap-2 mb-3">
+        <button class="btn btn-sm btn-outline-success" onclick="autoKeepAsNew()" id="autoKeepBtn">
+            <i class="fas fa-magic me-1"></i>Auto-Keep: Unqualified, Ex-Customer, Contact Later
+            <span class="badge bg-success ms-1" id="autoKeepCount">0</span>
+        </button>
+    </div>
+
     <!-- Main Merge Interface -->
     <div class="merge-container">
         <!-- Left Panel: CRM Imports -->
@@ -402,6 +410,7 @@ async function loadPending() {
         document.getElementById('pendingCount').textContent = pendingCRM.length + ' pending';
 
         renderCRMList();
+        updateAutoKeepCount();
     } catch (e) {
         console.error('Error loading pending:', e);
     }
@@ -695,6 +704,78 @@ async function handleFileSelect(event) {
         btn.innerHTML = '<i class="fas fa-upload me-2"></i>Import CRM Data';
         event.target.value = '';
     }
+}
+
+function updateAutoKeepCount() {
+    // Count CRM imports with "Unqualified", "Ex customer", or "Contact later" status
+    const autoKeepStatuses = ['Unqualified', 'Ex customer', 'Contact later'];
+    const count = pendingCRM.filter(crm =>
+        autoKeepStatuses.includes(crm.lead_status)
+    ).length;
+
+    document.getElementById('autoKeepCount').textContent = count;
+    document.getElementById('autoKeepBtn').disabled = count === 0;
+}
+
+async function autoKeepAsNew() {
+    const autoKeepStatuses = ['Unqualified', 'Ex customer', 'Contact later'];
+    const toProcess = pendingCRM.filter(crm =>
+        autoKeepStatuses.includes(crm.lead_status)
+    );
+
+    if (toProcess.length === 0) {
+        alert('No companies with Unqualified, Ex customer, or Contact later status found.');
+        return;
+    }
+
+    if (!confirm(`Mark ${toProcess.length} companies as "Keep as New"?\n\nThis includes all companies with:\n- Unqualified\n- Ex customer\n- Contact later\n\nstatus.`)) {
+        return;
+    }
+
+    const btn = document.getElementById('autoKeepBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Processing...';
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const crm of toProcess) {
+        try {
+            const response = await fetch('/api/crm-keep-standalone', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ crm_company_id: crm.company_id })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                successCount++;
+                // Remove from pendingCRM array
+                pendingCRM = pendingCRM.filter(c => c.company_id !== crm.company_id);
+            } else {
+                errorCount++;
+                console.error(`Error processing ${crm.name}:`, data.error);
+            }
+        } catch (e) {
+            errorCount++;
+            console.error(`Error processing ${crm.name}:`, e);
+        }
+    }
+
+    // Reset button
+    btn.innerHTML = '<i class="fas fa-magic me-1"></i>Auto-Keep: Unqualified, Ex-Customer, Contact Later <span class="badge bg-success ms-1" id="autoKeepCount">0</span>';
+
+    // Refresh UI
+    selectedCRM = null;
+    selectedExisting = null;
+    renderCRMList();
+    loadStats();
+    updateButtons();
+    updateAutoKeepCount();
+
+    // Show result
+    alert(`Processed ${successCount + errorCount} companies:\n- ${successCount} marked as new\n- ${errorCount} errors`);
 }
 
 function escapeHtml(text) {
