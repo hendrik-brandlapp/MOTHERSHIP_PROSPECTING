@@ -323,7 +323,7 @@
     <!-- Quick Actions -->
     <div class="d-flex gap-2 mb-3">
         <button class="btn btn-sm btn-outline-success" onclick="autoKeepAsNew()" id="autoKeepBtn">
-            <i class="fas fa-magic me-1"></i>Auto-Keep: Unqualified, Ex-Customer, Contact Later
+            <i class="fas fa-magic me-1"></i>Auto-Keep Non-Customers
             <span class="badge bg-success ms-1" id="autoKeepCount">0</span>
         </button>
     </div>
@@ -708,7 +708,7 @@ async function handleFileSelect(event) {
 
 function updateAutoKeepCount() {
     // Count CRM imports with "Unqualified", "Ex customer", or "Contact later" status
-    const autoKeepStatuses = ['Unqualified', 'Ex customer', 'Contact later'];
+    const autoKeepStatuses = ['Unqualified', 'Ex customer', 'Contact later', 'To be contacted', 'Follow up'];
     const count = pendingCRM.filter(crm =>
         autoKeepStatuses.includes(crm.lead_status)
     ).length;
@@ -718,17 +718,17 @@ function updateAutoKeepCount() {
 }
 
 async function autoKeepAsNew() {
-    const autoKeepStatuses = ['Unqualified', 'Ex customer', 'Contact later'];
+    const autoKeepStatuses = ['Unqualified', 'Ex customer', 'Contact later', 'To be contacted', 'Follow up'];
     const toProcess = pendingCRM.filter(crm =>
         autoKeepStatuses.includes(crm.lead_status)
     );
 
     if (toProcess.length === 0) {
-        alert('No companies with Unqualified, Ex customer, or Contact later status found.');
+        alert('No companies with non-customer status found (Unqualified, Ex customer, Contact later, To be contacted, Follow up).');
         return;
     }
 
-    if (!confirm(`Mark ${toProcess.length} companies as "Keep as New"?\n\nThis includes all companies with:\n- Unqualified\n- Ex customer\n- Contact later\n\nstatus.`)) {
+    if (!confirm(`Mark ${toProcess.length} companies as "Keep as New"?\n\nThis includes all companies with:\n- Unqualified\n- Ex customer\n- Contact later\n- To be contacted\n- Follow up\n\nstatus.`)) {
         return;
     }
 
@@ -764,7 +764,7 @@ async function autoKeepAsNew() {
     }
 
     // Reset button
-    btn.innerHTML = '<i class="fas fa-magic me-1"></i>Auto-Keep: Unqualified, Ex-Customer, Contact Later <span class="badge bg-success ms-1" id="autoKeepCount">0</span>';
+    btn.innerHTML = '<i class="fas fa-magic me-1"></i>Auto-Keep Non-Customers <span class="badge bg-success ms-1" id="autoKeepCount">0</span>';
 
     // Refresh UI
     selectedCRM = null;
