@@ -8264,7 +8264,7 @@ def api_companies_from_db():
             batch_size = 1000
             while True:
                 comp_result = supabase_client.table('companies').select(
-                    'id, company_id, email, phone_number, website, latitude, longitude, '
+                    'id, company_id, name, email, phone_number, website, latitude, longitude, '
                     'city, country_name, address_line1, post_code, company_tag, '
                     'company_categories, raw_company_data, public_name, customer_since, '
                     'assigned_salesperson, contact_person_name, geocoded_address, flavour_prices, '
@@ -8336,12 +8336,17 @@ def api_companies_from_db():
             supabase_id = details.get('id')  # Supabase auto-increment id
             duano_company_id = details.get('company_id') or cid  # Duano company_id
 
+            # Use companies table name (legal) if available, otherwise invoice company_name
+            # public_name from companies table is the display name
+            legal_name = details.get('name') or metrics['name']
+            display_name = details.get('public_name')
+
             company_data = {
                 'id': cid,
                 'company_id': cid,  # Keep using invoice company_id for consistency
                 'supabase_id': supabase_id,  # Supabase row ID - use this for notes/trips
-                'name': metrics['name'],
-                'public_name': details.get('public_name'),
+                'name': legal_name,
+                'public_name': display_name,
                 'customer_since': details.get('customer_since'),
                 'vat_number': metrics.get('vat_number'),
                 'email': details.get('email'),
