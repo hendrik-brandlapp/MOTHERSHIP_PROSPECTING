@@ -11041,6 +11041,162 @@ def api_full_sync_status():
     return jsonify(_full_sync_status)
 
 
+# Global status for name sync
+_name_sync_status = {'running': False, 'updated': 0, 'total': 0, 'message': ''}
+
+@app.route('/api/sync-company-names', methods=['POST'])
+def api_sync_company_names():
+    """Sync ONLY company names (name + public_name) from Duano API.
+    This is faster than full sync - only updates name fields.
+    """
+    global _name_sync_status
+
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    if _name_sync_status.get('running'):
+        return jsonify({
+            'success': False,
+            'message': 'Name sync already running',
+            'status': _name_sync_status
+        })
+
+    access_token = session.get('access_token')
+    if not access_token:
+        return jsonify({'error': 'Not authenticated - please log in again'}), 401
+
+    # Start background thread
+    import threading
+    thread = threading.Thread(target=_background_sync_company_names, args=(access_token,))
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'success': True,
+        'message': 'Company name sync started. Check /api/name-sync-status for progress.',
+        'status': _name_sync_status
+    })
+
+
+def _background_sync_company_names(access_token):
+    """Background thread to sync company names from Duano."""
+    global _name_sync_status
+
+    try:
+        _name_sync_status = {'running': True, 'updated': 0, 'total': 0, 'message': 'Starting name sync...'}
+        print("🏷️ [Name Sync] Starting company name sync from Duano...")
+
+        headers = {
+            'Authorization': f"Bearer {access_token}",
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+
+        page = 1
+        per_page = 100
+        all_updated = 0
+        companies_with_different_names = []
+
+        while True:
+            _name_sync_status['message'] = f'Fetching page {page}...'
+            print(f"📄 [Name Sync] Fetching page {page}...")
+
+            try:
+                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/crm/crm-companies"
+                api_response = requests.get(url, headers=headers, params={'per_page': per_page, 'page': page}, timeout=60)
+
+                if api_response.status_code != 200:
+                    print(f"❌ [Name Sync] API error: {api_response.status_code}")
+                    page += 1
+                    time.sleep(1)
+                    continue
+
+                response = api_response.json()
+            except Exception as e:
+                print(f"❌ [Name Sync] Error fetching page {page}: {e}")
+                page += 1
+                time.sleep(1)
+                continue
+
+            result = response.get('result', {})
+            companies = result.get('data', [])
+            current_page = result.get('current_page', page)
+            last_page = result.get('last_page', 1)
+            total_count = result.get('total', 0)
+
+            _name_sync_status['total'] = total_count
+
+            if not companies:
+                if current_page >= last_page:
+                    break
+                page += 1
+                continue
+
+            # Update only name and public_name for each company
+            for company_data in companies:
+                company_id = company_data.get('id')
+                legal_name = company_data.get('name')
+                public_name = company_data.get('public_name')
+
+                if not company_id:
+                    continue
+
+                try:
+                    # Update only name fields
+                    update_data = {}
+                    if legal_name:
+                        update_data['name'] = legal_name
+                    if public_name:
+                        update_data['public_name'] = public_name
+
+                    if update_data:
+                        supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
+                        all_updated += 1
+                        _name_sync_status['updated'] = all_updated
+
+                        # Track companies where names differ
+                        if legal_name and public_name and legal_name != public_name:
+                            companies_with_different_names.append({
+                                'id': company_id,
+                                'legal': legal_name,
+                                'public': public_name
+                            })
+
+                except Exception as e:
+                    print(f"❌ [Name Sync] Error updating {company_id}: {e}")
+
+            print(f"✅ [Name Sync] Page {page} complete. Updated: {all_updated}")
+
+            if current_page >= last_page:
+                break
+
+            time.sleep(0.2)
+            page += 1
+
+            if page > 500:
+                break
+
+        # Log companies with different names
+        print(f"\n🏷️ [Name Sync] Companies with different legal vs public names: {len(companies_with_different_names)}")
+        for c in companies_with_different_names[:20]:
+            print(f"  - '{c['legal']}' -> '{c['public']}'")
+
+        _name_sync_status['message'] = f'Complete! Updated {all_updated} companies. {len(companies_with_different_names)} have different legal/public names.'
+        _name_sync_status['running'] = False
+        print(f"🎉 [Name Sync] Complete: {all_updated} updated")
+
+    except Exception as e:
+        _name_sync_status['message'] = f'Error: {str(e)}'
+        _name_sync_status['running'] = False
+        print(f"❌ [Name Sync] Failed: {e}")
+
+
+@app.route('/api/name-sync-status', methods=['GET'])
+def api_name_sync_status():
+    """Get the status of the company name sync."""
+    return jsonify(_name_sync_status)
+
+
 # Global status for invoice-based company sync
 _invoice_sync_status = {'running': False, 'synced': 0, 'created': 0, 'updated': 0, 'total': 0, 'errors': 0, 'message': ''}
 
