@@ -1107,6 +1107,30 @@
         box-shadow: 0 4px 12px rgba(139, 92, 246, 0.15);
     }
 
+    /* Company Source Label - Very subtle */
+    .company-source-label {
+        position: absolute;
+        bottom: 8px;
+        right: 10px;
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        opacity: 0.35;
+        font-weight: 500;
+    }
+
+    .company-source-label.source-duano {
+        color: #3b82f6;
+    }
+
+    .company-source-label.source-crm {
+        color: #10b981;
+    }
+
+    .company-source-label.source-prospect {
+        color: #8b5cf6;
+    }
+
     .prospect-badge {
         display: inline-flex;
         align-items: center;
@@ -4268,8 +4292,12 @@ function displayCardsView() {
         const clickId = isProspect ? `'${company.prospect_id}'` : company.id;
         const clickHandler = isProspect ? `showProspectDetails('${company.prospect_id}')` : `showCompanyDetails(${company.id})`;
 
+        // Determine company source
+        const companySource = isProspect ? 'prospect' : (company.imported_from_crm ? 'crm' : 'duano');
+
         card.innerHTML = `
-            <div class="company-card-modern h-100 ${isProspect ? 'prospect-card' : ''}" data-company-id="${company.id}" onclick="${clickHandler}" style="cursor: pointer;">
+            <div class="company-card-modern h-100 ${isProspect ? 'prospect-card' : ''}" data-company-id="${company.id}" onclick="${clickHandler}" style="cursor: pointer; position: relative;">
+                <span class="company-source-label source-${companySource}">${companySource}</span>
                 <div class="company-header">
                     <div>
                         <h5 class="company-name">${escapeHtml(publicName)}</h5>
