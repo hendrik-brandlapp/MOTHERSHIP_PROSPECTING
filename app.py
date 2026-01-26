@@ -11102,11 +11102,12 @@ def _background_sync_company_names(access_token):
             print(f"📄 [Name Sync] Fetching page {page}...")
 
             try:
-                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/crm/crm-companies"
+                # Use CORE companies endpoint (not CRM) to get ALL companies with name/public_name
+                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies"
                 api_response = requests.get(url, headers=headers, params={'per_page': per_page, 'page': page}, timeout=60)
 
                 if api_response.status_code != 200:
-                    print(f"❌ [Name Sync] API error: {api_response.status_code}")
+                    print(f"❌ [Name Sync] API error: {api_response.status_code} - {api_response.text[:200]}")
                     page += 1
                     time.sleep(1)
                     continue
@@ -11120,6 +11121,8 @@ def _background_sync_company_names(access_token):
 
             result = response.get('result', {})
             companies = result.get('data', [])
+
+            print(f"📦 [Name Sync] Got {len(companies)} companies from page {page}")
             current_page = result.get('current_page', page)
             last_page = result.get('last_page', 1)
             total_count = result.get('total', 0)
@@ -11131,6 +11134,12 @@ def _background_sync_company_names(access_token):
                     break
                 page += 1
                 continue
+
+            # Debug: Print first few companies from first page
+            if page == 1 and companies:
+                print(f"🔍 [Name Sync] Sample companies from Duano API:")
+                for c in companies[:5]:
+                    print(f"   ID {c.get('id')}: name='{c.get('name')}' | public_name='{c.get('public_name')}'")
 
             # Update only name and public_name for each company
             for company_data in companies:
@@ -11150,17 +11159,19 @@ def _background_sync_company_names(access_token):
                         update_data['public_name'] = public_name
 
                     if update_data:
-                        supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
-                        all_updated += 1
-                        _name_sync_status['updated'] = all_updated
+                        result = supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
+                        # Only count if row was actually updated (exists in DB)
+                        if result.data:
+                            all_updated += 1
+                            _name_sync_status['updated'] = all_updated
 
-                        # Track companies where names differ
-                        if legal_name and public_name and legal_name != public_name:
-                            companies_with_different_names.append({
-                                'id': company_id,
-                                'legal': legal_name,
-                                'public': public_name
-                            })
+                            # Track companies where names differ
+                            if legal_name and public_name and legal_name != public_name:
+                                companies_with_different_names.append({
+                                    'id': company_id,
+                                    'legal': legal_name,
+                                    'public': public_name
+                                })
 
                 except Exception as e:
                     print(f"❌ [Name Sync] Error updating {company_id}: {e}")
