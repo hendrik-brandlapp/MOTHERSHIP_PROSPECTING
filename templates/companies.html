@@ -322,15 +322,23 @@ function displayGridView() {
             company.post_code,
             company.country?.name
         ].filter(part => part && part.trim());
-        
+
         const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
-        
+
+        // Use public_name as display name, show legal name if different
+        const displayName = company.public_name || company.name || 'Unnamed Company';
+        const legalName = company.name;
+        const showLegalName = company.public_name && legalName && company.public_name !== legalName;
+
         return `
         <div class="col-md-4 col-lg-3 mb-4">
             <div class="card h-100 company-card" onclick="showCompanyDetails(${company.id})">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="card-title mb-0">${company.name || 'Unnamed Company'}</h6>
+                        <div>
+                            <h6 class="card-title mb-0">${displayName}</h6>
+                            ${showLegalName ? `<small class="text-muted">${legalName}</small>` : ''}
+                        </div>
                         <span class="badge ${company.status?.name === 'Klant' ? 'bg-success' : 'bg-warning'}">${company.status?.name || 'Unknown'}</span>
                     </div>
                     ${company.vat_number ? `<p class="card-text text-muted small mb-2">
@@ -389,14 +397,20 @@ function displayListView() {
             company.post_code,
             company.country?.name
         ].filter(part => part && part.trim());
-        
+
         const fullAddress = addressParts.length > 0 ? addressParts.join(', ') : 'No address available';
-        
+
+        // Use public_name as display name, show legal name if different
+        const displayName = company.public_name || company.name || 'Unnamed Company';
+        const legalName = company.name;
+        const showLegalName = company.public_name && legalName && company.public_name !== legalName;
+
         return `
         <tr onclick="showCompanyDetails(${company.id})" style="cursor: pointer;">
             <td><span class="badge bg-primary">${company.id}</span></td>
             <td>
-                <strong>${company.name || 'Unnamed Company'}</strong>
+                <strong>${displayName}</strong>
+                ${showLegalName ? `<br><small class="text-muted">${legalName}</small>` : ''}
                 ${company.vat_number ? `<br><small class="text-muted">VAT: ${company.vat_number}</small>` : ''}
             </td>
             <td>
@@ -417,11 +431,12 @@ function filterCompanies() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
     console.log('Filtering companies with term:', searchTerm);
     console.log('Total companies to filter:', companiesData.length);
-    
+
     filteredCompanies = companiesData.filter(company => {
         const companyStr = JSON.stringify(company).toLowerCase();
         const matches = companyStr.includes(searchTerm) ||
                (company.name && company.name.toLowerCase().includes(searchTerm)) ||
+               (company.public_name && company.public_name.toLowerCase().includes(searchTerm)) ||
                (company.address_line1 && company.address_line1.toLowerCase().includes(searchTerm)) ||
                (company.address_line2 && company.address_line2.toLowerCase().includes(searchTerm)) ||
                (company.city && company.city.toLowerCase().includes(searchTerm)) ||
@@ -433,23 +448,25 @@ function filterCompanies() {
                (company.website && company.website.toLowerCase().includes(searchTerm)) ||
                (company.account_manager?.name && company.account_manager.name.toLowerCase().includes(searchTerm)) ||
                company.id.toString().includes(searchTerm);
-        
+
         if (matches) {
-            console.log('Match found:', company.name, 'for term:', searchTerm);
+            console.log('Match found:', company.public_name || company.name, 'for term:', searchTerm);
         }
         return matches;
     });
-    
+
     console.log('Filtered companies count:', filteredCompanies.length);
     displayCompanies();
 }
 
 function sortCompanies() {
     const sortBy = document.getElementById('sortSelect').value;
-    
+
     filteredCompanies.sort((a, b) => {
         if (sortBy === 'name') {
-            return a.name.localeCompare(b.name);
+            const nameA = (a.public_name || a.name || '').toLowerCase();
+            const nameB = (b.public_name || b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
         } else if (sortBy === 'id') {
             return a.id - b.id;
         } else if (sortBy === 'created_at') {
@@ -457,7 +474,7 @@ function sortCompanies() {
         }
         return 0;
     });
-    
+
     displayCompanies();
 }
 
@@ -477,9 +494,9 @@ function toggleView() {
 
 function showCompanyDetails(companyId) {
     const company = companiesData.find(c => c.id === companyId);
-    
+
     if (!company) return;
-    
+
     // Build complete address string
     const addressParts = [
         company.address_line1,
@@ -488,15 +505,21 @@ function showCompanyDetails(companyId) {
         company.post_code,
         company.country?.name
     ].filter(part => part && part.trim());
-    
-    const fullAddress = addressParts.length > 0 ? 
-        `<div class="alert alert-light"><i class="fas fa-map-marker-alt me-2"></i>${addressParts.join('<br>')}</div>` : 
+
+    const fullAddress = addressParts.length > 0 ?
+        `<div class="alert alert-light"><i class="fas fa-map-marker-alt me-2"></i>${addressParts.join('<br>')}</div>` :
         '<div class="text-muted">No address available</div>';
-    
+
+    // Use public_name as display name
+    const displayName = company.public_name || company.name || 'Unnamed Company';
+    const legalName = company.name;
+    const showLegalName = company.public_name && legalName && company.public_name !== legalName;
+
     // Populate modal
-    document.getElementById('modal-company-name').textContent = company.name || 'Unnamed Company';
+    document.getElementById('modal-company-name').textContent = displayName;
     document.getElementById('modal-company-id').textContent = company.id;
-    document.getElementById('modal-company-name-detail').textContent = company.name || 'Unnamed Company';
+    document.getElementById('modal-company-name-detail').innerHTML = showLegalName ?
+        `${displayName}<br><small class="text-muted">Legal: ${legalName}</small>` : displayName;
     document.getElementById('modal-company-vat').textContent = company.vat_number || 'Not available';
     document.getElementById('modal-company-status').innerHTML = company.status?.name ? 
         `<span class="badge ${company.status.name === 'Klant' ? 'bg-success' : 'bg-warning'}">${company.status.name}</span>` : 
