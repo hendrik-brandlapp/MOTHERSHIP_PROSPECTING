@@ -3010,7 +3010,7 @@ async function syncCompanyCategories() {
             const status = await statusResponse.json();
 
             document.getElementById('sync-message').textContent =
-                `Syncing categories... ${status.synced || 0} synced, ${status.no_category || 0} no categories, ${status.errors || 0} errors (${Math.round(((status.synced || 0) + (status.no_category || 0) + (status.errors || 0)) / (status.total || 1) * 100)}%)`;
+                `Syncing categories... ${status.synced || 0} synced, ${status.no_category || 0} no categories, ${status.crm_only || 0} CRM-only (${Math.round(((status.synced || 0) + (status.no_category || 0) + (status.crm_only || 0) + (status.errors || 0)) / (status.total || 1) * 100)}%)`;
 
             if (status.running) {
                 setTimeout(pollStatus, 1000);
@@ -3023,13 +3023,16 @@ async function syncCompanyCategories() {
                     <div class="alert alert-success">
                         <h5><i class="fas fa-check-circle me-2"></i>Company Categories Synced!</h5>
                         <div class="row mt-3">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <strong>Categories Synced:</strong> <span class="text-success">${status.synced}</span>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <strong>No Category in Duano:</strong> <span class="text-warning">${status.no_category}</span>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
+                                <strong>CRM-only (not in Duano):</strong> <span class="text-info">${status.crm_only}</span>
+                            </div>
+                            <div class="col-md-3">
                                 <strong>Errors:</strong> <span class="text-danger">${status.errors}</span>
                             </div>
                         </div>

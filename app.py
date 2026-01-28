@@ -11209,7 +11209,7 @@ def api_name_sync_status():
 
 
 # Global status for category sync
-_category_sync_status = {'running': False, 'synced': 0, 'no_category': 0, 'total': 0, 'errors': 0, 'message': ''}
+_category_sync_status = {'running': False, 'synced': 0, 'no_category': 0, 'crm_only': 0, 'total': 0, 'errors': 0, 'message': ''}
 
 @app.route('/api/sync-company-categories', methods=['POST'])
 def api_sync_company_categories():
@@ -11250,7 +11250,7 @@ def _background_sync_company_categories(access_token):
     global _category_sync_status
 
     try:
-        _category_sync_status = {'running': True, 'synced': 0, 'no_category': 0, 'total': 0, 'errors': 0, 'message': 'Finding companies without categories...'}
+        _category_sync_status = {'running': True, 'synced': 0, 'no_category': 0, 'crm_only': 0, 'total': 0, 'errors': 0, 'message': 'Finding companies without categories...'}
         print("🏷️ [Category Sync] Starting company category sync from Duano...")
 
         if not supabase_client:
@@ -11304,6 +11304,7 @@ def _background_sync_company_categories(access_token):
         # Step 2: Sync categories from Duano
         synced = 0
         no_category = 0
+        crm_only = 0
         errors = 0
 
         for i, company in enumerate(companies_to_sync):
@@ -11312,20 +11313,21 @@ def _background_sync_company_categories(access_token):
 
             # Rate limiting
             if i > 0 and i % 10 == 0:
-                _category_sync_status['message'] = f'Processing {i}/{len(companies_to_sync)}... ({synced} synced)'
+                _category_sync_status['message'] = f'Processing {i}/{len(companies_to_sync)}... ({synced} synced, {crm_only} CRM-only)'
                 time.sleep(0.5)
             elif i > 0:
                 time.sleep(0.15)
 
             try:
-                # Try CRM endpoint first (has company_categories)
-                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/crm/crm-companies/{company_id}"
+                # Use CORE endpoint (has company_categories per API docs)
+                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies/{company_id}"
                 response = requests.get(url, headers=headers, timeout=30)
 
                 if response.status_code == 404:
-                    # Fallback to core endpoint
-                    url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies/{company_id}"
-                    response = requests.get(url, headers=headers, timeout=30)
+                    # Company doesn't exist in Duano - it's a CRM-only company
+                    crm_only += 1
+                    _category_sync_status['crm_only'] = crm_only
+                    continue
 
                 if response.status_code != 200:
                     print(f"  ❌ {company_name}: API error {response.status_code}")
@@ -11365,9 +11367,9 @@ def _background_sync_company_categories(access_token):
                 errors += 1
                 _category_sync_status['errors'] = errors
 
-        _category_sync_status['message'] = f'Complete! Synced {synced} companies. {no_category} have no categories in Duano. {errors} errors.'
+        _category_sync_status['message'] = f'Complete! Synced {synced} companies. {no_category} have no categories in Duano. {crm_only} are CRM-only (not in Duano). {errors} errors.'
         _category_sync_status['running'] = False
-        print(f"🎉 [Category Sync] Complete: {synced} synced, {no_category} no categories, {errors} errors")
+        print(f"🎉 [Category Sync] Complete: {synced} synced, {no_category} no categories, {crm_only} CRM-only, {errors} errors")
 
     except Exception as e:
         _category_sync_status['message'] = f'Error: {str(e)}'
