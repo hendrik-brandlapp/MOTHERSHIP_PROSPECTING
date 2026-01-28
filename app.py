@@ -10851,13 +10851,15 @@ def api_sync_missing_companies():
 _full_sync_status = {'running': False, 'synced': 0, 'total': 0, 'errors': 0, 'message': '', 'page': 0}
 
 def _background_sync_all_duano_companies(access_token):
-    """Background thread to sync ALL companies from Duano CRM API."""
+    """Background thread to sync ALL companies from Duano CORE API.
+    Uses CORE API (not CRM API) to get the same company IDs as invoices.
+    """
     global _full_sync_status
 
     try:
         _full_sync_status = {'running': True, 'synced': 0, 'total': 0, 'errors': 0, 'message': 'Starting full Duano sync...', 'page': 0}
 
-        print("🚀 [Full Sync] Starting sync of ALL companies from Duano CRM API...")
+        print("🚀 [Full Sync] Starting sync of ALL companies from Duano CORE API...")
 
         # Headers for direct API calls (no Flask context needed)
         headers = {
@@ -10867,7 +10869,7 @@ def _background_sync_all_duano_companies(access_token):
         }
 
         page = 1
-        per_page = 50  # CRM endpoint works better with smaller pages
+        per_page = 50
         all_synced = 0
         all_errors = 0
 
@@ -10877,9 +10879,9 @@ def _background_sync_all_duano_companies(access_token):
 
             print(f"📄 [Full Sync] Fetching page {page}...")
 
-            # Use CRM companies endpoint - returns full company data in list
+            # Use CORE companies endpoint (same IDs as invoices, no duplicates)
             try:
-                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/crm/crm-companies"
+                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies"
                 api_response = requests.get(url, headers=headers, params={'per_page': per_page, 'page': page}, timeout=60)
                 if api_response.status_code != 200:
                     print(f"❌ [Full Sync] API error on page {page}: {api_response.status_code} - {api_response.text[:200]}")
@@ -10960,10 +10962,11 @@ def _background_sync_all_duano_companies(access_token):
                         'bank_accounts': company_data.get('bank_accounts', []),
                         'extension_values': company_data.get('extension_values', []),
                         'raw_company_data': company_data,
-                        'data_sources': ['douano_crm_api'],
+                        'data_sources': ['douano_api'],
                         'last_sync_at': datetime.now().isoformat()
                     }
 
+                    # Use upsert - will update existing companies (same CORE IDs as invoices)
                     supabase_client.table('companies').upsert(record, on_conflict='company_id').execute()
                     all_synced += 1
                     _full_sync_status['synced'] = all_synced
@@ -11001,16 +11004,38 @@ def _background_sync_all_duano_companies(access_token):
 
 @app.route('/api/sync-all-duano-companies', methods=['POST'])
 def api_sync_all_duano_companies():
-    """DISABLED - This sync creates duplicate companies because the CRM API uses
-    different company IDs than the CORE API (invoice data).
-    Use invoice sync instead - companies are created automatically from invoices.
+    """Sync ALL companies from Duano CORE API (not just ones with invoices).
+    Uses CORE API which has the same company IDs as invoices (no duplicates).
+    Runs in background to avoid timeout.
     """
+    global _full_sync_status
+
+    if not is_admin():
+        return jsonify({'error': 'Admin access required'}), 403
+
+    if _full_sync_status.get('running'):
+        return jsonify({
+            'success': False,
+            'message': 'Full sync already running',
+            'status': _full_sync_status
+        })
+
+    # Capture access token before starting thread (thread can't access Flask session)
+    access_token = session.get('access_token')
+    if not access_token:
+        return jsonify({'error': 'Not authenticated - please log in again'}), 401
+
+    # Start background thread with access token
+    import threading
+    thread = threading.Thread(target=_background_sync_all_duano_companies, args=(access_token,))
+    thread.daemon = True
+    thread.start()
+
     return jsonify({
-        'success': False,
-        'error': 'This sync is disabled because it creates duplicate companies. '
-                 'The CRM API uses different company IDs than the invoice API. '
-                 'Companies are synced automatically from invoice data instead.'
-    }), 400
+        'success': True,
+        'message': 'Full Duano sync started in background. Check /api/full-sync-status for progress.',
+        'status': _full_sync_status
+    })
 
 
 @app.route('/api/full-sync-status', methods=['GET'])
