@@ -4375,8 +4375,11 @@ function displayCardsView() {
         const clickId = isProspect ? `'${company.prospect_id}'` : company.id;
         const clickHandler = isProspect ? `showProspectDetails('${company.prospect_id}')` : `showCompanyDetails(${company.id})`;
 
-        // Determine company source
-        const companySource = isProspect ? 'prospect' : (company.imported_from_crm ? 'crm' : 'duano');
+        // Determine company source based on data_sources
+        // invoice_data and douano_api = from Duano, invoices = CRM imports
+        const dataSources = company.data_sources || [];
+        const isFromDuano = dataSources.includes('invoice_data') || dataSources.includes('douano_api');
+        const companySource = isProspect ? 'prospect' : (isFromDuano ? 'duano' : 'crm');
 
         card.innerHTML = `
             <div class="company-card-modern h-100 ${isProspect ? 'prospect-card' : ''}" data-company-id="${company.id}" onclick="${clickHandler}" style="cursor: pointer; position: relative;">

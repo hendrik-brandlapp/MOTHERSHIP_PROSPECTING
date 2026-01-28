@@ -8260,14 +8260,6 @@ def api_companies_from_db():
         # Fetch ALL companies with pagination (Supabase default limit is 1000)
         company_details = {}
         try:
-            # Helper to normalize names for duplicate detection
-            def normalize_name(name):
-                if not name:
-                    return ''
-                return name.lower().strip().replace(' ', '').replace('-', '').replace('.', '').replace(',', '')
-
-            # First pass: collect all companies and build name lookup for non-CRM-API companies
-            all_companies_raw = []
             offset = 0
             batch_size = 1000
             while True:
@@ -8286,46 +8278,22 @@ def api_companies_from_db():
 
                 if not comp_result.data:
                     break
-                all_companies_raw.extend(comp_result.data)
+
+                for c in comp_result.data:
+                    # Skip merged CRM imports (their data was transferred to target company)
+                    if c.get('crm_review_status') == 'merged':
+                        continue
+                    # Key by both id and company_id for flexible lookup
+                    # (sales tables may use either depending on how data was imported)
+                    company_details[c['company_id']] = c
+                    if c.get('id') and c['id'] != c['company_id']:
+                        company_details[c['id']] = c
+
                 if len(comp_result.data) < batch_size:
                     break
                 offset += batch_size
 
-            # Build set of normalized names from non-CRM-API companies (invoice_data, douano_api, invoices)
-            non_crm_api_names = set()
-            for c in all_companies_raw:
-                data_sources = c.get('data_sources', [])
-                if data_sources != ['douano_crm_api']:
-                    non_crm_api_names.add(normalize_name(c.get('name', '')))
-                    non_crm_api_names.add(normalize_name(c.get('public_name', '')))
-
-            # Second pass: process companies with smart deduplication
-            crm_api_unique = 0
-            crm_api_duplicate = 0
-            for c in all_companies_raw:
-                # Skip merged CRM imports (their data was transferred to target company)
-                if c.get('crm_review_status') == 'merged':
-                    continue
-
-                # Smart deduplication for CRM API companies
-                # Only skip if the name matches an existing non-CRM-API company (actual duplicate)
-                # Keep unique CRM companies (prospects without invoices)
-                if c.get('data_sources') == ['douano_crm_api']:
-                    name_norm = normalize_name(c.get('name', ''))
-                    public_name_norm = normalize_name(c.get('public_name', ''))
-                    if name_norm in non_crm_api_names or public_name_norm in non_crm_api_names:
-                        crm_api_duplicate += 1
-                        continue  # Skip - this is a duplicate
-                    crm_api_unique += 1  # Keep - this is a unique prospect
-
-                # Key by both id and company_id for flexible lookup
-                # (sales tables may use either depending on how data was imported)
-                company_details[c['company_id']] = c
-                if c.get('id') and c['id'] != c['company_id']:
-                    company_details[c['id']] = c
-
             print(f"📊 Loaded {len(company_details)} companies for enrichment (indexed by id and company_id)")
-            print(f"   CRM API: {crm_api_unique} unique prospects kept, {crm_api_duplicate} duplicates filtered")
         except Exception as e:
             print(f"Could not fetch company details (optional): {e}")
         
@@ -11033,38 +11001,16 @@ def _background_sync_all_duano_companies(access_token):
 
 @app.route('/api/sync-all-duano-companies', methods=['POST'])
 def api_sync_all_duano_companies():
-    """Sync ALL companies from Duano API (not just ones with invoices).
-    This restores companies that were deleted but exist in Duano.
-    Runs in background to avoid timeout.
+    """DISABLED - This sync creates duplicate companies because the CRM API uses
+    different company IDs than the CORE API (invoice data).
+    Use invoice sync instead - companies are created automatically from invoices.
     """
-    global _full_sync_status
-
-    if not is_admin():
-        return jsonify({'error': 'Admin access required'}), 403
-
-    if _full_sync_status.get('running'):
-        return jsonify({
-            'success': False,
-            'message': 'Full sync already running',
-            'status': _full_sync_status
-        })
-
-    # Capture access token before starting thread (thread can't access Flask session)
-    access_token = session.get('access_token')
-    if not access_token:
-        return jsonify({'error': 'Not authenticated - please log in again'}), 401
-
-    # Start background thread with access token
-    import threading
-    thread = threading.Thread(target=_background_sync_all_duano_companies, args=(access_token,))
-    thread.daemon = True
-    thread.start()
-
     return jsonify({
-        'success': True,
-        'message': 'Full Duano sync started in background. Check /api/full-sync-status for progress.',
-        'status': _full_sync_status
-    })
+        'success': False,
+        'error': 'This sync is disabled because it creates duplicate companies. '
+                 'The CRM API uses different company IDs than the invoice API. '
+                 'Companies are synced automatically from invoice data instead.'
+    }), 400
 
 
 @app.route('/api/full-sync-status', methods=['GET'])
