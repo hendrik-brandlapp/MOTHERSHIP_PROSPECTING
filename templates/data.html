@@ -4891,76 +4891,114 @@ function showCompanyDetails(companyId) {
                 </div>
             </div>
 
-        <!-- CRM Details (imported from old CRM) -->
-        ${company.imported_from_crm ? `
+        <!-- CRM Details (editable for all companies) -->
         <div class="detail-section">
-            <h6 class="mb-3 fw-bold text-dark"><i class="fas fa-database me-2 text-muted"></i>CRM Details</h6>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-sliders-h me-2 text-muted"></i>Company Details</h6>
+                <button class="btn btn-sm btn-primary" onclick="saveCrmDetails(${company.company_id})">
+                    <i class="fas fa-save me-1"></i>Save
+                </button>
+            </div>
             <div class="row g-3">
-                ${company.lead_status ? `
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold text-muted">Lead Status</label>
-                    <div class="badge ${company.lead_status === 'Customer' ? 'bg-success' : company.lead_status === 'Unqualified' ? 'bg-secondary' : company.lead_status === 'To be contacted' ? 'bg-info' : 'bg-warning'}">${company.lead_status}</div>
-                </div>
-                ` : ''}
-                ${company.channel ? `
                 <div class="col-md-4">
                     <label class="form-label small fw-bold text-muted">Channel</label>
-                    <div class="badge ${company.channel === 'On-Trade' ? 'bg-primary' : 'bg-info'}">${company.channel}</div>
+                    <select class="form-select form-select-sm" id="crmChannel">
+                        <option value="" ${!company.channel ? 'selected' : ''}>Not Set</option>
+                        <option value="On-Trade" ${company.channel === 'On-Trade' ? 'selected' : ''}>On-Trade</option>
+                        <option value="Off-Trade" ${company.channel === 'Off-Trade' ? 'selected' : ''}>Off-Trade</option>
+                    </select>
                 </div>
-                ` : ''}
-                ${company.priority ? `
                 <div class="col-md-4">
                     <label class="form-label small fw-bold text-muted">Priority</label>
-                    <div class="badge ${company.priority === 'High' ? 'bg-danger' : company.priority === 'Medium' ? 'bg-warning' : 'bg-secondary'}">${company.priority}</div>
+                    <select class="form-select form-select-sm" id="crmPriority">
+                        <option value="" ${!company.priority ? 'selected' : ''}>Not Set</option>
+                        <option value="High" ${company.priority === 'High' ? 'selected' : ''}>High</option>
+                        <option value="Medium" ${company.priority === 'Medium' ? 'selected' : ''}>Medium</option>
+                        <option value="Low" ${company.priority === 'Low' ? 'selected' : ''}>Low</option>
+                    </select>
                 </div>
-                ` : ''}
-                ${company.language ? `
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold text-muted">Lead Status</label>
+                    <select class="form-select form-select-sm" id="crmLeadStatus">
+                        <option value="" ${!company.lead_status ? 'selected' : ''}>Not Set</option>
+                        <option value="Customer" ${company.lead_status === 'Customer' ? 'selected' : ''}>Customer</option>
+                        <option value="To be contacted" ${company.lead_status === 'To be contacted' ? 'selected' : ''}>To be contacted</option>
+                        <option value="Contact later" ${company.lead_status === 'Contact later' ? 'selected' : ''}>Contact later</option>
+                        <option value="Ex-customer" ${company.lead_status === 'Ex-customer' ? 'selected' : ''}>Ex-customer</option>
+                        <option value="Follow up" ${company.lead_status === 'Follow up' ? 'selected' : ''}>Follow up</option>
+                        <option value="Unqualified" ${company.lead_status === 'Unqualified' ? 'selected' : ''}>Unqualified</option>
+                    </select>
+                </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-bold text-muted">Language</label>
-                    <div class="text-dark">${company.language}</div>
+                    <select class="form-select form-select-sm" id="crmLanguage">
+                        <option value="" ${!company.language ? 'selected' : ''}>Not Set</option>
+                        <option value="NL" ${company.language === 'NL' ? 'selected' : ''}>NL</option>
+                        <option value="FR" ${company.language === 'FR' ? 'selected' : ''}>FR</option>
+                        <option value="EN" ${company.language === 'EN' ? 'selected' : ''}>EN</option>
+                    </select>
                 </div>
-                ` : ''}
-                ${company.province ? `
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold text-muted">Province</label>
-                    <div class="text-dark">${company.province}</div>
-                </div>
-                ` : ''}
-                ${company.sub_type ? `
                 <div class="col-md-4">
                     <label class="form-label small fw-bold text-muted">Sub Type</label>
-                    <div class="text-dark">${company.sub_type}</div>
+                    <select class="form-select form-select-sm" id="crmSubType">
+                        <option value="" ${!company.sub_type ? 'selected' : ''}>Not Set</option>
+                        <option value="Restaurant" ${company.sub_type === 'Restaurant' ? 'selected' : ''}>Restaurant</option>
+                        <option value="Bar" ${company.sub_type === 'Bar' ? 'selected' : ''}>Bar</option>
+                        <option value="Café" ${company.sub_type === 'Café' ? 'selected' : ''}>Café</option>
+                        <option value="Hotel" ${company.sub_type === 'Hotel' ? 'selected' : ''}>Hotel</option>
+                        <option value="Nightclub" ${company.sub_type === 'Nightclub' ? 'selected' : ''}>Nightclub</option>
+                        <option value="Catering" ${company.sub_type === 'Catering' ? 'selected' : ''}>Catering</option>
+                        <option value="Supermarket" ${company.sub_type === 'Supermarket' ? 'selected' : ''}>Supermarket</option>
+                        <option value="Specialty Store" ${company.sub_type === 'Specialty Store' ? 'selected' : ''}>Specialty Store</option>
+                        <option value="Distributor" ${company.sub_type === 'Distributor' ? 'selected' : ''}>Distributor</option>
+                        <option value="Wholesaler" ${company.sub_type === 'Wholesaler' ? 'selected' : ''}>Wholesaler</option>
+                        <option value="Other" ${company.sub_type === 'Other' ? 'selected' : ''}>Other</option>
+                    </select>
                 </div>
-                ` : ''}
-                ${company.business_type ? `
                 <div class="col-md-4">
                     <label class="form-label small fw-bold text-muted">Business Type</label>
-                    <div class="text-dark">${company.business_type}</div>
+                    <select class="form-select form-select-sm" id="crmBusinessType">
+                        <option value="" ${!company.business_type ? 'selected' : ''}>Not Set</option>
+                        <option value="Independent" ${company.business_type === 'Independent' ? 'selected' : ''}>Independent</option>
+                        <option value="Chain" ${company.business_type === 'Chain' ? 'selected' : ''}>Chain</option>
+                        <option value="Franchise" ${company.business_type === 'Franchise' ? 'selected' : ''}>Franchise</option>
+                        <option value="Group" ${company.business_type === 'Group' ? 'selected' : ''}>Group</option>
+                    </select>
                 </div>
-                ` : ''}
-                ${company.parent_company ? `
-                <div class="col-md-4">
+                <div class="col-md-6">
+                    <label class="form-label small fw-bold text-muted">Province</label>
+                    <select class="form-select form-select-sm" id="crmProvince">
+                        <option value="" ${!company.province ? 'selected' : ''}>Not Set</option>
+                        <option value="Antwerpen" ${company.province === 'Antwerpen' ? 'selected' : ''}>Antwerpen</option>
+                        <option value="Limburg" ${company.province === 'Limburg' ? 'selected' : ''}>Limburg</option>
+                        <option value="Oost-Vlaanderen" ${company.province === 'Oost-Vlaanderen' ? 'selected' : ''}>Oost-Vlaanderen</option>
+                        <option value="Vlaams-Brabant" ${company.province === 'Vlaams-Brabant' ? 'selected' : ''}>Vlaams-Brabant</option>
+                        <option value="West-Vlaanderen" ${company.province === 'West-Vlaanderen' ? 'selected' : ''}>West-Vlaanderen</option>
+                        <option value="Brussel" ${company.province === 'Brussel' ? 'selected' : ''}>Brussel</option>
+                        <option value="Brabant Wallon" ${company.province === 'Brabant Wallon' ? 'selected' : ''}>Brabant Wallon</option>
+                        <option value="Hainaut" ${company.province === 'Hainaut' ? 'selected' : ''}>Hainaut</option>
+                        <option value="Liège" ${company.province === 'Liège' ? 'selected' : ''}>Liège</option>
+                        <option value="Luxembourg" ${company.province === 'Luxembourg' ? 'selected' : ''}>Luxembourg</option>
+                        <option value="Namur" ${company.province === 'Namur' ? 'selected' : ''}>Namur</option>
+                        <option value="Nederland" ${company.province === 'Nederland' ? 'selected' : ''}>Nederland</option>
+                        <option value="France" ${company.province === 'France' ? 'selected' : ''}>France</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
                     <label class="form-label small fw-bold text-muted">Parent Company</label>
-                    <div class="text-dark">${company.parent_company}</div>
+                    <input type="text" class="form-control form-control-sm" id="crmParentCompany"
+                           value="${company.parent_company || ''}" placeholder="Enter parent company">
                 </div>
-                ` : ''}
-                ${company.external_account_number ? `
-                <div class="col-md-4">
-                    <label class="form-label small fw-bold text-muted">Account #</label>
-                    <div class="text-dark font-monospace">${company.external_account_number}</div>
-                </div>
-                ` : ''}
             </div>
             ${Array.isArray(company.suppliers) && company.suppliers.length > 0 ? `
             <div class="mt-3">
                 <label class="form-label small fw-bold text-muted">Suppliers</label>
                 <div class="d-flex flex-wrap gap-1">
-                    ${company.suppliers.map(s => `<span class="badge bg-light text-dark border">${s}</span>`).join('')}
+                    ${company.suppliers.map(s => `<span class="badge bg-light text-dark border">${escapeHtml(s)}</span>`).join('')}
                 </div>
             </div>
             ` : ''}
         </div>
-        ` : ''}
 
         <!-- Products Tracking -->
         ${(() => {
@@ -6557,6 +6595,53 @@ async function updateLeadSource(companyId) {
     } catch (error) {
         console.error('Error updating lead source:', error);
         alert('Error updating lead source');
+    }
+}
+
+// Save CRM Details (channel, priority, lead_status, etc.)
+async function saveCrmDetails(companyId) {
+    const crmData = {
+        channel: document.getElementById('crmChannel')?.value || null,
+        priority: document.getElementById('crmPriority')?.value || null,
+        lead_status: document.getElementById('crmLeadStatus')?.value || null,
+        language: document.getElementById('crmLanguage')?.value || null,
+        sub_type: document.getElementById('crmSubType')?.value || null,
+        business_type: document.getElementById('crmBusinessType')?.value || null,
+        province: document.getElementById('crmProvince')?.value || null,
+        parent_company: document.getElementById('crmParentCompany')?.value || null
+    };
+
+    // Remove null/empty values
+    Object.keys(crmData).forEach(key => {
+        if (crmData[key] === '' || crmData[key] === null) {
+            crmData[key] = null;
+        }
+    });
+
+    try {
+        const response = await fetch(`/api/companies/${companyId}/crm-details`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(crmData)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showSaveSuccess('Company details saved!');
+            // Update local data
+            const company = allCompanies.find(c => c.company_id === companyId);
+            if (company) {
+                Object.assign(company, crmData);
+            }
+            // Refresh cards to show updated badges
+            renderCompanyCards();
+        } else {
+            alert('Error saving: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error saving CRM details:', error);
+        alert('Error saving company details');
     }
 }
 

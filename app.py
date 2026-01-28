@@ -8410,7 +8410,9 @@ def api_companies_from_db():
                 'contact_3_phone': details.get('contact_3_phone'),
                 # Import tracking
                 'imported_from_crm': details.get('imported_from_crm', False),
-                'crm_import_date': details.get('crm_import_date')
+                'crm_import_date': details.get('crm_import_date'),
+                # Data source for CRM/DUANO badge
+                'data_sources': details.get('data_sources', [])
             }
 
             # Add year breakdown for combined view
@@ -8606,6 +8608,49 @@ def api_update_company_contact(company_id):
 
     except Exception as e:
         print(f"Error updating company contact: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/companies/<int:company_id>/crm-details', methods=['PUT'])
+def api_update_company_crm_details(company_id):
+    """Update company CRM details (channel, priority, lead_status, language, sub_type, etc.)."""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Supabase not configured'}), 500
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        # Allowed CRM fields
+        allowed_fields = [
+            'channel', 'priority', 'lead_status', 'language',
+            'sub_type', 'business_type', 'province', 'parent_company'
+        ]
+
+        # Build update payload with only provided fields
+        update_fields = {}
+        for field in allowed_fields:
+            if field in data:
+                update_fields[field] = data[field] if data[field] else None
+
+        if not update_fields:
+            return jsonify({'error': 'No valid fields to update'}), 400
+
+        # Update in Supabase
+        result = supabase_client.table('companies').update(update_fields).eq('company_id', company_id).execute()
+
+        if result.data:
+            print(f"✅ Updated company {company_id} CRM details: {update_fields}")
+            return jsonify({'success': True, 'updated': update_fields})
+        else:
+            return jsonify({'error': 'Company not found'}), 404
+
+    except Exception as e:
+        print(f"Error updating company CRM details: {e}")
         return jsonify({'error': str(e)}), 500
 
 
