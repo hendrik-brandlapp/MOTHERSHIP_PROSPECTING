@@ -32,6 +32,11 @@
                             title="Sync Company Names (Legal + Public) from Duano">
                         <i class="fas fa-tag"></i> Sync Names
                     </button>
+                    <button class="btn btn-modern btn-outline-secondary" onclick="syncCompanyCategories()"
+                            data-bs-toggle="tooltip" data-bs-placement="bottom"
+                            title="Sync Company Categories from Duano">
+                        <i class="fas fa-tags"></i> Sync Categories
+                    </button>
                     <button class="btn btn-modern-primary" onclick="forceRefreshData()" 
                             data-bs-toggle="tooltip" data-bs-placement="bottom" 
                             title="Refresh Data">
@@ -2951,6 +2956,81 @@ async function syncCompanyNames() {
                             </div>
                             <div class="col-md-6">
                                 <strong>Total Processed:</strong> ${status.total}
+                            </div>
+                        </div>
+                        <p class="mt-3 mb-0">
+                            <i class="fas fa-info-circle me-2"></i>
+                            ${status.message}
+                        </p>
+                    </div>
+                `;
+
+                // Refresh data
+                clearCache();
+                setTimeout(() => loadData(true), 2000);
+            }
+        };
+
+        // Start polling
+        setTimeout(pollStatus, 1000);
+
+    } catch (error) {
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+async function syncCompanyCategories() {
+    try {
+        document.getElementById('sync-status').style.display = 'block';
+        document.getElementById('sync-results').style.display = 'none';
+        document.getElementById('sync-message').textContent = 'Syncing company categories from Duano CRM API...';
+
+        // Start the background sync
+        const startResponse = await fetch('/api/sync-company-categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const startResult = await startResponse.json();
+
+        if (!startResult.success && startResult.message !== 'Category sync already running') {
+            throw new Error(startResult.error || startResult.message);
+        }
+
+        // Poll for status
+        const pollStatus = async () => {
+            const statusResponse = await fetch('/api/category-sync-status');
+            const status = await statusResponse.json();
+
+            document.getElementById('sync-message').textContent =
+                `Syncing categories... ${status.synced || 0} synced, ${status.no_category || 0} no categories, ${status.errors || 0} errors (${Math.round(((status.synced || 0) + (status.no_category || 0) + (status.errors || 0)) / (status.total || 1) * 100)}%)`;
+
+            if (status.running) {
+                setTimeout(pollStatus, 1000);
+            } else {
+                // Sync complete
+                document.getElementById('sync-status').style.display = 'none';
+                document.getElementById('sync-results').style.display = 'block';
+
+                document.getElementById('sync-results').innerHTML = `
+                    <div class="alert alert-success">
+                        <h5><i class="fas fa-check-circle me-2"></i>Company Categories Synced!</h5>
+                        <div class="row mt-3">
+                            <div class="col-md-4">
+                                <strong>Categories Synced:</strong> <span class="text-success">${status.synced}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>No Category in Duano:</strong> <span class="text-warning">${status.no_category}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Errors:</strong> <span class="text-danger">${status.errors}</span>
                             </div>
                         </div>
                         <p class="mt-3 mb-0">

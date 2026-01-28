@@ -11208,6 +11208,179 @@ def api_name_sync_status():
     return jsonify(_name_sync_status)
 
 
+# Global status for category sync
+_category_sync_status = {'running': False, 'synced': 0, 'no_category': 0, 'total': 0, 'errors': 0, 'message': ''}
+
+@app.route('/api/sync-company-categories', methods=['POST'])
+def api_sync_company_categories():
+    """Sync company_categories from Duano API for companies missing categories.
+    This fetches categories from Duano CRM API and updates the companies table.
+    """
+    global _category_sync_status
+
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    if _category_sync_status.get('running'):
+        return jsonify({
+            'success': False,
+            'message': 'Category sync already running',
+            'status': _category_sync_status
+        })
+
+    access_token = session.get('access_token')
+    if not access_token:
+        return jsonify({'error': 'Not authenticated - please log in again'}), 401
+
+    # Start background thread
+    import threading
+    thread = threading.Thread(target=_background_sync_company_categories, args=(access_token,))
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'success': True,
+        'message': 'Company category sync started. Check /api/category-sync-status for progress.',
+        'status': _category_sync_status
+    })
+
+
+def _background_sync_company_categories(access_token):
+    """Background thread to sync company categories from Duano."""
+    global _category_sync_status
+
+    try:
+        _category_sync_status = {'running': True, 'synced': 0, 'no_category': 0, 'total': 0, 'errors': 0, 'message': 'Finding companies without categories...'}
+        print("🏷️ [Category Sync] Starting company category sync from Duano...")
+
+        if not supabase_client:
+            _category_sync_status['message'] = 'Error: Supabase not configured'
+            _category_sync_status['running'] = False
+            return
+
+        headers = {
+            'Authorization': f"Bearer {access_token}",
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+
+        # Step 1: Find companies without categories
+        companies_to_sync = []
+        offset = 0
+        batch_size = 1000
+
+        while True:
+            result = supabase_client.table('companies').select(
+                'id, company_id, name, public_name, company_categories, raw_company_data'
+            ).range(offset, offset + batch_size - 1).execute()
+
+            if not result.data:
+                break
+
+            for company in result.data:
+                categories = company.get('company_categories')
+                raw_data = company.get('raw_company_data') or {}
+                raw_categories = raw_data.get('company_categories') if raw_data else None
+
+                # Check if categories are missing
+                has_direct_categories = categories and isinstance(categories, list) and len(categories) > 0
+                has_raw_categories = raw_categories and isinstance(raw_categories, list) and len(raw_categories) > 0
+
+                if not has_direct_categories and not has_raw_categories:
+                    companies_to_sync.append(company)
+
+            if len(result.data) < batch_size:
+                break
+            offset += batch_size
+
+        _category_sync_status['total'] = len(companies_to_sync)
+        print(f"🔍 [Category Sync] Found {len(companies_to_sync)} companies without categories")
+
+        if not companies_to_sync:
+            _category_sync_status['message'] = 'All companies already have categories!'
+            _category_sync_status['running'] = False
+            return
+
+        # Step 2: Sync categories from Duano
+        synced = 0
+        no_category = 0
+        errors = 0
+
+        for i, company in enumerate(companies_to_sync):
+            company_id = company['company_id']
+            company_name = company.get('public_name') or company.get('name') or f"ID:{company_id}"
+
+            # Rate limiting
+            if i > 0 and i % 10 == 0:
+                _category_sync_status['message'] = f'Processing {i}/{len(companies_to_sync)}... ({synced} synced)'
+                time.sleep(0.5)
+            elif i > 0:
+                time.sleep(0.15)
+
+            try:
+                # Try CRM endpoint first (has company_categories)
+                url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/crm/crm-companies/{company_id}"
+                response = requests.get(url, headers=headers, timeout=30)
+
+                if response.status_code == 404:
+                    # Fallback to core endpoint
+                    url = f"{DOUANO_CONFIG['base_url']}/api/public/v1/core/companies/{company_id}"
+                    response = requests.get(url, headers=headers, timeout=30)
+
+                if response.status_code != 200:
+                    print(f"  ❌ {company_name}: API error {response.status_code}")
+                    errors += 1
+                    _category_sync_status['errors'] = errors
+                    continue
+
+                company_data = response.json().get('result', {})
+                if not company_data:
+                    errors += 1
+                    _category_sync_status['errors'] = errors
+                    continue
+
+                categories = company_data.get('company_categories', [])
+
+                if not categories or len(categories) == 0:
+                    no_category += 1
+                    _category_sync_status['no_category'] = no_category
+                    continue
+
+                # Update Supabase
+                update_data = {
+                    'company_categories': categories,
+                    'raw_company_data': company_data,
+                    'last_sync_at': datetime.now().isoformat()
+                }
+
+                supabase_client.table('companies').update(update_data).eq('company_id', company_id).execute()
+                synced += 1
+                _category_sync_status['synced'] = synced
+
+                cat_names = [c.get('name', str(c)) if isinstance(c, dict) else str(c) for c in categories]
+                print(f"  ✅ {company_name}: {cat_names}")
+
+            except Exception as e:
+                print(f"  ❌ {company_name}: {e}")
+                errors += 1
+                _category_sync_status['errors'] = errors
+
+        _category_sync_status['message'] = f'Complete! Synced {synced} companies. {no_category} have no categories in Duano. {errors} errors.'
+        _category_sync_status['running'] = False
+        print(f"🎉 [Category Sync] Complete: {synced} synced, {no_category} no categories, {errors} errors")
+
+    except Exception as e:
+        _category_sync_status['message'] = f'Error: {str(e)}'
+        _category_sync_status['running'] = False
+        print(f"❌ [Category Sync] Failed: {e}")
+
+
+@app.route('/api/category-sync-status', methods=['GET'])
+def api_category_sync_status():
+    """Get the status of the company category sync."""
+    return jsonify(_category_sync_status)
+
+
 # Global status for invoice-based company sync
 _invoice_sync_status = {'running': False, 'synced': 0, 'created': 0, 'updated': 0, 'total': 0, 'errors': 0, 'message': ''}
 
