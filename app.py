@@ -8273,7 +8273,7 @@ def api_companies_from_db():
                     'products_proposed, products_sampled, products_listed, products_won, '
                     'contact_person_role, contact_2_name, contact_2_role, contact_2_email, contact_2_phone, '
                     'contact_3_name, contact_3_role, contact_3_email, contact_3_phone, '
-                    'imported_from_crm, crm_import_date, external_account_number, crm_review_status'
+                    'imported_from_crm, crm_import_date, external_account_number, crm_review_status, data_sources'
                 ).range(offset, offset + batch_size - 1).execute()
 
                 if not comp_result.data:
@@ -8282,6 +8282,10 @@ def api_companies_from_db():
                 for c in comp_result.data:
                     # Skip merged CRM imports (their data was transferred to target company)
                     if c.get('crm_review_status') == 'merged':
+                        continue
+                    # Skip CRM API only companies - they are duplicates of CORE companies
+                    # These have CRM IDs (not CORE IDs) and should not be shown
+                    if c.get('data_sources') == ['douano_crm_api']:
                         continue
                     # Key by both id and company_id for flexible lookup
                     # (sales tables may use either depending on how data was imported)
@@ -11265,13 +11269,16 @@ def _background_sync_company_categories(access_token):
         }
 
         # Step 1: Find companies without categories
+        # IMPORTANT: Skip CRM-only companies (they have CRM IDs, not CORE IDs)
+        # CRM-only companies are duplicates that need to be merged with CORE records
         companies_to_sync = []
+        crm_only_skipped = 0
         offset = 0
         batch_size = 1000
 
         while True:
             result = supabase_client.table('companies').select(
-                'id, company_id, name, public_name, company_categories, raw_company_data'
+                'id, company_id, name, public_name, company_categories, raw_company_data, data_sources'
             ).range(offset, offset + batch_size - 1).execute()
 
             if not result.data:
@@ -11281,12 +11288,18 @@ def _background_sync_company_categories(access_token):
                 categories = company.get('company_categories')
                 raw_data = company.get('raw_company_data') or {}
                 raw_categories = raw_data.get('company_categories') if raw_data else None
+                data_sources = company.get('data_sources') or []
 
                 # Check if categories are missing
                 has_direct_categories = categories and isinstance(categories, list) and len(categories) > 0
                 has_raw_categories = raw_categories and isinstance(raw_categories, list) and len(raw_categories) > 0
 
                 if not has_direct_categories and not has_raw_categories:
+                    # Skip CRM-only companies - they have CRM IDs, not CORE IDs
+                    # These are likely duplicates that need to be merged
+                    if data_sources == ['douano_crm_api']:
+                        crm_only_skipped += 1
+                        continue
                     companies_to_sync.append(company)
 
             if len(result.data) < batch_size:
@@ -11294,7 +11307,8 @@ def _background_sync_company_categories(access_token):
             offset += batch_size
 
         _category_sync_status['total'] = len(companies_to_sync)
-        print(f"🔍 [Category Sync] Found {len(companies_to_sync)} companies without categories")
+        _category_sync_status['crm_only'] = crm_only_skipped
+        print(f"🔍 [Category Sync] Found {len(companies_to_sync)} companies without categories (skipped {crm_only_skipped} CRM-only duplicates)")
 
         if not companies_to_sync:
             _category_sync_status['message'] = 'All companies already have categories!'
