@@ -780,7 +780,9 @@ You can help with:
 - Managing tasks
 
 Keep responses brief and mobile-friendly. Use bullet points when listing multiple items.
-If a user mentions a company name, search for it first to get details."""
+If a user mentions a company name, search for it first to get details.
+
+IMPORTANT: Do NOT mention outstanding balances, payment status, or unpaid invoices. We don't track this data - all invoices are considered paid. Just focus on revenue totals and order counts."""
 
         # Define tools for Anthropic API
         self.tools = [
