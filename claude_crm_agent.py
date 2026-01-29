@@ -203,16 +203,17 @@ class CRMAgentTools:
             if not company_id or not note:
                 return {"content": [{"type": "text", "text": "Error: company_id and note are required"}]}
 
-            # Get company name for confirmation message
-            result = self.supabase.table('companies').select('name, public_name').eq('company_id', company_id).execute()
+            # Get company internal id and name - company_notes uses internal 'id', not 'company_id'
+            result = self.supabase.table('companies').select('id, name, public_name').eq('company_id', company_id).execute()
             if not result.data:
                 return {"content": [{"type": "text", "text": f"Company {company_id} not found"}]}
 
+            internal_id = result.data[0].get('id')
             company_name = result.data[0].get('public_name') or result.data[0].get('name')
 
-            # Insert into company_notes table (the correct table for notes)
+            # Insert into company_notes table using internal id (not company_id)
             note_result = self.supabase.table('company_notes').insert({
-                'company_id': int(company_id),
+                'company_id': int(internal_id),  # This field stores the internal id
                 'note_text': note,
                 'created_by': 'WhatsApp Agent'
             }).execute()
@@ -223,7 +224,7 @@ class CRMAgentTools:
             return {
                 "content": [{
                     "type": "text",
-                    "text": f"Note added to {company_name} (ID: {company_id}):\n\"{note}\""
+                    "text": f"Note added to {company_name}:\n\"{note}\""
                 }]
             }
 
