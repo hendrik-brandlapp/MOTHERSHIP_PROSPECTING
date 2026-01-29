@@ -68,7 +68,7 @@ class CRMAgentTools:
 
             # Build query
             q = self.supabase.table('companies').select(
-                'company_id, name, public_name, city, address, email, phone, company_categories'
+                'company_id, name, public_name, city, addresses, email, phone, company_categories'
             )
 
             # Apply filters - use textSearch or simple ilike
@@ -99,7 +99,7 @@ class CRMAgentTools:
                     'company_id': c['company_id'],
                     'name': name,
                     'city': c.get('city', 'N/A'),
-                    'address': c.get('address', 'N/A'),
+                    'address': c.get('addresses', 'N/A'),
                     'categories': ', '.join(cat_names) if cat_names else 'N/A'
                 })
 
@@ -156,7 +156,7 @@ class CRMAgentTools:
 
             text = f"## {name}\n\n"
             text += f"**Company ID:** {company_id}\n"
-            text += f"**Address:** {company.get('address', 'N/A')}, {company.get('city', 'N/A')} {company.get('zip_code', '')}\n"
+            text += f"**Address:** {company.get('addresses', 'N/A')}, {company.get('city', 'N/A')} {company.get('zip_code', '')}\n"
             text += f"**Email:** {company.get('email') or company.get('email_addresses') or 'N/A'}\n"
             text += f"**Phone:** {company.get('phone') or 'N/A'}\n"
             text += f"**VAT:** {company.get('vat_number') or 'N/A'}\n"
@@ -400,7 +400,7 @@ class CRMAgentTools:
 
             # Get company details for the stop
             company = self.supabase.table('companies').select(
-                'name, public_name, address, city, latitude, longitude'
+                'name, public_name, addresses, city, latitude, longitude'
             ).eq('company_id', company_id).execute()
 
             if not company.data:
@@ -419,7 +419,7 @@ class CRMAgentTools:
                 'company_id': company_id,
                 'stop_order': stop_order,
                 'company_name': comp.get('public_name') or comp.get('name'),
-                'address': comp.get('address'),
+                'address': comp.get('addresses'),
                 'city': comp.get('city'),
                 'latitude': comp.get('latitude'),
                 'longitude': comp.get('longitude'),
@@ -434,7 +434,7 @@ class CRMAgentTools:
                 return {
                     "content": [{
                         "type": "text",
-                        "text": f"Added stop #{stop_order} to trip:\n**{company_name}**\n{comp.get('address', '')}, {comp.get('city', '')}"
+                        "text": f"Added stop #{stop_order} to trip:\n**{company_name}**\n{comp.get('addresses', '')}, {comp.get('city', '')}"
                     }]
                 }
             else:
