@@ -31,6 +31,11 @@
                             title="Sync All Companies from Duano">
                         <i class="fas fa-sync-alt"></i>
                     </button>
+                    <button class="btn btn-modern btn-outline-danger" onclick="refreshAlerts()"
+                            data-bs-toggle="tooltip" data-bs-placement="bottom"
+                            title="Refresh Customer Alerts (recalculate overdue days)">
+                        <i class="fas fa-bell"></i> Refresh Alerts
+                    </button>
                     {% endif %}
                     <button class="btn btn-modern btn-outline-info" onclick="syncCompanyNames()"
                             data-bs-toggle="tooltip" data-bs-placement="bottom"
@@ -2522,9 +2527,23 @@ async function syncLatestData(fullSync = false) {
                     ` : '<p class="mt-2 mb-0">Database is up to date - no new invoices found.</p>'}
                 </div>
             `;
-            
+
             // Clear cache and refresh data after sync
         clearCache();
+
+            // If invoices were synced, also refresh alerts to update "days since last order"
+            if (totalSaved > 0) {
+                document.getElementById('sync-message').textContent = 'Refreshing customer alerts...';
+                document.getElementById('sync-status').style.display = 'block';
+                try {
+                    await fetch('/api/alerts/refresh', { method: 'POST' });
+                    console.log('Alerts refreshed after invoice sync');
+                } catch (alertError) {
+                    console.warn('Could not refresh alerts:', alertError);
+                }
+                document.getElementById('sync-status').style.display = 'none';
+            }
+
             setTimeout(() => loadData(true), 2000);
         
     } catch (error) {
@@ -2991,6 +3010,61 @@ async function syncCompanyNames() {
         document.getElementById('sync-results').innerHTML = `
             <div class="alert alert-danger">
                 <h5><i class="fas fa-exclamation-triangle me-2"></i>Error</h5>
+                <p class="mb-0">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+async function refreshAlerts() {
+    try {
+        document.getElementById('sync-status').style.display = 'block';
+        document.getElementById('sync-results').style.display = 'none';
+        document.getElementById('sync-message').textContent = 'Refreshing customer alerts (recalculating overdue days)...';
+
+        const response = await fetch('/api/alerts/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+
+        if (result.success) {
+            const summary = result.summary || {};
+            document.getElementById('sync-results').innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle me-2"></i>Alerts Refreshed!</h5>
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <strong>Total Alerts:</strong> ${summary.total || 0}
+                        </div>
+                        <div class="col-md-4">
+                            <strong>High Priority:</strong> <span class="text-danger">${summary.by_priority?.HIGH || 0}</span>
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Medium Priority:</strong> <span class="text-warning">${summary.by_priority?.MEDIUM || 0}</span>
+                        </div>
+                    </div>
+                    <p class="mt-2 mb-0">Customer alerts have been recalculated based on latest invoice data.</p>
+                </div>
+            `;
+
+            // Refresh data to show updated alerts
+            clearCache();
+            setTimeout(() => loadData(true), 1000);
+        } else {
+            throw new Error(result.error || 'Failed to refresh alerts');
+        }
+    } catch (error) {
+        console.error('Alert refresh error:', error);
+        document.getElementById('sync-status').style.display = 'none';
+        document.getElementById('sync-results').style.display = 'block';
+        document.getElementById('sync-results').innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Error Refreshing Alerts</h5>
                 <p class="mb-0">${error.message}</p>
             </div>
         `;
