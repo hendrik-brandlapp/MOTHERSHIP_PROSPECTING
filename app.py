@@ -5868,7 +5868,7 @@ def recalculate_company_metrics_from_invoices(company_ids=None, max_companies=99
         if company_ids is None:
             company_ids = set()
             
-            for year in ['2024', '2025']:
+            for year in ['2024', '2025', '2026']:
                 try:
                     # Just get distinct company IDs - more efficient
                     batch = supabase_client.table(f'sales_{year}').select('company_id').limit(5000).execute()
@@ -9243,14 +9243,16 @@ def api_refresh_alerts():
     """
     Recalculate all alerts and update database.
     Use this for scheduled updates or manual refresh.
+
+    OPTIMIZED: Processes companies in batches to avoid memory issues.
     """
     if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
-    
+
     try:
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
-        
+
         # First check if the table exists by trying to query it
         try:
             supabase_client.table('customer_alerts').select('id').limit(1).execute()
@@ -9264,343 +9266,397 @@ def api_refresh_alerts():
                     'setup_required': True
                 }), 400
             raise
-        
+
         from datetime import datetime, timedelta
         import statistics
-        
-        print("🔍 Starting comprehensive alert analysis...")
-        
-        # Get all companies
-        companies_result = supabase_client.table('companies').select('*').execute()
-        
-        all_alerts = []
+        import gc
+
+        print("🔍 Starting comprehensive alert analysis (batch mode)...")
+
         current_date = datetime.now()
         companies_processed = 0
-        
-        for company in companies_result.data:
-            company_id = company['company_id']
-            
-            # Rate limiting
-            if companies_processed > 0 and companies_processed % 10 == 0:
-                time.sleep(0.1)
-            
-            # Get all invoices for this company
-            all_invoices = []
-            
-            for year in ['2024', '2025']:
-                max_retries = 3
-                retry_count = 0
-                
-                while retry_count < max_retries:
-                    try:
-                        invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number, balance, invoice_data').eq('company_id', company_id).execute()
-                        for invoice in invoices_result.data:
-                            if invoice.get('invoice_date'):
-                                # Calculate revenue from line items (ex-VAT)
-                                invoice_data = invoice.get('invoice_data') or {}
-                                line_items = invoice_data.get('invoice_line_items') or []
-                                line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
-                                amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
+        total_alerts_created = 0
+        total_alerts_updated = 0
+        alert_summary = {
+            'total_alerts': 0,
+            'high_priority': 0,
+            'medium_priority': 0,
+            'low_priority': 0,
+            'by_type': {},
+            'saved': 0,
+            'updated': 0
+        }
 
-                                all_invoices.append({
-                                    'date': datetime.strptime(invoice['invoice_date'], '%Y-%m-%d'),
-                                    'amount': amount,
-                                    'balance': float(invoice.get('balance', 0)) if invoice.get('balance') else 0,
-                                    'id': invoice['id'],
-                                    'number': invoice.get('invoice_number', invoice['id'])
-                                })
-                        break
-                    except Exception as e:
-                        retry_count += 1
-                        if retry_count >= max_retries:
-                            if "Resource temporarily unavailable" not in str(e):
-                                print(f"Error fetching invoices for company {company_id}: {e}")
+        # Track all current alert keys for resolving old alerts
+        current_alert_keys = set()
+
+        # Process companies in batches to avoid memory issues
+        BATCH_SIZE = 100
+        offset = 0
+
+        while True:
+            # Fetch a batch of companies with only required fields
+            companies_batch = supabase_client.table('companies').select(
+                'company_id, name, public_name, email, email_addresses'
+            ).range(offset, offset + BATCH_SIZE - 1).execute()
+
+            if not companies_batch.data:
+                break
+
+            print(f"  Processing batch {offset // BATCH_SIZE + 1} ({len(companies_batch.data)} companies)...")
+
+            batch_alerts = []
+
+            for company in companies_batch.data:
+                company_id = company['company_id']
+
+                # Get all invoices for this company
+                all_invoices = []
+
+                for year in ['2024', '2025', '2026']:
+                    max_retries = 3
+                    retry_count = 0
+
+                    while retry_count < max_retries:
+                        try:
+                            invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number, balance, invoice_data').eq('company_id', company_id).execute()
+                            for invoice in invoices_result.data:
+                                if invoice.get('invoice_date'):
+                                    # Calculate revenue from line items (ex-VAT)
+                                    invoice_data = invoice.get('invoice_data') or {}
+                                    line_items = invoice_data.get('invoice_line_items') or []
+                                    line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
+                                    amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
+
+                                    all_invoices.append({
+                                        'date': datetime.strptime(invoice['invoice_date'], '%Y-%m-%d'),
+                                        'amount': amount,
+                                        'balance': float(invoice.get('balance', 0)) if invoice.get('balance') else 0,
+                                        'id': invoice['id'],
+                                        'number': invoice.get('invoice_number', invoice['id'])
+                                    })
                             break
-                        time.sleep(0.05 * (2 ** retry_count))
-            
-            companies_processed += 1
-            
-            # Need at least 2 invoices for most analyses
-            if len(all_invoices) < 2:
-                # Check for one-time customers (only 1 invoice)
-                if len(all_invoices) == 1:
-                    days_since = (current_date - all_invoices[0]['date']).days
-                    if days_since > 90:  # No return in 90+ days
-                        all_alerts.append({
-                            'type': 'ONE_TIME_CUSTOMER',
+                        except Exception as e:
+                            retry_count += 1
+                            if retry_count >= max_retries:
+                                if "Resource temporarily unavailable" not in str(e):
+                                    print(f"Error fetching invoices for company {company_id}: {e}")
+                                break
+                            time.sleep(0.05 * (2 ** retry_count))
+
+                # Need at least 2 invoices for most analyses
+                if len(all_invoices) < 2:
+                    # Check for one-time customers (only 1 invoice)
+                    if len(all_invoices) == 1:
+                        days_since = (current_date - all_invoices[0]['date']).days
+                        if days_since > 90:  # No return in 90+ days
+                            batch_alerts.append({
+                                'type': 'ONE_TIME_CUSTOMER',
+                                'priority': 'MEDIUM',
+                                'company_id': company_id,
+                                'company_name': company['name'],
+                                'public_name': company.get('public_name'),
+                                'email': company.get('email_addresses') or company.get('email'),
+                                'description': f'Customer made only one purchase {days_since} days ago and never returned',
+                                'recommendation': 'Reach out with a follow-up offer or check satisfaction',
+                                'metrics': {
+                                    'total_orders': 1,
+                                    'first_order_date': all_invoices[0]['date'].strftime('%Y-%m-%d'),
+                                    'first_order_amount': all_invoices[0]['amount'],
+                                    'days_since_order': days_since
+                                }
+                            })
+                    continue
+
+                # Sort by date
+                all_invoices.sort(key=lambda x: x['date'])
+
+                # Calculate intervals and amounts
+                intervals = []
+                amounts = []
+                for i in range(len(all_invoices)):
+                    amounts.append(all_invoices[i]['amount'])
+                    if i > 0:
+                        interval = (all_invoices[i]['date'] - all_invoices[i-1]['date']).days
+                        intervals.append(interval)
+
+                # Skip if not enough data
+                if len(intervals) < 2:
+                    continue
+
+                # Calculate metrics
+                avg_interval = statistics.mean(intervals)
+                std_interval = statistics.stdev(intervals) if len(intervals) > 1 else 0
+                avg_amount = statistics.mean(amounts)
+                days_since_last = (current_date - all_invoices[-1]['date']).days
+
+                # 1. PATTERN DISRUPTION ALERT
+                expected_next_order = all_invoices[-1]['date'] + timedelta(days=avg_interval)
+                days_overdue = (current_date - expected_next_order).days
+
+                if days_overdue > (std_interval * 2) and days_overdue > 14:  # More than 2 std devs + at least 2 weeks
+                    severity = 'HIGH' if days_overdue > avg_interval else 'MEDIUM'
+
+                    batch_alerts.append({
+                        'type': 'PATTERN_DISRUPTION',
+                        'priority': severity,
+                        'company_id': company_id,
+                        'company_name': company['name'],
+                        'public_name': company.get('public_name'),
+                        'email': company.get('email_addresses') or company.get('email'),
+                        'description': f'Customer typically orders every {int(avg_interval)} days but is now {days_overdue} days overdue',
+                        'recommendation': 'Immediate outreach recommended - customer may have switched suppliers',
+                        'metrics': {
+                            'total_orders': len(all_invoices),
+                            'avg_interval_days': int(avg_interval),
+                            'days_since_last_order': days_since_last,
+                            'days_overdue': days_overdue,
+                            'last_order_amount': all_invoices[-1]['amount'],
+                            'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d'),
+                            'total_lifetime_value': sum(amounts)
+                        }
+                    })
+
+                # 2. DECLINING ORDER VALUE ALERT
+                if len(amounts) >= 4:
+                    recent_avg = statistics.mean(amounts[-3:])  # Last 3 orders
+                    earlier_avg = statistics.mean(amounts[:len(amounts)-3])  # Earlier orders
+                    decline_pct = ((recent_avg - earlier_avg) / earlier_avg * 100) if earlier_avg > 0 else 0
+
+                    if decline_pct < -20:  # 20%+ decline
+                        batch_alerts.append({
+                            'type': 'DECLINING_VALUE',
                             'priority': 'MEDIUM',
                             'company_id': company_id,
                             'company_name': company['name'],
                             'public_name': company.get('public_name'),
                             'email': company.get('email_addresses') or company.get('email'),
-                            'description': f'Customer made only one purchase {days_since} days ago and never returned',
-                            'recommendation': 'Reach out with a follow-up offer or check satisfaction',
+                            'description': f'Order value has declined by {abs(int(decline_pct))}% in recent orders',
+                            'recommendation': 'Investigate if customer needs have changed or if there\'s price sensitivity',
                             'metrics': {
-                                'total_orders': 1,
-                                'first_order_date': all_invoices[0]['date'].strftime('%Y-%m-%d'),
-                                'first_order_amount': all_invoices[0]['amount'],
-                                'days_since_order': days_since
+                                'total_orders': len(all_invoices),
+                                'earlier_avg_value': earlier_avg,
+                                'recent_avg_value': recent_avg,
+                                'decline_percentage': decline_pct,
+                                'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
                             }
                         })
-                continue
-            
-            # Sort by date
-            all_invoices.sort(key=lambda x: x['date'])
-            
-            # Calculate intervals and amounts
-            intervals = []
-            amounts = []
-            for i in range(len(all_invoices)):
-                amounts.append(all_invoices[i]['amount'])
-                if i > 0:
-                    interval = (all_invoices[i]['date'] - all_invoices[i-1]['date']).days
-                    intervals.append(interval)
-            
-            # Skip if not enough data
-            if len(intervals) < 2:
-                continue
-            
-            # Calculate metrics
-            avg_interval = statistics.mean(intervals)
-            std_interval = statistics.stdev(intervals) if len(intervals) > 1 else 0
-            avg_amount = statistics.mean(amounts)
-            days_since_last = (current_date - all_invoices[-1]['date']).days
-            
-            # 1. PATTERN DISRUPTION ALERT
-            expected_next_order = all_invoices[-1]['date'] + timedelta(days=avg_interval)
-            days_overdue = (current_date - expected_next_order).days
-            
-            if days_overdue > (std_interval * 2) and days_overdue > 14:  # More than 2 std devs + at least 2 weeks
-                severity = 'HIGH' if days_overdue > avg_interval else 'MEDIUM'
-                
-                all_alerts.append({
-                    'type': 'PATTERN_DISRUPTION',
-                    'priority': severity,
-                    'company_id': company_id,
-                    'company_name': company['name'],
-                    'public_name': company.get('public_name'),
-                    'email': company.get('email_addresses') or company.get('email'),
-                    'description': f'Customer typically orders every {int(avg_interval)} days but is now {days_overdue} days overdue',
-                    'recommendation': 'Immediate outreach recommended - customer may have switched suppliers',
-                    'metrics': {
-                        'total_orders': len(all_invoices),
-                        'avg_interval_days': int(avg_interval),
-                        'days_since_last_order': days_since_last,
-                        'days_overdue': days_overdue,
-                        'last_order_amount': all_invoices[-1]['amount'],
-                        'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d'),
-                        'total_lifetime_value': sum(amounts)
-                    }
-                })
-            
-            # 2. DECLINING ORDER VALUE ALERT
-            if len(amounts) >= 4:
-                recent_avg = statistics.mean(amounts[-3:])  # Last 3 orders
-                earlier_avg = statistics.mean(amounts[:len(amounts)-3])  # Earlier orders
-                decline_pct = ((recent_avg - earlier_avg) / earlier_avg * 100) if earlier_avg > 0 else 0
-                
-                if decline_pct < -20:  # 20%+ decline
-                    all_alerts.append({
-                        'type': 'DECLINING_VALUE',
-                        'priority': 'MEDIUM',
+
+                # 3. INCREASING GAP ALERT (Orders becoming less frequent)
+                if len(intervals) >= 4:
+                    recent_intervals = intervals[-3:]
+                    earlier_intervals = intervals[:len(intervals)-3]
+                    recent_avg_interval = statistics.mean(recent_intervals)
+                    earlier_avg_interval = statistics.mean(earlier_intervals)
+                    gap_increase = recent_avg_interval - earlier_avg_interval
+
+                    if gap_increase > 30:  # Orders now 30+ days less frequent
+                        batch_alerts.append({
+                            'type': 'INCREASING_GAP',
+                            'priority': 'MEDIUM',
+                            'company_id': company_id,
+                            'company_name': company['name'],
+                            'public_name': company.get('public_name'),
+                            'email': company.get('email_addresses') or company.get('email'),
+                            'description': f'Time between orders has increased by {int(gap_increase)} days',
+                            'recommendation': 'Customer engagement declining - reach out to understand their needs',
+                            'metrics': {
+                                'total_orders': len(all_invoices),
+                                'earlier_avg_gap': int(earlier_avg_interval),
+                                'recent_avg_gap': int(recent_avg_interval),
+                                'gap_increase_days': int(gap_increase),
+                                'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
+                            }
+                        })
+
+                # 4. HIGH VALUE AT RISK ALERT
+                total_value = sum(amounts)
+                if total_value > 5000 and days_since_last > 60:  # High value customer quiet for 60+ days
+                    batch_alerts.append({
+                        'type': 'HIGH_VALUE_AT_RISK',
+                        'priority': 'HIGH',
                         'company_id': company_id,
                         'company_name': company['name'],
                         'public_name': company.get('public_name'),
                         'email': company.get('email_addresses') or company.get('email'),
-                        'description': f'Order value has declined by {abs(int(decline_pct))}% in recent orders',
-                        'recommendation': 'Investigate if customer needs have changed or if there\'s price sensitivity',
+                        'description': f'High-value customer (€{int(total_value)} lifetime) has been inactive for {days_since_last} days',
+                        'recommendation': 'Priority outreach - offer VIP treatment or exclusive deals',
                         'metrics': {
                             'total_orders': len(all_invoices),
-                            'earlier_avg_value': earlier_avg,
-                            'recent_avg_value': recent_avg,
-                            'decline_percentage': decline_pct,
+                            'lifetime_value': total_value,
+                            'avg_order_value': avg_amount,
+                            'days_since_last_order': days_since_last,
                             'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
                         }
                     })
-            
-            # 3. INCREASING GAP ALERT (Orders becoming less frequent)
-            if len(intervals) >= 4:
-                recent_intervals = intervals[-3:]
-                earlier_intervals = intervals[:len(intervals)-3]
-                recent_avg_interval = statistics.mean(recent_intervals)
-                earlier_avg_interval = statistics.mean(earlier_intervals)
-                gap_increase = recent_avg_interval - earlier_avg_interval
-                
-                if gap_increase > 30:  # Orders now 30+ days less frequent
-                    all_alerts.append({
-                        'type': 'INCREASING_GAP',
-                        'priority': 'MEDIUM',
+
+                # 5. PAYMENT ISSUES ALERT
+                unpaid_balance = sum(inv['balance'] for inv in all_invoices if inv['balance'] > 0)
+                if unpaid_balance > 500:
+                    batch_alerts.append({
+                        'type': 'PAYMENT_ISSUES',
+                        'priority': 'HIGH',
                         'company_id': company_id,
                         'company_name': company['name'],
                         'public_name': company.get('public_name'),
                         'email': company.get('email_addresses') or company.get('email'),
-                        'description': f'Time between orders has increased by {int(gap_increase)} days',
-                        'recommendation': 'Customer engagement declining - reach out to understand their needs',
+                        'description': f'Outstanding balance of €{int(unpaid_balance)} across multiple invoices',
+                        'recommendation': 'Follow up on payment - may indicate cash flow issues',
                         'metrics': {
                             'total_orders': len(all_invoices),
-                            'earlier_avg_gap': int(earlier_avg_interval),
-                            'recent_avg_gap': int(recent_avg_interval),
-                            'gap_increase_days': int(gap_increase),
+                            'outstanding_balance': unpaid_balance,
                             'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
                         }
                     })
-            
-            # 4. HIGH VALUE AT RISK ALERT
-            total_value = sum(amounts)
-            if total_value > 5000 and days_since_last > 60:  # High value customer quiet for 60+ days
-                all_alerts.append({
-                    'type': 'HIGH_VALUE_AT_RISK',
-                    'priority': 'HIGH',
-                    'company_id': company_id,
-                    'company_name': company['name'],
-                    'public_name': company.get('public_name'),
-                    'email': company.get('email_addresses') or company.get('email'),
-                    'description': f'High-value customer (€{int(total_value)} lifetime) has been inactive for {days_since_last} days',
-                    'recommendation': 'Priority outreach - offer VIP treatment or exclusive deals',
-                    'metrics': {
-                        'total_orders': len(all_invoices),
-                        'lifetime_value': total_value,
-                        'avg_order_value': avg_amount,
-                        'days_since_last_order': days_since_last,
-                        'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
+
+                # 6. DORMANT CUSTOMER ALERT (used to order regularly, now completely stopped)
+                if len(all_invoices) >= 5 and days_since_last > 120:
+                    batch_alerts.append({
+                        'type': 'DORMANT_CUSTOMER',
+                        'priority': 'HIGH',
+                        'company_id': company_id,
+                        'company_name': company['name'],
+                        'public_name': company.get('public_name'),
+                        'email': company.get('email_addresses') or company.get('email'),
+                        'description': f'Regular customer ({len(all_invoices)} orders) has been dormant for {days_since_last} days',
+                        'recommendation': 'Win-back campaign - investigate why they stopped ordering',
+                        'metrics': {
+                            'total_orders': len(all_invoices),
+                            'lifetime_value': total_value,
+                            'days_since_last_order': days_since_last,
+                            'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
+                        }
+                    })
+
+                # End of company processing in batch
+                companies_processed += 1
+
+                # Rate limiting between companies
+                if companies_processed % 10 == 0:
+                    time.sleep(0.05)
+
+                # Clear invoice data for this company to free memory
+                all_invoices = None
+
+            # Save batch alerts to database immediately (outside company loop, inside batch loop)
+            for alert in batch_alerts:
+                try:
+                    # Track this alert key for resolving old alerts later
+                    current_alert_keys.add((alert['company_id'], alert['type']))
+
+                    # Check if this alert already exists for this company+type
+                    existing = supabase_client.table('customer_alerts').select('id, first_detected_at').eq('company_id', alert['company_id']).eq('alert_type', alert['type']).eq('status', 'active').execute()
+
+                    alert_data = {
+                        'company_id': alert['company_id'],
+                        'company_name': alert['company_name'],
+                        'public_name': alert.get('public_name'),
+                        'email': alert.get('email'),
+                        'alert_type': alert['type'],
+                        'priority': alert['priority'],
+                        'description': alert['description'],
+                        'recommendation': alert['recommendation'],
+                        'metrics': alert['metrics'],
+                        'status': 'active',
+                        'analysis_date': current_date.isoformat(),
+                        'last_detected_at': current_date.isoformat()
                     }
-                })
-            
-            # 5. PAYMENT ISSUES ALERT
-            unpaid_balance = sum(inv['balance'] for inv in all_invoices if inv['balance'] > 0)
-            if unpaid_balance > 500:
-                all_alerts.append({
-                    'type': 'PAYMENT_ISSUES',
-                    'priority': 'HIGH',
-                    'company_id': company_id,
-                    'company_name': company['name'],
-                    'public_name': company.get('public_name'),
-                    'email': company.get('email_addresses') or company.get('email'),
-                    'description': f'Outstanding balance of €{int(unpaid_balance)} across multiple invoices',
-                    'recommendation': 'Follow up on payment - may indicate cash flow issues',
-                    'metrics': {
-                        'total_orders': len(all_invoices),
-                        'outstanding_balance': unpaid_balance,
-                        'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
-                    }
-                })
-            
-            # 6. DORMANT CUSTOMER ALERT (used to order regularly, now completely stopped)
-            if len(all_invoices) >= 5 and days_since_last > 120:
-                all_alerts.append({
-                    'type': 'DORMANT_CUSTOMER',
-                    'priority': 'HIGH',
-                    'company_id': company_id,
-                    'company_name': company['name'],
-                    'public_name': company.get('public_name'),
-                    'email': company.get('email_addresses') or company.get('email'),
-                    'description': f'Regular customer ({len(all_invoices)} orders) has been dormant for {days_since_last} days',
-                    'recommendation': 'Win-back campaign - investigate why they stopped ordering',
-                    'metrics': {
-                        'total_orders': len(all_invoices),
-                        'lifetime_value': total_value,
-                        'days_since_last_order': days_since_last,
-                        'last_order_date': all_invoices[-1]['date'].strftime('%Y-%m-%d')
-                    }
-                })
-        
-        # Sort alerts by priority and date
-        priority_order = {'HIGH': 3, 'MEDIUM': 2, 'LOW': 1}
-        all_alerts.sort(key=lambda x: (priority_order.get(x['priority'], 0), x['metrics'].get('days_since_last_order', 0)), reverse=True)
-        
-        print(f"✅ Analysis complete: {len(all_alerts)} alerts detected")
-        
-        # Save alerts to database
-        print("💾 Saving alerts to database...")
-        saved_count = 0
-        updated_count = 0
-        
-        for alert in all_alerts:
-            try:
-                # Check if this alert already exists for this company+type
-                existing = supabase_client.table('customer_alerts').select('id, first_detected_at').eq('company_id', alert['company_id']).eq('alert_type', alert['type']).eq('status', 'active').execute()
-                
-                alert_data = {
-                    'company_id': alert['company_id'],
-                    'company_name': alert['company_name'],
-                    'public_name': alert.get('public_name'),
-                    'email': alert.get('email'),
-                    'alert_type': alert['type'],
-                    'priority': alert['priority'],
-                    'description': alert['description'],
-                    'recommendation': alert['recommendation'],
-                    'metrics': alert['metrics'],
-                    'status': 'active',
-                    'analysis_date': current_date.isoformat(),
-                    'last_detected_at': current_date.isoformat()
-                }
-                
-                if existing.data:
-                    # Update existing alert
-                    alert_data['first_detected_at'] = existing.data[0]['first_detected_at']
-                    supabase_client.table('customer_alerts').update(alert_data).eq('id', existing.data[0]['id']).execute()
-                    updated_count += 1
-                else:
-                    # Insert new alert
-                    alert_data['first_detected_at'] = current_date.isoformat()
-                    supabase_client.table('customer_alerts').insert(alert_data).execute()
-                    saved_count += 1
-                
-            except Exception as e:
-                print(f"  ⚠️  Error saving alert for company {alert['company_id']}: {e}")
-        
+
+                    if existing.data:
+                        # Update existing alert
+                        alert_data['first_detected_at'] = existing.data[0]['first_detected_at']
+                        supabase_client.table('customer_alerts').update(alert_data).eq('id', existing.data[0]['id']).execute()
+                        total_alerts_updated += 1
+                    else:
+                        # Insert new alert
+                        alert_data['first_detected_at'] = current_date.isoformat()
+                        supabase_client.table('customer_alerts').insert(alert_data).execute()
+                        total_alerts_created += 1
+
+                    # Update summary statistics incrementally
+                    alert_summary['total_alerts'] += 1
+                    if alert['priority'] == 'HIGH':
+                        alert_summary['high_priority'] += 1
+                    elif alert['priority'] == 'MEDIUM':
+                        alert_summary['medium_priority'] += 1
+                    else:
+                        alert_summary['low_priority'] += 1
+
+                    alert_type = alert['type']
+                    if alert_type not in alert_summary['by_type']:
+                        alert_summary['by_type'][alert_type] = 0
+                    alert_summary['by_type'][alert_type] += 1
+
+                except Exception as e:
+                    print(f"  ⚠️  Error saving alert for company {alert['company_id']}: {e}")
+
+            batch_alert_count = len(batch_alerts) if batch_alerts else 0
+            batch_company_count = len(companies_batch.data) if companies_batch and companies_batch.data else 0
+            print(f"    Batch complete: {batch_alert_count} alerts saved from {batch_company_count} companies")
+
+            # Check if we've processed all companies (before clearing)
+            is_last_batch = batch_company_count < BATCH_SIZE
+
+            # Clear batch data and force garbage collection
+            batch_alerts = None
+            companies_batch = None
+            gc.collect()
+
+            if is_last_batch:
+                break
+
+            offset += BATCH_SIZE
+            time.sleep(0.1)  # Small delay between batches
+
         # Mark alerts as resolved if they no longer appear
+        print("🔄 Checking for resolved alerts...")
         try:
-            # Get all active alert IDs from current analysis
-            current_alert_keys = {(a['company_id'], a['type']) for a in all_alerts}
-            
-            # Get all active alerts from database
-            active_alerts = supabase_client.table('customer_alerts').select('id, company_id, alert_type').eq('status', 'active').execute()
-            
+            # Get all active alerts from database in batches
             resolved_count = 0
-            for db_alert in active_alerts.data:
-                key = (db_alert['company_id'], db_alert['alert_type'])
-                if key not in current_alert_keys:
-                    # This alert no longer exists - mark as resolved
-                    supabase_client.table('customer_alerts').update({
-                        'status': 'resolved',
-                        'updated_at': current_date.isoformat()
-                    }).eq('id', db_alert['id']).execute()
-                    resolved_count += 1
-            
+            alert_offset = 0
+            ALERT_BATCH_SIZE = 500
+
+            while True:
+                active_alerts = supabase_client.table('customer_alerts').select('id, company_id, alert_type').eq('status', 'active').range(alert_offset, alert_offset + ALERT_BATCH_SIZE - 1).execute()
+
+                if not active_alerts.data:
+                    break
+
+                for db_alert in active_alerts.data:
+                    key = (db_alert['company_id'], db_alert['alert_type'])
+                    if key not in current_alert_keys:
+                        # This alert no longer exists - mark as resolved
+                        supabase_client.table('customer_alerts').update({
+                            'status': 'resolved',
+                            'updated_at': current_date.isoformat()
+                        }).eq('id', db_alert['id']).execute()
+                        resolved_count += 1
+
+                if len(active_alerts.data) < ALERT_BATCH_SIZE:
+                    break
+
+                alert_offset += ALERT_BATCH_SIZE
+
             if resolved_count > 0:
                 print(f"✅ Marked {resolved_count} alerts as resolved")
-        
+
         except Exception as e:
             print(f"  ⚠️  Error resolving old alerts: {e}")
-        
-        # Calculate summary statistics
-        alert_summary = {
-            'total_alerts': len(all_alerts),
-            'high_priority': len([a for a in all_alerts if a['priority'] == 'HIGH']),
-            'medium_priority': len([a for a in all_alerts if a['priority'] == 'MEDIUM']),
-            'low_priority': len([a for a in all_alerts if a['priority'] == 'LOW']),
-            'by_type': {},
-            'saved': saved_count,
-            'updated': updated_count
-        }
-        
-        for alert in all_alerts:
-            alert_type = alert['type']
-            if alert_type not in alert_summary['by_type']:
-                alert_summary['by_type'][alert_type] = 0
-            alert_summary['by_type'][alert_type] += 1
-        
-        print(f"💾 Saved {saved_count} new alerts, updated {updated_count} existing alerts")
-        
+
+        # Update final summary
+        alert_summary['saved'] = total_alerts_created
+        alert_summary['updated'] = total_alerts_updated
+
+        print(f"✅ Analysis complete: {alert_summary['total_alerts']} total alerts")
+        print(f"💾 Saved {total_alerts_created} new alerts, updated {total_alerts_updated} existing alerts")
+
         return jsonify({
             'success': True,
-            'alerts': all_alerts,
             'summary': alert_summary,
             'analysis_date': current_date.strftime('%Y-%m-%d %H:%M:%S'),
             'companies_analyzed': companies_processed
         })
-        
+
     except Exception as e:
         print(f"Error in alert refresh: {e}")
         return jsonify({'error': str(e)}), 500
@@ -9785,7 +9841,7 @@ def api_pattern_disruptions():
             # Get all invoices for this company from both years
             all_invoices = []
             
-            for year in ['2024', '2025']:
+            for year in ['2024', '2025', '2026']:
                 max_retries = 3
                 retry_count = 0
                 
@@ -10143,7 +10199,7 @@ def api_combined_companies_analysis():
             company['total_revenue'] = round(company['total_revenue'], 2)
             
             # Calculate year-specific averages
-            for year in ['2024', '2025']:
+            for year in ['2024', '2025', '2026']:
                 year_data = company['years_data'][year]
                 year_data['average_invoice_value'] = round(year_data['total_revenue'] / year_data['invoice_count'], 2) if year_data['invoice_count'] > 0 else 0
                 year_data['total_revenue'] = round(year_data['total_revenue'], 2)
