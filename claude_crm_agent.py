@@ -66,9 +66,9 @@ class CRMAgentTools:
             category = args.get('category')
             limit = args.get('limit', 10)
 
-            # Build query
+            # Build query - only select columns that exist in the schema
             q = self.supabase.table('companies').select(
-                'company_id, name, public_name, city, addresses, email, phone, company_categories'
+                'company_id, name, public_name, city, addresses, email_addresses, company_categories'
             )
 
             # Apply filters - use textSearch or simple ilike
