@@ -9290,8 +9290,19 @@ def api_refresh_alerts():
         # Track all current alert keys for resolving old alerts
         current_alert_keys = set()
 
-        # Process companies in batches to avoid memory issues
-        BATCH_SIZE = 100
+        # Check which sales tables exist
+        available_years = []
+        for year in ['2024', '2025', '2026']:
+            try:
+                supabase_client.table(f'sales_{year}').select('id').limit(1).execute()
+                available_years.append(year)
+            except Exception:
+                pass  # Table doesn't exist
+
+        print(f"  Available sales tables: {available_years}")
+
+        # Process companies in smaller batches to avoid memory issues
+        BATCH_SIZE = 50  # Reduced from 100
         offset = 0
 
         while True:
@@ -9310,39 +9321,29 @@ def api_refresh_alerts():
             for company in companies_batch.data:
                 company_id = company['company_id']
 
-                # Get all invoices for this company
+                # Get all invoices for this company - skip invoice_data to reduce memory
                 all_invoices = []
 
-                for year in ['2024', '2025', '2026']:
-                    max_retries = 3
-                    retry_count = 0
+                for year in available_years:
+                    try:
+                        # Simplified query - just get essential fields
+                        invoices_result = supabase_client.table(f'sales_{year}').select(
+                            'invoice_date, total_amount, id, invoice_number, balance'
+                        ).eq('company_id', company_id).execute()
 
-                    while retry_count < max_retries:
-                        try:
-                            invoices_result = supabase_client.table(f'sales_{year}').select('invoice_date, total_amount, id, invoice_number, balance, invoice_data').eq('company_id', company_id).execute()
-                            for invoice in invoices_result.data:
-                                if invoice.get('invoice_date'):
-                                    # Calculate revenue from line items (ex-VAT)
-                                    invoice_data = invoice.get('invoice_data') or {}
-                                    line_items = invoice_data.get('invoice_line_items') or []
-                                    line_revenue = sum(float(item.get('revenue') or 0) for item in line_items)
-                                    amount = line_revenue if line_revenue > 0 else float(invoice.get('total_amount') or 0)
-
-                                    all_invoices.append({
-                                        'date': datetime.strptime(invoice['invoice_date'], '%Y-%m-%d'),
-                                        'amount': amount,
-                                        'balance': float(invoice.get('balance', 0)) if invoice.get('balance') else 0,
-                                        'id': invoice['id'],
-                                        'number': invoice.get('invoice_number', invoice['id'])
-                                    })
-                            break
-                        except Exception as e:
-                            retry_count += 1
-                            if retry_count >= max_retries:
-                                if "Resource temporarily unavailable" not in str(e):
-                                    print(f"Error fetching invoices for company {company_id}: {e}")
-                                break
-                            time.sleep(0.05 * (2 ** retry_count))
+                        for invoice in invoices_result.data:
+                            if invoice.get('invoice_date'):
+                                amount = float(invoice.get('total_amount') or 0)
+                                all_invoices.append({
+                                    'date': datetime.strptime(invoice['invoice_date'], '%Y-%m-%d'),
+                                    'amount': amount,
+                                    'balance': float(invoice.get('balance', 0)) if invoice.get('balance') else 0,
+                                    'id': invoice['id'],
+                                    'number': invoice.get('invoice_number', invoice['id'])
+                                })
+                    except Exception as e:
+                        if "does not exist" not in str(e):
+                            print(f"Error fetching {year} invoices for company {company_id}: {e}")
 
                 # Need at least 2 invoices for most analyses
                 if len(all_invoices) < 2:
