@@ -2548,14 +2548,14 @@ def api_get_dashboard():
             # Get non-completed tasks due within relevant range (overdue to 7 days ahead)
             tasks_result = supabase_client.table('sales_tasks').select(
                 'id, title, task_type, priority, status, due_date, prospect_id'
-            ).or_(f'assigned_to.eq.{current_user},assigned_to.is.null').neq(
+            ).neq(
                 'status', 'completed'
             ).lte('due_date', week_ahead).order('due_date').limit(50).execute()
 
             # Get today's completed tasks count separately
             completed_today_result = supabase_client.table('sales_tasks').select(
                 'id', count='exact', head=True
-            ).or_(f'assigned_to.eq.{current_user},assigned_to.is.null').eq(
+            ).eq(
                 'status', 'completed'
             ).eq('due_date', today_str).execute()
             dashboard_data['tasks']['completed_today'] = completed_today_result.count or 0
@@ -2596,7 +2596,7 @@ def api_get_dashboard():
         try:
             trips_result = supabase_client.table('trips').select('''
                 *,
-                trip_stops (id, prospect_id, stop_order)
+                trip_stops (id, stop_order)
             ''').eq('created_by', current_user).gte('trip_date', today_str).order('trip_date').limit(10).execute()
 
             if trips_result.data:
