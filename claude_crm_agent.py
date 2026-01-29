@@ -71,9 +71,10 @@ class CRMAgentTools:
                 'company_id, name, public_name, city, address, email, phone, company_categories'
             )
 
-            # Apply filters
+            # Apply filters - use textSearch or simple ilike
             if query_text:
-                q = q.or_(f"name.ilike.%{query_text}%,public_name.ilike.%{query_text}%")
+                # Use simple ilike on public_name (most common search field)
+                q = q.ilike('public_name', f'%{query_text}%')
             if city:
                 q = q.ilike('city', f'%{city}%')
 
@@ -111,6 +112,7 @@ class CRMAgentTools:
             return {"content": [{"type": "text", "text": text}]}
 
         except Exception as e:
+            print(f"Error in search_companies: {str(e)}")
             return {"content": [{"type": "text", "text": f"Error searching companies: {str(e)}"}]}
 
     async def get_company_details(self, args: Dict[str, Any]) -> Dict[str, Any]:
