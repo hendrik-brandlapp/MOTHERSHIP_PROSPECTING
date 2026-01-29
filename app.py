@@ -8283,11 +8283,10 @@ def api_companies_from_db():
                     # Skip merged CRM imports (their data was transferred to target company)
                     if c.get('crm_review_status') == 'merged':
                         continue
-                    # Key by both id and company_id for flexible lookup
-                    # (sales tables may use either depending on how data was imported)
+                    # Key by company_id (Duano ID) only - this is what invoices use
+                    # DO NOT key by row id as it can conflict with another company's company_id
+                    # (e.g., Caffe Mundi has row id=3, but Yugen has company_id=3)
                     company_details[c['company_id']] = c
-                    if c.get('id') and c['id'] != c['company_id']:
-                        company_details[c['id']] = c
 
                 if len(comp_result.data) < batch_size:
                     break
@@ -8656,18 +8655,23 @@ def api_update_company_crm_details(company_id):
 
 @app.route('/api/company-invoices/<int:company_id>', methods=['GET'])
 def api_company_invoices(company_id):
-    """Get all invoices for a specific company."""
+    """Get all invoices for a specific company.
+
+    NOTE: company_id here is the Duano company_id (not the Supabase row id).
+    The frontend passes company.company_id which is the Duano ID.
+    """
     if not is_logged_in():
         return jsonify({'error': 'Not authenticated'}), 401
-    
+
     try:
         if not supabase_client:
             return jsonify({'error': 'Supabase not configured'}), 500
-        
+
         year_filter = request.args.get('year', '2026')
         invoices = []
 
         # Fetch invoices based on year filter
+        # company_id is the Duano company_id from the URL
         if year_filter == 'combined':
             # Get from all years
             for year in ['2024', '2025', '2026']:
