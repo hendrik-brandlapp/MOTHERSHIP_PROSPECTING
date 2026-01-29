@@ -1,26 +1,56 @@
 """
 WhatsApp Service for handling messages, transcriptions, and AI analysis
+
+Supports two AI backends:
+1. Claude Agent SDK (preferred) - Full CRM agent with tool access
+2. OpenAI GPT (fallback) - Basic analysis and task extraction
 """
 import os
 import json
 import requests
+import asyncio
 from datetime import datetime
 from typing import Dict, Optional, List, Any
 from openai import OpenAI
 from supabase import create_client, Client
 
+# Try to import Claude Agent SDK
+try:
+    from claude_crm_agent import ClaudeCRMAgent, CLAUDE_SDK_AVAILABLE
+    CLAUDE_AGENT_AVAILABLE = CLAUDE_SDK_AVAILABLE and os.getenv('ANTHROPIC_API_KEY')
+except ImportError:
+    CLAUDE_AGENT_AVAILABLE = False
+    ClaudeCRMAgent = None
+
+
 class WhatsAppService:
     def __init__(self):
-        """Initialize WhatsApp service with OpenAI and Supabase clients"""
+        """Initialize WhatsApp service with AI clients and Supabase"""
+        # OpenAI for transcription and fallback
         self.openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        
+
+        # Claude Agent for CRM operations (if available)
+        self.claude_agent = None
+        self.use_claude_agent = os.getenv('USE_CLAUDE_AGENT', 'true').lower() == 'true'
+
+        if CLAUDE_AGENT_AVAILABLE and self.use_claude_agent:
+            try:
+                self.claude_agent = ClaudeCRMAgent()
+                print("Claude CRM Agent initialized for WhatsApp")
+            except Exception as e:
+                print(f"Failed to initialize Claude Agent: {e}")
+                self.claude_agent = None
+
         supabase_url = os.getenv('SUPABASE_URL')
         supabase_key = os.getenv('SUPABASE_KEY')
-        
+
         if not supabase_url or not supabase_key:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
-        
+
         self.supabase: Client = create_client(supabase_url, supabase_key)
+
+        # Conversation history cache (phone_number -> messages)
+        self._conversation_cache: Dict[str, List[Dict]] = {}
     
     def process_incoming_message(self, message_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -76,19 +106,34 @@ class WhatsAppService:
             
             result = self.supabase.table('whatsapp_messages').insert(message_record).execute()
             message_id = result.data[0]['id'] if result.data else None
-            
+
             # Process based on message type
+            agent_response = None
+
             if message_type == 'audio' and media_url:
-                # Transcribe audio asynchronously
-                self._transcribe_audio(message_id, media_url)
+                # Transcribe audio first
+                transcribed_text = self._transcribe_audio(message_id, media_url)
+                if transcribed_text and self.claude_agent:
+                    # Process transcribed text with Claude Agent
+                    agent_response = self._process_with_claude_agent(
+                        message_id, transcribed_text, from_number
+                    )
             elif message_type == 'text' and message_body:
-                # Analyze text message
-                self._analyze_text_message(message_id, message_body)
-            
+                if self.claude_agent:
+                    # Use Claude Agent for full CRM capabilities
+                    agent_response = self._process_with_claude_agent(
+                        message_id, message_body, from_number
+                    )
+                else:
+                    # Fallback to GPT analysis
+                    self._analyze_text_message(message_id, message_body)
+
             return {
                 'success': True,
                 'message_id': message_id,
-                'message_type': message_type
+                'message_type': message_type,
+                'agent_response': agent_response,
+                'used_claude_agent': self.claude_agent is not None
             }
             
         except Exception as e:
@@ -97,7 +142,125 @@ class WhatsAppService:
                 'success': False,
                 'error': str(e)
             }
-    
+
+    def _process_with_claude_agent(self, message_id: str, text: str, phone_number: str) -> Optional[str]:
+        """
+        Process message using Claude CRM Agent for full CRM capabilities
+
+        Args:
+            message_id: Database ID of the message
+            text: Message text to process
+            phone_number: Sender's phone number for conversation tracking
+
+        Returns:
+            Agent response text or None if failed
+        """
+        try:
+            if not self.claude_agent:
+                print("Claude Agent not available, skipping")
+                return None
+
+            print(f"Processing with Claude Agent: {text[:100]}...")
+
+            # Get conversation history for context
+            conversation_history = self._get_conversation_history(phone_number)
+
+            # Run the async agent in a sync context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                response = loop.run_until_complete(
+                    self.claude_agent.process_message(text, conversation_history)
+                )
+            finally:
+                loop.close()
+
+            # Update message with agent response
+            self.supabase.table('whatsapp_messages').update({
+                'ai_response': response,
+                'ai_provider': 'claude_agent',
+                'processed': True,
+                'processed_at': datetime.utcnow().isoformat()
+            }).eq('id', message_id).execute()
+
+            # Update conversation cache
+            self._update_conversation_cache(phone_number, text, response)
+
+            # Auto-reply if configured
+            if os.getenv('WHATSAPP_AUTO_REPLY', 'false').lower() == 'true':
+                self.send_message(f"whatsapp:{phone_number}", response)
+
+            print(f"Claude Agent response: {response[:200]}...")
+            return response
+
+        except Exception as e:
+            print(f"Error processing with Claude Agent: {str(e)}")
+
+            # Update message with error
+            self.supabase.table('whatsapp_messages').update({
+                'processing_error': f"Claude Agent error: {str(e)}",
+                'processed': True,
+                'processed_at': datetime.utcnow().isoformat()
+            }).eq('id', message_id).execute()
+
+            # Fallback to GPT analysis
+            print("Falling back to GPT analysis...")
+            self._analyze_text_message(message_id, text)
+            return None
+
+    def _get_conversation_history(self, phone_number: str) -> List[Dict]:
+        """Get recent conversation history for a phone number"""
+        try:
+            # Check cache first
+            if phone_number in self._conversation_cache:
+                return self._conversation_cache[phone_number][-10:]  # Last 10 messages
+
+            # Fetch from database
+            result = self.supabase.table('whatsapp_messages').select(
+                'message_body, ai_response, direction'
+            ).or_(
+                f'from_number.eq.{phone_number},to_number.eq.{phone_number}'
+            ).order('received_at', desc=True).limit(10).execute()
+
+            history = []
+            for msg in reversed(result.data or []):
+                if msg.get('message_body'):
+                    history.append({
+                        'role': 'user' if msg.get('direction') == 'inbound' else 'assistant',
+                        'content': msg['message_body']
+                    })
+                if msg.get('ai_response'):
+                    history.append({
+                        'role': 'assistant',
+                        'content': msg['ai_response']
+                    })
+
+            # Cache it
+            self._conversation_cache[phone_number] = history
+            return history
+
+        except Exception as e:
+            print(f"Error getting conversation history: {e}")
+            return []
+
+    def _update_conversation_cache(self, phone_number: str, user_msg: str, assistant_msg: str):
+        """Update conversation cache with new messages"""
+        if phone_number not in self._conversation_cache:
+            self._conversation_cache[phone_number] = []
+
+        self._conversation_cache[phone_number].append({
+            'role': 'user',
+            'content': user_msg
+        })
+        self._conversation_cache[phone_number].append({
+            'role': 'assistant',
+            'content': assistant_msg
+        })
+
+        # Keep only last 20 messages
+        if len(self._conversation_cache[phone_number]) > 20:
+            self._conversation_cache[phone_number] = self._conversation_cache[phone_number][-20:]
+
     def _transcribe_audio(self, message_id: str, media_url: str) -> Optional[str]:
         """
         Transcribe audio message using OpenAI Whisper
