@@ -195,39 +195,30 @@ class CRMAgentTools:
             return {"content": [{"type": "text", "text": f"Error getting company details: {str(e)}"}]}
 
     async def update_company_notes(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Add or update notes for a company"""
+        """Add a note to a company (inserts into company_notes table)"""
         try:
             company_id = args.get('company_id')
             note = args.get('note')
-            append = args.get('append', True)  # Append to existing notes by default
 
             if not company_id or not note:
                 return {"content": [{"type": "text", "text": "Error: company_id and note are required"}]}
 
-            # Get current notes if appending
-            current_notes = ""
-            if append:
-                result = self.supabase.table('companies').select('notes, name, public_name').eq('company_id', company_id).execute()
-                if result.data:
-                    current_notes = result.data[0].get('notes') or ""
-                    company_name = result.data[0].get('public_name') or result.data[0].get('name')
-                else:
-                    return {"content": [{"type": "text", "text": f"Company {company_id} not found"}]}
+            # Get company name for confirmation message
+            result = self.supabase.table('companies').select('name, public_name').eq('company_id', company_id).execute()
+            if not result.data:
+                return {"content": [{"type": "text", "text": f"Company {company_id} not found"}]}
 
-            # Build new notes
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-            new_entry = f"\n\n[{timestamp}] {note}"
+            company_name = result.data[0].get('public_name') or result.data[0].get('name')
 
-            if append and current_notes:
-                updated_notes = current_notes + new_entry
-            else:
-                updated_notes = f"[{timestamp}] {note}"
+            # Insert into company_notes table (the correct table for notes)
+            note_result = self.supabase.table('company_notes').insert({
+                'company_id': int(company_id),
+                'note_text': note,
+                'created_by': 'WhatsApp Agent'
+            }).execute()
 
-            # Update
-            self.supabase.table('companies').update({
-                'notes': updated_notes,
-                'updated_at': datetime.now().isoformat()
-            }).eq('company_id', company_id).execute()
+            if not note_result.data:
+                return {"content": [{"type": "text", "text": "Error: Failed to create note"}]}
 
             return {
                 "content": [{
