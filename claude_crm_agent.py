@@ -18,6 +18,14 @@ from typing import Any, Dict, List, Optional
 from supabase import create_client, Client
 
 # Claude Agent SDK imports
+# Note: The Claude Agent SDK requires Claude Code runtime to be installed
+# If not available, we'll use a direct Anthropic API fallback
+CLAUDE_SDK_AVAILABLE = False
+query = None
+tool = None
+create_sdk_mcp_server = None
+ClaudeAgentOptions = None
+
 try:
     from claude_agent_sdk import (
         query,
@@ -26,9 +34,13 @@ try:
         ClaudeAgentOptions
     )
     CLAUDE_SDK_AVAILABLE = True
-except ImportError:
-    CLAUDE_SDK_AVAILABLE = False
-    print("Warning: claude-agent-sdk not installed. Run: pip install claude-agent-sdk")
+    print("Claude Agent SDK loaded successfully")
+except ImportError as e:
+    print(f"Claude Agent SDK not available: {e}")
+    print("Using Anthropic API fallback instead")
+except Exception as e:
+    print(f"Error loading Claude Agent SDK: {e}")
+    print("Using Anthropic API fallback instead")
 
 
 class CRMAgentTools:
@@ -737,17 +749,240 @@ def create_crm_mcp_server():
     )
 
 
-class ClaudeCRMAgent:
-    """Main Claude CRM Agent class for handling WhatsApp messages"""
+class ClaudeCRMAgentFallback:
+    """
+    Fallback CRM Agent using direct Anthropic API with tool calling.
+    Used when Claude Agent SDK is not available.
+    """
 
     def __init__(self):
-        if not CLAUDE_SDK_AVAILABLE:
-            raise ImportError("claude-agent-sdk is required")
+        try:
+            import anthropic
+            self.client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        except ImportError:
+            raise ImportError("anthropic package is required. Install with: pip install anthropic")
 
         if not os.getenv('ANTHROPIC_API_KEY'):
             raise ValueError("ANTHROPIC_API_KEY environment variable must be set")
 
-        self.mcp_server = create_crm_mcp_server()
+        self.tools_instance = CRMAgentTools()
+        self.system_prompt = """You are Kelsy, a helpful CRM assistant for a coffee/beverage distribution company.
+You help sales representatives manage their customer relationships via WhatsApp.
+
+You can help with:
+- Searching for companies/customers
+- Looking up company details and invoices
+- Adding notes to companies
+- Checking customer alerts (overdue, at-risk)
+- Creating and viewing trips/routes
+- Managing tasks
+
+Keep responses brief and mobile-friendly. Use bullet points when listing multiple items.
+If a user mentions a company name, search for it first to get details."""
+
+        # Define tools for Anthropic API
+        self.tools = [
+            {
+                "name": "search_companies",
+                "description": "Search for companies by name, city, or category",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query for company name"},
+                        "city": {"type": "string", "description": "Filter by city"},
+                        "limit": {"type": "integer", "description": "Max results (default 10)"}
+                    }
+                }
+            },
+            {
+                "name": "get_company_details",
+                "description": "Get detailed information about a company including invoices and alerts",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "company_id": {"type": "integer", "description": "The company ID"}
+                    },
+                    "required": ["company_id"]
+                }
+            },
+            {
+                "name": "update_company_notes",
+                "description": "Add a note to a company",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "company_id": {"type": "integer", "description": "The company ID"},
+                        "note": {"type": "string", "description": "The note to add"}
+                    },
+                    "required": ["company_id", "note"]
+                }
+            },
+            {
+                "name": "get_alerts",
+                "description": "Get customer alerts (overdue, at-risk, dormant customers)",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "type": {"type": "string", "description": "Alert type: PATTERN_DISRUPTION, HIGH_VALUE_AT_RISK, DORMANT_CUSTOMER"},
+                        "priority": {"type": "string", "description": "Priority: HIGH, MEDIUM, LOW"},
+                        "city": {"type": "string", "description": "Filter by city"},
+                        "limit": {"type": "integer", "description": "Max results"}
+                    }
+                }
+            },
+            {
+                "name": "get_tasks",
+                "description": "Get pending sales tasks",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string", "description": "Task status: pending, completed"},
+                        "due": {"type": "string", "description": "Filter: today, overdue, week"}
+                    }
+                }
+            },
+            {
+                "name": "create_task",
+                "description": "Create a new sales task",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "Task title"},
+                        "task_type": {"type": "string", "description": "Type: call, email, meeting, follow_up"},
+                        "due_date": {"type": "string", "description": "Due date: today, tomorrow, or YYYY-MM-DD"},
+                        "company_id": {"type": "integer", "description": "Link to company (optional)"}
+                    },
+                    "required": ["title"]
+                }
+            },
+            {
+                "name": "get_trips",
+                "description": "Get planned sales trips/routes",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "date": {"type": "string", "description": "Filter: today, tomorrow, week"}
+                    }
+                }
+            }
+        ]
+
+    async def _execute_tool(self, tool_name: str, tool_input: Dict) -> str:
+        """Execute a tool and return the result"""
+        tool_map = {
+            "search_companies": self.tools_instance.search_companies,
+            "get_company_details": self.tools_instance.get_company_details,
+            "update_company_notes": self.tools_instance.update_company_notes,
+            "get_alerts": self.tools_instance.get_alerts,
+            "get_tasks": self.tools_instance.get_tasks,
+            "create_task": self.tools_instance.create_task,
+            "get_trips": self.tools_instance.get_trips,
+        }
+
+        if tool_name in tool_map:
+            result = await tool_map[tool_name](tool_input)
+            # Extract text from result
+            if isinstance(result, dict) and "content" in result:
+                for item in result["content"]:
+                    if item.get("type") == "text":
+                        return item.get("text", "")
+            return str(result)
+        return f"Unknown tool: {tool_name}"
+
+    async def process_message(self, message: str, conversation_history: List[Dict] = None) -> str:
+        """Process a message using direct Anthropic API with tool calling"""
+        try:
+            messages = []
+
+            # Add conversation history
+            if conversation_history:
+                for msg in conversation_history[-6:]:
+                    messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
+
+            # Add current message
+            messages.append({"role": "user", "content": message})
+
+            # Initial API call
+            response = self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1024,
+                system=self.system_prompt,
+                tools=self.tools,
+                messages=messages
+            )
+
+            # Process tool calls in a loop
+            max_iterations = 5
+            iteration = 0
+
+            while response.stop_reason == "tool_use" and iteration < max_iterations:
+                iteration += 1
+
+                # Extract tool use blocks
+                tool_results = []
+                assistant_content = response.content
+
+                for block in response.content:
+                    if block.type == "tool_use":
+                        tool_result = await self._execute_tool(block.name, block.input)
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": tool_result
+                        })
+
+                # Add assistant response and tool results to messages
+                messages.append({"role": "assistant", "content": assistant_content})
+                messages.append({"role": "user", "content": tool_results})
+
+                # Continue the conversation
+                response = self.client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=1024,
+                    system=self.system_prompt,
+                    tools=self.tools,
+                    messages=messages
+                )
+
+            # Extract final text response
+            final_text = ""
+            for block in response.content:
+                if hasattr(block, "text"):
+                    final_text += block.text
+
+            return final_text or "I processed your request. Is there anything else I can help with?"
+
+        except Exception as e:
+            print(f"Claude API error: {e}")
+            return f"Sorry, I encountered an error: {str(e)[:100]}. Please try again."
+
+
+class ClaudeCRMAgent:
+    """Main Claude CRM Agent class for handling WhatsApp messages"""
+
+    def __init__(self):
+        # Try full SDK first, fall back to direct API
+        self.use_sdk = CLAUDE_SDK_AVAILABLE
+        self.fallback_agent = None
+
+        if not os.getenv('ANTHROPIC_API_KEY'):
+            raise ValueError("ANTHROPIC_API_KEY environment variable must be set")
+
+        if self.use_sdk:
+            try:
+                self.mcp_server = create_crm_mcp_server()
+                print("Using Claude Agent SDK")
+            except Exception as e:
+                print(f"SDK initialization failed, using fallback: {e}")
+                self.use_sdk = False
+
+        if not self.use_sdk:
+            self.fallback_agent = ClaudeCRMAgentFallback()
+            print("Using Anthropic API fallback")
+
         self.system_prompt = """You are a helpful CRM assistant for a coffee/beverage distribution company.
 You help sales representatives manage their customer relationships via WhatsApp.
 
@@ -780,6 +1015,10 @@ If a user mentions a company name, search for it first to get the company_id bef
         Returns:
             The agent's response text
         """
+        # Use fallback if SDK not available
+        if not self.use_sdk and self.fallback_agent:
+            return await self.fallback_agent.process_message(message, conversation_history)
+
         try:
             # Build the prompt with conversation history if provided
             full_prompt = message
@@ -839,6 +1078,11 @@ If a user mentions a company name, search for it first to get the company_id bef
         except Exception as e:
             error_msg = str(e)
             print(f"Claude CRM Agent error: {error_msg}")
+
+            # Try fallback on error
+            if self.fallback_agent:
+                print("Trying fallback agent...")
+                return await self.fallback_agent.process_message(message, conversation_history)
 
             # Return user-friendly error
             if "API key" in error_msg.lower():

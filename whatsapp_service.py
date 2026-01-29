@@ -14,11 +14,13 @@ from typing import Dict, Optional, List, Any
 from openai import OpenAI
 from supabase import create_client, Client
 
-# Try to import Claude Agent SDK
+# Try to import Claude CRM Agent (uses SDK or Anthropic API fallback)
 try:
-    from claude_crm_agent import ClaudeCRMAgent, CLAUDE_SDK_AVAILABLE
-    CLAUDE_AGENT_AVAILABLE = CLAUDE_SDK_AVAILABLE and os.getenv('ANTHROPIC_API_KEY')
-except ImportError:
+    from claude_crm_agent import ClaudeCRMAgent
+    # Agent is available if ANTHROPIC_API_KEY is set (fallback doesn't need full SDK)
+    CLAUDE_AGENT_AVAILABLE = bool(os.getenv('ANTHROPIC_API_KEY'))
+except ImportError as e:
+    print(f"Could not import ClaudeCRMAgent: {e}")
     CLAUDE_AGENT_AVAILABLE = False
     ClaudeCRMAgent = None
 
