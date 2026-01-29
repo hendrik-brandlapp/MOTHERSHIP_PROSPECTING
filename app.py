@@ -12469,35 +12469,49 @@ def api_companies_stats():
 def whatsapp_webhook():
     """
     Twilio WhatsApp webhook endpoint
-    Receives incoming WhatsApp messages
+    Receives incoming WhatsApp messages and replies with Claude Agent response
     """
     try:
         if WhatsAppService is None:
             return jsonify({'error': 'WhatsApp service not available'}), 503
-        
+
         # Get message data from Twilio
         message_data = request.form.to_dict()
-        
+
+        print(f"WhatsApp webhook received: {message_data.get('From')} - {message_data.get('Body', '')[:50]}")
+
         # Initialize service
         whatsapp_service = WhatsAppService()
-        
-        # Process the message
+
+        # Process the message (this triggers Claude Agent if available)
         result = whatsapp_service.process_incoming_message(message_data)
-        
+
         # Return TwiML response
         from twilio.twiml.messaging_response import MessagingResponse
         response = MessagingResponse()
-        
+
         if result.get('success'):
-            # Optionally send an auto-reply
-            # response.message("Thanks for your message! We'll get back to you soon.")
-            pass
-        
+            # If Claude Agent generated a response, send it back
+            agent_response = result.get('agent_response')
+            if agent_response:
+                # Truncate if too long for WhatsApp (max ~4096 chars)
+                if len(agent_response) > 4000:
+                    agent_response = agent_response[:3950] + "\n\n... (truncated)"
+                response.message(agent_response)
+                print(f"Sending Claude Agent response: {agent_response[:100]}...")
+            else:
+                # No agent response, send acknowledgment
+                response.message("Got it! I'm processing your request.")
+
         return str(response), 200, {'Content-Type': 'application/xml'}
-        
+
     except Exception as e:
         print(f"Error in WhatsApp webhook: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        # Still return valid TwiML on error
+        from twilio.twiml.messaging_response import MessagingResponse
+        response = MessagingResponse()
+        response.message("Sorry, I encountered an error. Please try again.")
+        return str(response), 200, {'Content-Type': 'application/xml'}
 
 
 @app.route('/api/whatsapp/inbox')
