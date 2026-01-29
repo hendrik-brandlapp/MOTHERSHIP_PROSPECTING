@@ -123,7 +123,7 @@ class CRMAgentTools:
             if not company_id:
                 return {"content": [{"type": "text", "text": "Error: company_id is required"}]}
 
-            # Get company info
+            # Get company info (including flavour_prices)
             result = self.supabase.table('companies').select('*').eq('company_id', company_id).execute()
 
             if not result.data:
@@ -131,20 +131,27 @@ class CRMAgentTools:
 
             company = result.data[0]
 
-            # Get recent invoices
+            # Get recent invoices (with full invoice_data for flavour extraction)
             invoices = []
+            all_invoice_data = []
             for year in ['2024', '2025', '2026']:
                 try:
                     inv_result = self.supabase.table(f'sales_{year}').select(
-                        'invoice_date, total_amount, invoice_number'
-                    ).eq('company_id', company_id).order('invoice_date', desc=True).limit(5).execute()
-                    invoices.extend(inv_result.data or [])
+                        'invoice_date, total_amount, invoice_number, invoice_data'
+                    ).eq('company_id', company_id).order('invoice_date', desc=True).limit(10).execute()
+                    for inv in (inv_result.data or []):
+                        invoices.append(inv)
+                        if inv.get('invoice_data'):
+                            all_invoice_data.append(inv.get('invoice_data'))
                 except:
                     pass
 
             # Sort and limit invoices
             invoices.sort(key=lambda x: x.get('invoice_date', ''), reverse=True)
             invoices = invoices[:5]
+
+            # Extract flavours from all invoice line items
+            current_flavours = self._extract_flavours_from_invoices(all_invoice_data)
 
             # Get alerts
             alerts_result = self.supabase.table('customer_alerts').select(
@@ -171,6 +178,17 @@ class CRMAgentTools:
             if company.get('notes'):
                 text += f"\n**Notes:**\n{company.get('notes')}\n"
 
+            # Flavours currently ordered
+            if current_flavours:
+                text += f"\n**Current Flavours Ordered:** {', '.join(current_flavours)}\n"
+
+            # Flavour prices (if set)
+            flavour_prices = company.get('flavour_prices') or {}
+            if flavour_prices:
+                text += "**Flavour Prices:**\n"
+                for flavour, price in flavour_prices.items():
+                    text += f"  - {flavour}: €{price}\n"
+
             # Revenue
             text += f"\n**Total Revenue (2024):** €{company.get('total_revenue_2024', 0):,.2f}\n"
             text += f"**Total Revenue (2025):** €{company.get('total_revenue_2025', 0):,.2f}\n"
@@ -193,6 +211,48 @@ class CRMAgentTools:
 
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error getting company details: {str(e)}"}]}
+
+    def _extract_flavours_from_invoices(self, invoice_data_list: list) -> list:
+        """Extract flavour names from invoice line items."""
+        import re
+        flavours = set()
+
+        # Known Yugen flavours to match against
+        known_flavours = [
+            'Ginger Lemon', 'Original Tonic', 'Elderflower', 'Yuzu Citrus',
+            'Cucumber Mint', 'Hibiscus Rose', 'Grapefruit', 'Blood Orange',
+            'Lemon', 'Lime', 'Apple Ginger', 'Passion Fruit', 'Mango',
+            'Peach', 'Raspberry', 'Strawberry', 'Blueberry', 'Pomegranate'
+        ]
+
+        for invoice_data in invoice_data_list:
+            if not invoice_data:
+                continue
+            line_items = invoice_data.get('invoice_line_items') or []
+
+            for item in line_items:
+                product = item.get('product') or {}
+                product_name = product.get('name') or item.get('description') or ''
+
+                if not product_name:
+                    continue
+
+                # Try to match known flavours first
+                product_upper = product_name.upper()
+                for flavour in known_flavours:
+                    if flavour.upper() in product_upper:
+                        flavours.add(flavour)
+                        break
+                else:
+                    # Try to extract flavour from "Yugen [Flavour] Bio" pattern
+                    match = re.search(r'Yugen\s+([A-Za-z\s]+?)\s+Bio', product_name, re.IGNORECASE)
+                    if match:
+                        flavour_text = match.group(1).strip()
+                        flavour_text = re.sub(r'^(Box|Pallet|Case)\s+', '', flavour_text, flags=re.IGNORECASE)
+                        if flavour_text and len(flavour_text) > 2:
+                            flavours.add(flavour_text.title())
+
+        return sorted(list(flavours))
 
     async def update_company_notes(self, args: Dict[str, Any]) -> Dict[str, Any]:
         """Add a note to a company (inserts into company_notes table)"""
