@@ -2248,12 +2248,6 @@ async function showRouteSelectorModal(location, isGooglePlace = false) {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('scheduleVisitDate').value = today;
 
-    // Load available routes (await so dropdown is populated before modal shows)
-    await loadAvailableRoutes();
-
-    // Load existing visits for this location
-    await loadExistingVisits();
-
     // Default to "Add to Route" tab if actively building a route, otherwise "Schedule Visit"
     if (activeRouteId) {
         document.getElementById('scheduleTab').style.display = 'none';
@@ -2269,12 +2263,15 @@ async function showRouteSelectorModal(location, isGooglePlace = false) {
         });
     }
 
-    // Show modal - verify dropdown state first
-    const dd = document.getElementById('selectRouteDropdown');
-    console.log('Pre-show dropdown state:', dd.options.length, 'options, value:', dd.value);
+    // Show modal FIRST, then populate dropdown while visible
+    // (browsers don't re-render <select> changes inside display:none containers)
     const modalEl = document.getElementById('routeSelectorModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
+
+    // Load data after modal is visible so browser renders the dropdown correctly
+    await loadAvailableRoutes();
+    await loadExistingVisits();
 }
 
 // Load available routes for dropdown
@@ -2325,7 +2322,6 @@ async function loadAvailableRoutes() {
             } else if (data.trips.length === 1) {
                 dropdown.value = data.trips[0].id;
             }
-            console.log('Dropdown now has', dropdown.options.length, 'options, selected:', dropdown.value, 'innerHTML:', dropdown.innerHTML);
         } else {
             const option = document.createElement('option');
             option.value = '';
