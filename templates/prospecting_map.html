@@ -838,8 +838,8 @@
         justify-content: space-between;
         align-items: flex-start;
         padding: 20px;
-        background: #1e293b;
-        color: white;
+        background: #f1f5f9;
+        color: #1e293b;
     }
 
     .route-modal-location {
@@ -863,16 +863,16 @@
     .route-modal-location p {
         margin: 0;
         font-size: 0.8125rem;
-        opacity: 0.85;
+        color: #64748b;
     }
 
     .route-modal-close {
-        background: rgba(255,255,255,0.15);
+        background: rgba(0,0,0,0.05);
         border: none;
         width: 32px;
         height: 32px;
         border-radius: 8px;
-        color: white;
+        color: #64748b;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -881,7 +881,7 @@
     }
 
     .route-modal-close:hover {
-        background: rgba(255,255,255,0.25);
+        background: rgba(0,0,0,0.1);
     }
 
     .route-modal-body {
@@ -2269,7 +2269,9 @@ async function showRouteSelectorModal(location, isGooglePlace = false) {
         });
     }
 
-    // Show modal
+    // Show modal - verify dropdown state first
+    const dd = document.getElementById('selectRouteDropdown');
+    console.log('Pre-show dropdown state:', dd.options.length, 'options, value:', dd.value);
     const modalEl = document.getElementById('routeSelectorModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
@@ -2317,12 +2319,13 @@ async function loadAvailableRoutes() {
                 option.textContent = `${trip.name} (${date})`;
                 dropdown.appendChild(option);
             });
-            console.log('Dropdown now has', dropdown.options.length, 'options');
-
-            // Auto-select route if activeRouteId is set
+            // Auto-select route if activeRouteId is set, or if only one route
             if (activeRouteId) {
                 dropdown.value = activeRouteId;
+            } else if (data.trips.length === 1) {
+                dropdown.value = data.trips[0].id;
             }
+            console.log('Dropdown now has', dropdown.options.length, 'options, selected:', dropdown.value, 'innerHTML:', dropdown.innerHTML);
         } else {
             const option = document.createElement('option');
             option.value = '';
