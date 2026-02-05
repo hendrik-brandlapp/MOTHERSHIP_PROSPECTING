@@ -1012,6 +1012,7 @@
     .route-hint {
         font-size: 0.8125rem;
         color: #94a3b8;
+        margin-top: -4px;
         margin-bottom: 16px;
     }
 
@@ -2229,7 +2230,7 @@ function showRouteTab(tab) {
     document.getElementById('addTab').style.display = tab === 'add' ? 'block' : 'none';
 }
 
-function showRouteSelectorModal(location, isGooglePlace = false) {
+async function showRouteSelectorModal(location, isGooglePlace = false) {
     selectedRouteLocation = {
         name: location.name || location.company_name || 'Unknown',
         address: location.address || location.formatted_address || location.vicinity || '',
@@ -2248,8 +2249,8 @@ function showRouteSelectorModal(location, isGooglePlace = false) {
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('scheduleVisitDate').value = today;
 
-    // Load available routes
-    loadAvailableRoutes();
+    // Load available routes (await so dropdown is populated before modal shows)
+    await loadAvailableRoutes();
 
     // Load existing visits for this location
     loadExistingVisits();
