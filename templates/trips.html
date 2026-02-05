@@ -222,9 +222,9 @@
             <a href="{{ url_for('prospecting_map') }}" class="btn btn-outline-primary">
                 <i class="fas fa-map-marked-alt me-2"></i>Prospecting Map
             </a>
-            <a href="{{ url_for('planning') }}" class="btn btn-primary">
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createRouteModal">
                 <i class="fas fa-plus me-2"></i>Create New Route
-            </a>
+            </button>
         </div>
     </div>
 </div>
@@ -260,6 +260,49 @@
         </button>
     </div>
 
+    <!-- Create Route Modal -->
+    <div class="modal fade" id="createRouteModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Route</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Route Name</label>
+                        <input type="text" class="form-control" id="newRouteName" placeholder="e.g. Brussels East - Week 6">
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col">
+                            <label class="form-label">Date</label>
+                            <input type="date" class="form-control" id="newRouteDate">
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Start Time</label>
+                            <input type="time" class="form-control" id="newRouteTime" value="09:00">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Salesperson</label>
+                        <select class="form-control" id="newRouteSalesperson">
+                            <option value="">Select...</option>
+                            <option value="Caitlin">Caitlin</option>
+                            <option value="Kesha">Kesha</option>
+                            <option value="Django">Django</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="submitCreateRoute()" id="createRouteSubmitBtn">
+                        <i class="fas fa-plus me-2"></i>Create & Build Route
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Results count -->
     <div class="routes-results-count" id="routesResultsCount"></div>
 
@@ -280,7 +323,53 @@ let filteredRoutes = [];
 
 document.addEventListener('DOMContentLoaded', function() {
     loadRoutes();
+
+    // Set default date to today in the create modal
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('newRouteDate').value = today;
 });
+
+async function submitCreateRoute() {
+    const name = document.getElementById('newRouteName').value.trim();
+    const tripDate = document.getElementById('newRouteDate').value;
+    const startTime = document.getElementById('newRouteTime').value;
+    const salesperson = document.getElementById('newRouteSalesperson').value;
+
+    if (!name) {
+        alert('Please enter a route name');
+        return;
+    }
+    if (!tripDate) {
+        alert('Please select a date');
+        return;
+    }
+
+    const btn = document.getElementById('createRouteSubmitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating...';
+
+    try {
+        const response = await fetch('/api/trips/create-empty', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, trip_date: tripDate, start_time: startTime, salesperson })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            window.location.href = `/prospecting-map?route_id=${data.trip.id}`;
+        } else {
+            alert('Error: ' + (data.error || 'Failed to create route'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-plus me-2"></i>Create & Build Route';
+        }
+    } catch (error) {
+        console.error('Error creating route:', error);
+        alert('Error creating route');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-plus me-2"></i>Create & Build Route';
+    }
+}
 
 async function loadRoutes() {
     try {

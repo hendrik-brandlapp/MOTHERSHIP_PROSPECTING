@@ -23,6 +23,12 @@
 
         <!-- Filter Panel -->
         <div class="tab-content" id="filter-panel">
+            <!-- Route Building Banner (shown when route_id param present) -->
+            <div class="focus-banner" id="routeBuildBanner" style="display:none;background:var(--info-bg);border-color:var(--info);">
+                <span><i class="fas fa-route me-2" style="color:var(--info)"></i>Building: <strong id="routeBuildName">Route</strong></span>
+                <a id="routeBuildLink" href="/trips" style="font-size:0.75rem;color:var(--info);text-decoration:underline;">Done</a>
+            </div>
+
             <!-- Focus Banner (shown when company selected) -->
             <div class="focus-banner" id="focusBanner" style="display:none">
                 <span><i class="fas fa-crosshairs me-2"></i>Viewing: <strong id="focusedCompanyName">Company</strong></span>
@@ -1120,6 +1126,9 @@ function setCachedData(data) {
     }
 }
 
+// Route building mode (from URL param)
+let activeRouteId = new URLSearchParams(window.location.search).get('route_id') || null;
+
 // Initialize Map
 function initMap() {
     map = new google.maps.Map(document.getElementById('map'), {
@@ -1136,8 +1145,26 @@ function initMap() {
 
     infoWindow = new google.maps.InfoWindow();
 
+    // If route_id param present, show the route building banner
+    if (activeRouteId) {
+        initRouteBuildMode(activeRouteId);
+    }
+
     // Load customers
     loadCustomers();
+}
+
+async function initRouteBuildMode(routeId) {
+    try {
+        const response = await fetch(`/api/trips/${routeId}`);
+        const data = await response.json();
+        if (data.success && data.trip) {
+            document.getElementById('routeBuildName').textContent = data.trip.name;
+            document.getElementById('routeBuildBanner').style.display = 'flex';
+        }
+    } catch (e) {
+        console.error('Failed to load route for build mode:', e);
+    }
 }
 
 // Load customers from API (with caching)
@@ -2227,12 +2254,20 @@ function showRouteSelectorModal(location, isGooglePlace = false) {
     // Load existing visits for this location
     loadExistingVisits();
 
-    // Reset to schedule tab
-    document.getElementById('scheduleTab').style.display = 'block';
-    document.getElementById('addTab').style.display = 'none';
-    document.querySelectorAll('.route-action-card').forEach((card, i) => {
-        card.classList.toggle('active', i === 0);
-    });
+    // Default to "Add to Route" tab if actively building a route, otherwise "Schedule Visit"
+    if (activeRouteId) {
+        document.getElementById('scheduleTab').style.display = 'none';
+        document.getElementById('addTab').style.display = 'block';
+        document.querySelectorAll('.route-action-card').forEach((card, i) => {
+            card.classList.toggle('active', i === 1);
+        });
+    } else {
+        document.getElementById('scheduleTab').style.display = 'block';
+        document.getElementById('addTab').style.display = 'none';
+        document.querySelectorAll('.route-action-card').forEach((card, i) => {
+            card.classList.toggle('active', i === 0);
+        });
+    }
 
     // Show modal
     const modal = new bootstrap.Modal(document.getElementById('routeSelectorModal'));
@@ -2282,6 +2317,11 @@ async function loadAvailableRoutes() {
                 dropdown.appendChild(option);
             });
             console.log('Dropdown now has', dropdown.options.length, 'options');
+
+            // Auto-select route if activeRouteId is set
+            if (activeRouteId) {
+                dropdown.value = activeRouteId;
+            }
         } else {
             const option = document.createElement('option');
             option.value = '';

@@ -14389,6 +14389,53 @@ def reoptimize_trip(trip_id):
 # ROUTE SCHEDULING ENDPOINTS
 # =====================================================
 
+@app.route('/api/trips/create-empty', methods=['POST'])
+def create_empty_trip():
+    """Create an empty trip (no stops) for building via prospecting map"""
+    if not is_logged_in():
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    try:
+        if not supabase_client:
+            return jsonify({'error': 'Database not available'}), 500
+
+        data = request.json
+        name = data.get('name')
+        trip_date = data.get('trip_date')
+
+        if not name or not trip_date:
+            return jsonify({'error': 'Name and trip_date are required'}), 400
+
+        start_time = data.get('start_time', '09:00')
+
+        trip_data = {
+            'name': name,
+            'trip_date': trip_date,
+            'start_location': 'TBD',
+            'start_time': start_time,
+            'status': 'planned',
+            'total_distance_km': 0,
+            'estimated_duration_minutes': 0,
+            'created_by': data.get('salesperson', session.get('user_email', '')),
+            'notes': data.get('notes', '')
+        }
+
+        trip_response = supabase_client.table('trips').insert(trip_data).execute()
+
+        if not trip_response.data:
+            return jsonify({'error': 'Failed to create trip'}), 500
+
+        return jsonify({
+            'success': True,
+            'trip': trip_response.data[0],
+            'message': 'Empty route created successfully'
+        })
+
+    except Exception as e:
+        print(f"Error creating empty trip: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/trips/quick-create', methods=['POST'])
 def quick_create_trip():
     """Create a quick trip with a single stop (Schedule Visit)"""
