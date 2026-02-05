@@ -238,14 +238,8 @@
 
                 <!-- Add to Route Section -->
                 <div class="route-tab-content" id="addTab" style="display:none;">
-                    <div class="route-form-group">
-                        <label>Select Existing Route</label>
-                        <select id="selectRouteDropdown" disabled>
-                            <option value="">Loading routes...</option>
-                        </select>
-                    </div>
-                    <p class="route-hint"><i class="fas fa-info-circle"></i> Only planned routes are shown</p>
-                    <button class="route-submit-btn route-submit-success" onclick="addToExistingRoute()">
+                    <div id="routePickerContainer"></div>
+                    <button class="route-submit-btn route-submit-success" id="addToRouteBtn" onclick="addToExistingRoute()" disabled>
                         <i class="fas fa-plus me-2"></i>Add to Route
                     </button>
                 </div>
@@ -1008,15 +1002,56 @@
         background: #059669;
     }
 
-    .route-hint {
-        font-size: 0.8125rem;
-        color: #94a3b8;
-        margin-top: -4px;
-        margin-bottom: 16px;
+    .route-pick-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        cursor: pointer;
+        margin-bottom: 8px;
+        transition: border-color 0.15s, background 0.15s;
     }
 
-    .route-hint i {
-        margin-right: 4px;
+    .route-pick-card:hover {
+        border-color: #6366f1;
+        background: #f5f3ff;
+    }
+
+    .route-pick-card.selected {
+        border-color: #6366f1;
+        background: #f5f3ff;
+    }
+
+    .route-pick-card .route-pick-name {
+        font-size: 0.9375rem;
+        font-weight: 500;
+        color: #1e293b;
+    }
+
+    .route-pick-card .route-pick-date {
+        font-size: 0.8125rem;
+        color: #64748b;
+    }
+
+    .route-pick-card .route-pick-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6366f1;
+        flex-shrink: 0;
+    }
+
+    .route-pick-empty {
+        text-align: center;
+        padding: 20px;
+        color: #94a3b8;
+        font-size: 0.875rem;
     }
 
     .route-existing {
@@ -2263,71 +2298,68 @@ async function showRouteSelectorModal(location, isGooglePlace = false) {
         });
     }
 
-    // Show modal and wait for animation to complete before populating dropdown.
-    // Native <select> popups cache their options on first click — loading must
-    // finish before the user can interact with the dropdown.
+    // Reset selection
+    selectedRouteId = null;
+    document.getElementById('addToRouteBtn').disabled = true;
+
+    // Show modal
     const modalEl = document.getElementById('routeSelectorModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
 
-    // Wait for modal to be fully visible
-    await new Promise(resolve => modalEl.addEventListener('shown.bs.modal', resolve, { once: true }));
-
-    // Now load data — dropdown is visible and disabled, user can't click it yet
+    // Load data (cards render fine inside visible modal)
     await loadAvailableRoutes();
     await loadExistingVisits();
 }
 
 // Load available routes for dropdown
-async function loadAvailableRoutes() {
-    const dropdown = document.getElementById('selectRouteDropdown');
-    if (!dropdown) {
-        console.error('selectRouteDropdown element not found');
-        return;
-    }
+let selectedRouteId = null;
 
-    // Disable while loading
-    dropdown.disabled = true;
+async function loadAvailableRoutes() {
+    const container = document.getElementById('routePickerContainer');
+    if (!container) return;
+
+    container.innerHTML = '<div class="route-pick-empty">Loading routes...</div>';
 
     try {
         const response = await fetch('/api/trips?status=planned');
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
 
-        // Build new options as HTML string and replace in one shot
-        let html = '<option value="">Select a route...</option>';
-
         if (data.success && data.trips && data.trips.length > 0) {
-            data.trips.forEach(trip => {
+            container.innerHTML = data.trips.map(trip => {
                 const date = trip.trip_date ? new Date(trip.trip_date).toLocaleDateString('en-GB', {
                     day: 'numeric', month: 'short'
                 }) : 'No date';
-                html += `<option value="${trip.id}">${trip.name} (${date})</option>`;
-            });
+                return `<div class="route-pick-card" data-trip-id="${trip.id}" onclick="selectRoute(this, '${trip.id}')">
+                    <div class="route-pick-icon"><i class="fas fa-route"></i></div>
+                    <div>
+                        <div class="route-pick-name">${trip.name}</div>
+                        <div class="route-pick-date">${date}</div>
+                    </div>
+                </div>`;
+            }).join('');
 
-            // Set innerHTML in one operation
-            dropdown.innerHTML = html;
-
-            // Auto-select route if activeRouteId is set, or if only one route
-            if (activeRouteId) {
-                dropdown.value = activeRouteId;
-            } else if (data.trips.length === 1) {
-                dropdown.value = data.trips[0].id;
+            // Auto-select if activeRouteId matches, or if only one route
+            const autoId = activeRouteId || (data.trips.length === 1 ? data.trips[0].id : null);
+            if (autoId) {
+                const card = container.querySelector(`[data-trip-id="${autoId}"]`);
+                if (card) selectRoute(card, autoId);
             }
         } else {
-            dropdown.innerHTML = '<option value="" disabled>No planned routes available</option>';
+            container.innerHTML = '<div class="route-pick-empty">No planned routes available</div>';
         }
     } catch (error) {
         console.error('Error loading routes:', error);
-        dropdown.innerHTML = '<option value="">Error loading routes</option>';
+        container.innerHTML = '<div class="route-pick-empty">Error loading routes</div>';
     }
+}
 
-    // Enable dropdown
-    dropdown.disabled = false;
+function selectRoute(card, tripId) {
+    document.querySelectorAll('.route-pick-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedRouteId = tripId;
+    document.getElementById('addToRouteBtn').disabled = false;
 }
 
 // Load existing visits for this location
@@ -2415,7 +2447,7 @@ async function scheduleVisit() {
 
 // Add to existing route
 async function addToExistingRoute() {
-    const tripId = document.getElementById('selectRouteDropdown').value;
+    const tripId = selectedRouteId || activeRouteId;
 
     if (!tripId) {
         showToast('Please select a route', 'error');
