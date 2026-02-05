@@ -240,8 +240,8 @@
                 <div class="route-tab-content" id="addTab" style="display:none;">
                     <div class="route-form-group">
                         <label>Select Existing Route</label>
-                        <select id="selectRouteDropdown">
-                            <option value="">Select a route...</option>
+                        <select id="selectRouteDropdown" disabled>
+                            <option value="">Loading routes...</option>
                         </select>
                     </div>
                     <p class="route-hint"><i class="fas fa-info-circle"></i> Only planned routes are shown</p>
@@ -2263,13 +2263,17 @@ async function showRouteSelectorModal(location, isGooglePlace = false) {
         });
     }
 
-    // Show modal FIRST, then populate dropdown while visible
-    // (browsers don't re-render <select> changes inside display:none containers)
+    // Show modal and wait for animation to complete before populating dropdown.
+    // Native <select> popups cache their options on first click — loading must
+    // finish before the user can interact with the dropdown.
     const modalEl = document.getElementById('routeSelectorModal');
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
 
-    // Load data after modal is visible so browser renders the dropdown correctly
+    // Wait for modal to be fully visible
+    await new Promise(resolve => modalEl.addEventListener('shown.bs.modal', resolve, { once: true }));
+
+    // Now load data — dropdown is visible and disabled, user can't click it yet
     await loadAvailableRoutes();
     await loadExistingVisits();
 }
@@ -2282,7 +2286,8 @@ async function loadAvailableRoutes() {
         return;
     }
 
-    console.log('Fetching planned routes...');
+    // Disable while loading
+    dropdown.disabled = true;
 
     try {
         const response = await fetch('/api/trips?status=planned');
@@ -2292,30 +2297,21 @@ async function loadAvailableRoutes() {
         }
 
         const data = await response.json();
-        console.log('Routes loaded:', data);
 
-        // Clear and rebuild dropdown
-        while (dropdown.firstChild) {
-            dropdown.removeChild(dropdown.firstChild);
-        }
-
-        // Add default option
-        const defaultOpt = document.createElement('option');
-        defaultOpt.value = '';
-        defaultOpt.textContent = 'Select a route...';
-        dropdown.appendChild(defaultOpt);
+        // Build new options as HTML string and replace in one shot
+        let html = '<option value="">Select a route...</option>';
 
         if (data.success && data.trips && data.trips.length > 0) {
-            console.log(`Adding ${data.trips.length} routes to dropdown`);
             data.trips.forEach(trip => {
                 const date = trip.trip_date ? new Date(trip.trip_date).toLocaleDateString('en-GB', {
                     day: 'numeric', month: 'short'
                 }) : 'No date';
-                const option = document.createElement('option');
-                option.value = trip.id;
-                option.textContent = `${trip.name} (${date})`;
-                dropdown.appendChild(option);
+                html += `<option value="${trip.id}">${trip.name} (${date})</option>`;
             });
+
+            // Set innerHTML in one operation
+            dropdown.innerHTML = html;
+
             // Auto-select route if activeRouteId is set, or if only one route
             if (activeRouteId) {
                 dropdown.value = activeRouteId;
@@ -2323,22 +2319,15 @@ async function loadAvailableRoutes() {
                 dropdown.value = data.trips[0].id;
             }
         } else {
-            const option = document.createElement('option');
-            option.value = '';
-            option.disabled = true;
-            option.textContent = 'No planned routes available';
-            dropdown.appendChild(option);
+            dropdown.innerHTML = '<option value="" disabled>No planned routes available</option>';
         }
     } catch (error) {
         console.error('Error loading routes:', error);
-        while (dropdown.firstChild) {
-            dropdown.removeChild(dropdown.firstChild);
-        }
-        const errorOpt = document.createElement('option');
-        errorOpt.value = '';
-        errorOpt.textContent = 'Error loading routes';
-        dropdown.appendChild(errorOpt);
+        dropdown.innerHTML = '<option value="">Error loading routes</option>';
     }
+
+    // Enable dropdown
+    dropdown.disabled = false;
 }
 
 // Load existing visits for this location
