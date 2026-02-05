@@ -241,7 +241,7 @@
                     <div class="route-form-group">
                         <label>Select Existing Route</label>
                         <select id="selectRouteDropdown">
-                            <option value="">Loading...</option>
+                            <option value="">Select a route...</option>
                         </select>
                     </div>
                     <p class="route-hint"><i class="fas fa-info-circle"></i> Only planned routes are shown</p>
@@ -838,7 +838,7 @@
         justify-content: space-between;
         align-items: flex-start;
         padding: 20px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #1e293b;
         color: white;
     }
 
@@ -986,27 +986,26 @@
     .route-submit-btn {
         width: 100%;
         padding: 14px 20px;
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        background: #6366f1;
         color: white;
         border: none;
         border-radius: 10px;
         font-size: 0.9375rem;
         font-weight: 600;
         cursor: pointer;
-        transition: transform 0.2s, box-shadow 0.2s;
+        transition: background 0.2s;
     }
 
     .route-submit-btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        background: #4f46e5;
     }
 
     .route-submit-success {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        background: #10b981;
     }
 
     .route-submit-success:hover {
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        background: #059669;
     }
 
     .route-hint {
@@ -2253,7 +2252,7 @@ async function showRouteSelectorModal(location, isGooglePlace = false) {
     await loadAvailableRoutes();
 
     // Load existing visits for this location
-    loadExistingVisits();
+    await loadExistingVisits();
 
     // Default to "Add to Route" tab if actively building a route, otherwise "Schedule Visit"
     if (activeRouteId) {
@@ -2271,7 +2270,8 @@ async function showRouteSelectorModal(location, isGooglePlace = false) {
     }
 
     // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('routeSelectorModal'));
+    const modalEl = document.getElementById('routeSelectorModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
 }
 
